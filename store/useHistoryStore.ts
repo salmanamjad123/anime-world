@@ -87,16 +87,26 @@ export const useHistoryStore = create<HistoryStore>()(
     }),
     {
       name: 'anime-history',
-      serialize: (state) => JSON.stringify(state),
-      deserialize: (str) => {
-        const data = JSON.parse(str);
-        if (data.state?.history) {
-          data.state.history = data.state.history.map((item: any) => ({
-            ...item,
-            lastWatched: new Date(item.lastWatched),
-          }));
-        }
-        return data;
+      storage: {
+        getItem: (name) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+          
+          const data = JSON.parse(str);
+          if (data.state?.history) {
+            data.state.history = data.state.history.map((item: any) => ({
+              ...item,
+              lastWatched: new Date(item.lastWatched),
+            }));
+          }
+          return data;
+        },
+        setItem: (name, value) => {
+          localStorage.setItem(name, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          localStorage.removeItem(name);
+        },
       },
     }
   )

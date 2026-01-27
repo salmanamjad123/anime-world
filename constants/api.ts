@@ -7,9 +7,14 @@
 export const ANILIST_API_URL = 
   process.env.NEXT_PUBLIC_ANILIST_API_URL || 'https://graphql.anilist.co';
 
-// Consumet API (you can self-host or use public instance)
+// Consumet API (Fallback provider)
 export const CONSUMET_API_URL = 
   process.env.NEXT_PUBLIC_CONSUMET_API_URL || 'https://api.consumet.org';
+
+// HiAnime API (Primary streaming provider - Aniwatch API)
+// Deploy from: https://github.com/ghoshRitesh12/aniwatch-api
+export const HIANIME_API_URL = 
+  process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
 
 // API Endpoints
 export const API_ENDPOINTS = {

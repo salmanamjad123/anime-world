@@ -4,14 +4,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnimeInfo } from '@/lib/api/consumet';
+import { getAnimeById } from '@/lib/api/anilist';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { animeId: string } }
+  { params }: { params: Promise<{ animeId: string }> }
 ) {
   try {
-    const { animeId } = params;
+    const { animeId } = await params;
 
     if (!animeId) {
       return NextResponse.json(
@@ -20,7 +20,19 @@ export async function GET(
       );
     }
 
-    const result = await getAnimeInfo(animeId);
+    // Get from AniList which is always reliable
+    const animeData = await getAnimeById(animeId);
+    const anime = animeData.data.Media;
+
+    // Return info based on AniList data
+    const result = {
+      id: animeId,
+      title: anime.title.english || anime.title.romaji,
+      totalEpisodes: anime.episodes || 0,
+      hasDub: true, // Assume both are available
+      hasSub: true,
+    };
+
     return NextResponse.json(result);
   } catch (error) {
     console.error('[API Error] /api/episodes/[animeId]/info:', error);

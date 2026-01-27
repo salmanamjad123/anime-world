@@ -6,7 +6,7 @@
 export const ROUTES = {
   HOME: '/',
   ANIME_DETAIL: (id: string) => `/anime/${id}`,
-  WATCH: (animeId: string, episodeId: string) => `/watch/${animeId}/${episodeId}`,
+  WATCH: (animeId: string, episodeId: string) => `/watch/${animeId}/${encodeURIComponent(episodeId)}`,
   SEARCH: '/search',
   WATCHLIST: '/watchlist',
   HISTORY: '/history',

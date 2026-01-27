@@ -21,7 +21,7 @@ export async function getAnimeInfo(anilistId: string): Promise<{
 }> {
   try {
     const url = `${CONSUMET_API_URL}${API_ENDPOINTS.CONSUMET.ANIME_INFO}/${anilistId}`;
-    const response = await axiosInstance.get(url);
+    const response = await axiosInstance.get(url, { timeout: 10000 });
     
     return {
       id: response.data.id,
@@ -31,9 +31,18 @@ export async function getAnimeInfo(anilistId: string): Promise<{
       hasDub: response.data.hasDub || false,
       hasSub: response.data.hasSub !== false, // Default to true if not specified
     };
-  } catch (error) {
-    console.error('[Consumet API Error] getAnimeInfo:', error);
-    throw new Error('Failed to fetch anime info from Consumet');
+  } catch (error: any) {
+    console.error('[Consumet API Error] getAnimeInfo:', error.message);
+    
+    // Return default response instead of throwing
+    return {
+      id: anilistId,
+      title: 'Unknown',
+      totalEpisodes: 0,
+      episodes: [],
+      hasDub: false,
+      hasSub: true,
+    };
   }
 }
 
@@ -53,7 +62,7 @@ export async function getEpisodes(
       params.dub = true;
     }
     
-    const response = await axiosInstance.get(url, { params });
+    const response = await axiosInstance.get(url, { params, timeout: 10000 });
     
     return {
       animeId: anilistId,
@@ -67,38 +76,58 @@ export async function getEpisodes(
         airDate: ep.airDate,
       })),
     };
-  } catch (error) {
-    console.error('[Consumet API Error] getEpisodes:', error);
-    throw new Error('Failed to fetch episodes from Consumet');
+  } catch (error: any) {
+    console.error('[Consumet API Error] getEpisodes:', error.message);
+    
+    // Return empty response instead of throwing
+    // This allows the UI to handle the error gracefully
+    return {
+      animeId: anilistId,
+      totalEpisodes: 0,
+      episodes: [],
+    };
   }
 }
 
 /**
- * Get streaming sources for an episode
+ * Get streaming sources for an episode from any provider
  */
 export async function getStreamingSources(
   episodeId: string,
-  provider: string = 'gogoanime'
+  provider: string = 'hianime'
 ): Promise<StreamSourcesResponse> {
   try {
-    const url = `${CONSUMET_API_URL}${API_ENDPOINTS.CONSUMET.STREAMING_LINKS}/${episodeId}`;
-    const params = { provider };
+    const url = `https://api.consumet.org/anime/${provider}/watch/${episodeId}`;
     
-    const response = await axiosInstance.get(url, { params });
+    console.log(`🎬 [${provider.toUpperCase()}] Fetching REAL stream from:`, url);
+    
+    const response = await axiosInstance.get(url, { 
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
+    
+    if (!response.data || !response.data.sources) {
+      throw new Error('No sources in response');
+    }
+
+    console.log(`✅ [${provider.toUpperCase()}] Found ${response.data.sources.length} streaming sources`);
+    console.log(`🎥 [${provider.toUpperCase()}] Quality:`, response.data.sources[0]?.quality);
     
     return {
-      headers: response.data.headers,
+      headers: response.data.headers || {},
       sources: response.data.sources.map((source: any) => ({
         url: source.url,
         quality: source.quality || 'default',
-        isM3U8: source.isM3U8 || source.url.includes('.m3u8'),
+        isM3U8: source.isM3U8 !== false,
       })),
       subtitles: response.data.subtitles || [],
       download: response.data.download,
     };
-  } catch (error) {
-    console.error('[Consumet API Error] getStreamingSources:', error);
-    throw new Error('Failed to fetch streaming sources from Consumet');
+  } catch (error: any) {
+    console.error(`❌ [${provider.toUpperCase()}] Error:`, error.message);
+    throw new Error(`Failed to fetch streaming sources: ${error.message}`);
   }
 }
 
@@ -140,31 +169,67 @@ export async function getAvailableServers(episodeId: string): Promise<string[]> 
 }
 
 /**
- * Helper: Try to get streaming sources with fallback servers
+ * Helper: Try to get streaming sources with multi-provider fallback
+ * Automatically detects provider from episode ID or tries all providers
  */
 export async function getStreamingSourcesWithFallback(
   episodeId: string,
-  preferredProvider: string = 'gogoanime'
+  preferredProvider?: string
 ): Promise<StreamSourcesResponse | null> {
-  const providers = [preferredProvider, 'gogoanime', 'zoro', 'animepahe'].filter(
-    (p, i, arr) => arr.indexOf(p) === i // Remove duplicates
-  );
-
-  for (const provider of providers) {
+  
+  console.log('═══════════════════════════════════════════════');
+  console.log('🎯 [Stream Fetch] Episode ID:', episodeId);
+  console.log('═══════════════════════════════════════════════');
+  
+  // Auto-detect provider from episode ID format
+  let detectedProvider: string | null = null;
+  
+  if (episodeId.includes('?ep=')) {
+    detectedProvider = 'hianime'; // HiAnime uses ?ep= format
+    console.log('🔍 [Stream Fetch] Detected HiAnime format (?ep=)');
+  } else if (episodeId.includes('-episode-')) {
+    detectedProvider = 'gogoanime'; // Gogoanime uses -episode- format
+    console.log('🔍 [Stream Fetch] Detected Gogoanime format (-episode-)');
+  }
+  
+  // Try providers in order
+  const providersToTry = [
+    preferredProvider,
+    detectedProvider,
+    'hianime',
+    'gogoanime',
+    'animepahe',
+    'zoro'
+  ].filter((p, i, arr) => p && arr.indexOf(p) === i) as string[]; // Remove duplicates and nulls
+  
+  console.log('🔄 [Stream Fetch] Will try providers:', providersToTry.join(', '));
+  console.log('═══════════════════════════════════════════════');
+  
+  for (const provider of providersToTry) {
     try {
-      console.log(`[Consumet] Trying provider: ${provider}`);
+      console.log(`🎬 [${provider.toUpperCase()}] Attempting to fetch stream...`);
+      
       const sources = await getStreamingSources(episodeId, provider);
       
-      if (sources.sources && sources.sources.length > 0) {
-        console.log(`[Consumet] Success with provider: ${provider}`);
+      if (sources?.sources && sources.sources.length > 0) {
+        console.log('═══════════════════════════════════════════════');
+        console.log(`✅ [${provider.toUpperCase()}] SUCCESS!`);
+        console.log(`✅ [${provider.toUpperCase()}] Found ${sources.sources.length} sources`);
+        console.log(`🎬 [${provider.toUpperCase()}] Ready to play REAL anime!`);
+        console.log('═══════════════════════════════════════════════');
         return sources;
       }
-    } catch (error) {
-      console.warn(`[Consumet] Provider ${provider} failed, trying next...`);
-      continue;
+    } catch (error: any) {
+      console.error(`❌ [${provider.toUpperCase()}] Failed:`, error.message);
+      continue; // Try next provider
     }
   }
 
-  console.error('[Consumet] All providers failed');
+  console.error('═══════════════════════════════════════════════');
+  console.error('🚫 [Stream Fetch] ALL PROVIDERS FAILED');
+  console.error('❌ [Stream Fetch] No streaming sources available');
+  console.error('⚠️  [Stream Fetch] Will show error (no placeholder)');
+  console.error('═══════════════════════════════════════════════');
+  
   return null;
 }

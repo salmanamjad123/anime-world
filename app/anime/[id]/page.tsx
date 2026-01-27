@@ -1,0 +1,359 @@
+/**
+ * Anime Detail Page
+ * Shows anime information and episode list
+ */
+
+'use client';
+
+import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Header } from '@/components/layout/Header';
+import { Button } from '@/components/ui/Button';
+import { useAnimeById } from '@/hooks/useAnime';
+import { useEpisodes, useAnimeInfo } from '@/hooks/useEpisodes';
+import { useWatchlistStore } from '@/store/useWatchlistStore';
+import { useHistoryStore } from '@/store/useHistoryStore';
+import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
+import { ROUTES } from '@/constants/routes';
+import { Heart, Play, Star, Calendar, Tv } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+export default function AnimeDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const animeId = params.id as string;
+  
+  const [selectedLanguage, setSelectedLanguage] = useState<'sub' | 'dub'>('sub');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>(animeId);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [movies, setMovies] = useState<any[]>([]);
+  
+  const { data: animeData, isLoading: isAnimeLoading } = useAnimeById(animeId);
+  const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
+  const { data: animeInfo } = useAnimeInfo(selectedSeasonId);
+
+  // Fetch seasons and movies
+  useEffect(() => {
+    async function fetchSeasons() {
+      try {
+        const response = await fetch(`/api/anime/${animeId}/seasons`);
+        if (response.ok) {
+          const data = await response.json();
+          setSeasons([data.main, ...data.seasons]);
+          setMovies(data.movies);
+        }
+      } catch (error) {
+        console.error('Failed to fetch seasons:', error);
+      }
+    }
+    
+    if (animeId) {
+      fetchSeasons();
+    }
+  }, [animeId]);
+  
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
+  const { getProgress } = useHistoryStore();
+  
+  const anime = animeData?.data?.Media;
+  const episodes = episodesData?.episodes || [];
+  const watchProgress = getProgress(animeId);
+
+  if (isAnimeLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!anime) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white mb-2">Anime not found</h1>
+            <Button onClick={() => router.push('/')}>Go Home</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const title = getPreferredTitle(anime.title);
+  const description = anime.description ? stripHtml(anime.description) : 'No description available.';
+  const inWatchlist = isInWatchlist(animeId);
+
+  const handleWatchlistToggle = () => {
+    if (inWatchlist) {
+      removeFromWatchlist(animeId);
+    } else {
+      addToWatchlist(animeId, title, anime.coverImage.large);
+    }
+  };
+
+  const handlePlayFirst = () => {
+    if (episodes.length > 0) {
+      router.push(ROUTES.WATCH(animeId, episodes[0].id));
+    }
+  };
+
+  const handleContinueWatching = () => {
+    if (watchProgress) {
+      router.push(ROUTES.WATCH(animeId, watchProgress.episodeId));
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900">
+      <Header />
+
+      {/* Banner Section */}
+      <div className="relative h-[500px] w-full">
+        {/* Background Image */}
+        {anime.bannerImage && (
+          <div className="absolute inset-0">
+            <Image
+              src={anime.bannerImage}
+              alt={title}
+              fill
+              className="object-cover opacity-40"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="relative container mx-auto px-4 h-full flex items-end pb-12">
+          <div className="flex gap-6 w-full">
+            {/* Cover Image */}
+            <div className="flex-shrink-0 w-48 -mb-24">
+              <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl">
+                <Image
+                  src={anime.coverImage.extraLarge || anime.coverImage.large}
+                  alt={title}
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 pb-8">
+              <h1 className="text-4xl font-bold text-white mb-2">{title}</h1>
+              {anime.title.native && (
+                <p className="text-gray-400 mb-4">{anime.title.native}</p>
+              )}
+
+              {/* Meta Info */}
+              <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                {anime.averageScore && (
+                  <div className="flex items-center gap-1">
+                    <Star className={`w-4 h-4 fill-current ${getScoreColor(anime.averageScore)}`} />
+                    <span className="text-white">{(anime.averageScore / 10).toFixed(1)}</span>
+                  </div>
+                )}
+                {anime.format && (
+                  <div className="flex items-center gap-1">
+                    <Tv className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-300">{anime.format}</span>
+                  </div>
+                )}
+                {(anime.season || anime.seasonYear) && (
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-300">{formatSeasonYear(anime.season, anime.seasonYear)}</span>
+                  </div>
+                )}
+                {anime.episodes && (
+                  <span className="text-gray-300">{anime.episodes} Episodes</span>
+                )}
+              </div>
+
+              {/* Genres */}
+              {anime.genres && anime.genres.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {anime.genres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="px-3 py-1 rounded-full bg-blue-600/20 text-blue-400 text-sm border border-blue-600/30"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                {watchProgress ? (
+                  <Button variant="primary" size="lg" onClick={handleContinueWatching}>
+                    <Play className="w-5 h-5 mr-2" />
+                    Continue Episode {watchProgress.episodeNumber}
+                  </Button>
+                ) : (
+                  <Button variant="primary" size="lg" onClick={handlePlayFirst}>
+                    <Play className="w-5 h-5 mr-2" />
+                    Play Now
+                  </Button>
+                )}
+                <Button variant="secondary" size="lg" onClick={handleWatchlistToggle}>
+                  <Heart className={`w-5 h-5 mr-2 ${inWatchlist ? 'fill-current' : ''}`} />
+                  {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Description and Episodes */}
+      <div className="container mx-auto px-4 py-12 mt-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2">
+            {/* Description */}
+            <div className="bg-gray-800/50 rounded-lg p-6 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-4">Synopsis</h2>
+              <p className="text-gray-300 leading-relaxed">{description}</p>
+            </div>
+
+            {/* Season/Movie Selector */}
+            {(seasons.length > 1 || movies.length > 0) && (
+              <div className="bg-gray-800/50 rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-bold text-white mb-4">Select Season or Movie</h3>
+                
+                {/* Seasons */}
+                {seasons.length > 1 && (
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-400 mb-2">Seasons</p>
+                    <div className="flex flex-wrap gap-2">
+                      {seasons.map((season, index) => (
+                        <Button
+                          key={season.id}
+                          variant={selectedSeasonId === season.id ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => setSelectedSeasonId(season.id)}
+                        >
+                          {season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`}
+                          {season.episodes > 0 && ` (${season.episodes} eps)`}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Movies */}
+                {movies.length > 0 && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">Movies</p>
+                    <div className="flex flex-wrap gap-2">
+                      {movies.map((movie) => (
+                        <Button
+                          key={movie.id}
+                          variant={selectedSeasonId === movie.id ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => setSelectedSeasonId(movie.id)}
+                        >
+                          {movie.title}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Episodes */}
+            <div className="bg-gray-800/50 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white">
+                  Episodes
+                  {seasons.find(s => s.id === selectedSeasonId)?.relationType !== 'MAIN' && 
+                    ` - ${seasons.find(s => s.id === selectedSeasonId)?.title || 'Season'}`
+                  }
+                </h2>
+                
+                {/* Sub/Dub Toggle */}
+                {animeInfo && (animeInfo.hasSub || animeInfo.hasDub) && (
+                  <div className="flex gap-2">
+                    {animeInfo.hasSub && (
+                      <Button
+                        variant={selectedLanguage === 'sub' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setSelectedLanguage('sub')}
+                      >
+                        Sub
+                      </Button>
+                    )}
+                    {animeInfo.hasDub && (
+                      <Button
+                        variant={selectedLanguage === 'dub' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setSelectedLanguage('dub')}
+                      >
+                        Dub
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {isEpisodesLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+                </div>
+              ) : episodes.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {episodes.map((episode) => (
+                    <button
+                      key={episode.id}
+                      onClick={() => router.push(ROUTES.WATCH(selectedSeasonId, episode.id))}
+                      className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-4 transition-colors text-left"
+                    >
+                      <div className="text-white font-semibold">Episode {episode.number}</div>
+                      {episode.title && episode.title !== `Episode ${episode.number}` && (
+                        <div className="text-gray-400 text-sm mt-1 line-clamp-2">{episode.title}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-400">No episode information available for this anime.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Studios */}
+            {anime.studios?.nodes && anime.studios.nodes.length > 0 && (
+              <div className="bg-gray-800/50 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3">Studios</h3>
+                {anime.studios.nodes.map((studio, index) => (
+                  <div key={index} className="text-gray-300">{studio.name}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Status */}
+            {anime.status && (
+              <div className="bg-gray-800/50 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3">Status</h3>
+                <p className="text-gray-300 capitalize">{anime.status.toLowerCase().replace('_', ' ')}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -63,18 +63,27 @@ export const useWatchlistStore = create<WatchlistStore>()(
     }),
     {
       name: 'anime-watchlist',
-      // Serialize dates properly
-      serialize: (state) => JSON.stringify(state),
-      deserialize: (str) => {
-        const data = JSON.parse(str);
-        // Convert date strings back to Date objects
-        if (data.state?.watchlist) {
-          data.state.watchlist = data.state.watchlist.map((item: any) => ({
-            ...item,
-            addedAt: new Date(item.addedAt),
-          }));
-        }
-        return data;
+      storage: {
+        getItem: (name) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+          
+          const data = JSON.parse(str);
+          // Convert date strings back to Date objects
+          if (data.state?.watchlist) {
+            data.state.watchlist = data.state.watchlist.map((item: any) => ({
+              ...item,
+              addedAt: new Date(item.addedAt),
+            }));
+          }
+          return data;
+        },
+        setItem: (name, value) => {
+          localStorage.setItem(name, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          localStorage.removeItem(name);
+        },
       },
     }
   )

@@ -1,0 +1,318 @@
+/**
+ * HiAnime API Client (Aniwatch API)
+ * Direct integration with aniwatch-api for reliable HiAnime streaming
+ * 
+ * This is the PRIMARY streaming provider - most reliable and best quality
+ */
+
+import { axiosInstance } from './axios';
+import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
+import { getCached, CACHE_TTL } from '@/lib/cache/memory-cache';
+
+// HiAnime API base URL (default to localhost, override via env)
+const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
+
+/**
+ * HiAnime search result
+ */
+export interface HiAnimeSearchResult {
+  id: string;
+  name: string;
+  poster: string;
+  duration?: string;
+  type?: string;
+  rating?: string;
+  episodes?: {
+    sub: number;
+    dub: number;
+  };
+}
+
+/**
+ * HiAnime anime info
+ */
+export interface HiAnimeInfo {
+  id: string;
+  name: string;
+  poster: string;
+  description: string;
+  stats: {
+    rating: string;
+    quality: string;
+    episodes: {
+      sub: number;
+      dub: number;
+    };
+    type: string;
+    duration: string;
+  };
+  seasons?: Array<{
+    id: string;
+    name: string;
+    title: string;
+    poster: string;
+    isCurrent: boolean;
+  }>;
+}
+
+/**
+ * HiAnime episode
+ */
+export interface HiAnimeEpisode {
+  title: string;
+  episodeId: string; // Format: "anime-id?ep=12345"
+  number: number;
+  isFiller: boolean;
+}
+
+/**
+ * Search for anime on HiAnime (with caching)
+ */
+export async function searchHiAnime(
+  query: string,
+  page: number = 1
+): Promise<HiAnimeSearchResult[]> {
+  const cacheKey = `hianime:search:${query}:${page}`;
+  
+  return getCached(
+    cacheKey,
+    async () => {
+      console.log(`🔍 [HiAnime API] Searching: "${query}"`);
+      
+      const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
+      const response = await axiosInstance.get(url, {
+        params: { q: query, page },
+        timeout: 8000,
+      });
+
+      const results = response.data?.data?.animes || [];
+      console.log(`✅ [HiAnime API] Found ${results.length} results`);
+      
+      return results;
+    },
+    CACHE_TTL.ANIME_SEARCH
+  ).catch((error: any) => {
+    console.error('[HiAnime API Error] searchHiAnime:', error.message);
+    throw new Error(`HiAnime search failed: ${error.message}`);
+  });
+}
+
+/**
+ * Get anime info from HiAnime (with caching)
+ */
+export async function getHiAnimeInfo(animeId: string): Promise<HiAnimeInfo> {
+  const cacheKey = `hianime:info:${animeId}`;
+  
+  return getCached(
+    cacheKey,
+    async () => {
+      console.log(`📺 [HiAnime API] Getting info for: ${animeId}`);
+      
+      const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}`;
+      const response = await axiosInstance.get(url, {
+        timeout: 10000,
+      });
+
+      console.log(`✅ [HiAnime API] Got info for: ${response.data?.data?.anime?.name}`);
+      
+      return response.data.data.anime;
+    },
+    CACHE_TTL.ANIME_INFO
+  ).catch((error: any) => {
+    console.error('[HiAnime API Error] getHiAnimeInfo:', error.message);
+    throw new Error(`HiAnime info failed: ${error.message}`);
+  });
+}
+
+/**
+ * Get episode list from HiAnime (with caching)
+ */
+export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisode[]> {
+  const cacheKey = `hianime:episodes:${animeId}`;
+  
+  return getCached(
+    cacheKey,
+    async () => {
+      console.log(`📺 [HiAnime API] Getting episodes for: ${animeId}`);
+      
+      const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}/episodes`;
+      const response = await axiosInstance.get(url, {
+        timeout: 10000,
+      });
+
+      const episodes = response.data?.data?.episodes || [];
+      console.log(`✅ [HiAnime API] Found ${episodes.length} episodes`);
+      console.log(`🎬 [HiAnime API] Sample episode ID: ${episodes[0]?.episodeId}`);
+      
+      return episodes;
+    },
+    CACHE_TTL.EPISODE_LIST
+  ).catch((error: any) => {
+    console.error('[HiAnime API Error] getHiAnimeEpisodes:', error.message);
+    throw new Error(`HiAnime episodes failed: ${error.message}`);
+  });
+}
+
+/**
+ * Get streaming sources for an episode from HiAnime
+ */
+export async function getHiAnimeStreamSources(
+  episodeId: string,
+  category: 'sub' | 'dub' | 'raw' = 'sub',
+  server: string = 'hd-1'
+): Promise<StreamSourcesResponse> {
+  try {
+    console.log(`🎬 [HiAnime API] Getting stream for: ${episodeId} (${category})`);
+    
+    const url = `${HIANIME_API_URL}/api/v2/hianime/episode/sources`;
+    const response = await axiosInstance.get(url, {
+      params: {
+        animeEpisodeId: episodeId,
+        server,
+        category,
+      },
+      timeout: 10000,
+    });
+
+    if (!response.data || !response.data.data ||!response.data.data.sources) {
+      throw new Error('No sources in response');
+    }
+
+    const data = response.data.data;
+
+    // Convert HiAnime response to our standard format
+    const sources = data.sources.map((source: any) => ({
+      url: source.url,
+      quality: source.quality || 'default',
+      isM3U8: source.type === 'hls' || source.url.includes('.m3u8'),
+    }));
+
+    // Convert tracks to subtitles
+    const subtitles = (data.tracks || [])
+      .filter((track: any) => track.kind === 'captions' || track.kind === 'subtitles')
+      .map((track: any) => ({
+        url: track.file,
+        lang: track.label || 'English',
+      }));
+
+    console.log(`✅ [HiAnime API] Found ${sources.length} sources`);
+    console.log(`🎥 [HiAnime API] Quality: ${sources[0]?.quality}`);
+
+    return {
+      headers: {
+        Referer: 'https://hianime.to',
+        Origin: 'https://hianime.to',
+      },
+      sources,
+      subtitles,
+      intro: data.intro,
+      outro: data.outro,
+    };
+  } catch (error: any) {
+    console.error('[HiAnime API Error] getHiAnimeStreamSources:', error.message);
+    throw new Error(`HiAnime stream failed: ${error.message}`);
+  }
+}
+
+/**
+ * Search and get the best match for an anime
+ * Returns null if not found
+ */
+export async function findHiAnimeMatch(
+  animeTitle: string,
+  isDub: boolean = false
+): Promise<HiAnimeSearchResult | null> {
+  try {
+    // Clean up the title for better search results
+    const cleanTitle = animeTitle
+      .toLowerCase()
+      .replace(/season\s*\d+/gi, '')
+      .replace(/\d+(st|nd|rd|th)\s*season/gi, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const results = await searchHiAnime(cleanTitle);
+
+    if (results.length === 0) {
+      return null;
+    }
+
+    // Filter for dub if requested
+    let matches = results;
+    if (isDub) {
+      const dubMatches = results.filter(
+        (r) => r.id.includes('-dub') || r.name.toLowerCase().includes('dub')
+      );
+      if (dubMatches.length > 0) {
+        matches = dubMatches;
+      }
+    }
+
+    // Return the first/best match
+    return matches[0];
+  } catch (error) {
+    console.error('[HiAnime API Error] findHiAnimeMatch:', error);
+    return null;
+  }
+}
+
+/**
+ * Get episodes in our standard format
+ */
+export async function getHiAnimeEpisodesStandard(
+  animeId: string,
+  hiAnimeId: string
+): Promise<EpisodeListResponse> {
+  try {
+    const hiAnimeEpisodes = await getHiAnimeEpisodes(hiAnimeId);
+
+    return {
+      animeId,
+      totalEpisodes: hiAnimeEpisodes.length,
+      episodes: hiAnimeEpisodes.map((ep) => ({
+        id: ep.episodeId,
+        number: ep.number,
+        title: ep.title || `Episode ${ep.number}`,
+      })),
+      _provider: 'hianime',
+    };
+  } catch (error: any) {
+    console.error('[HiAnime API Error] getHiAnimeEpisodesStandard:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Check if HiAnime API is available
+ */
+export async function isHiAnimeAvailable(): Promise<boolean> {
+  try {
+    const response = await axiosInstance.get(`${HIANIME_API_URL}/api/v2/hianime/home`, {
+      timeout: 3000,
+    });
+    return response.status === 200;
+  } catch (error) {
+    console.warn('[HiAnime API] Not available:', error);
+    return false;
+  }
+}
+
+/**
+ * Get available servers for an episode
+ */
+export async function getHiAnimeServers(episodeId: string): Promise<string[]> {
+  try {
+    const url = `${HIANIME_API_URL}/api/v2/hianime/episode/servers`;
+    const response = await axiosInstance.get(url, {
+      params: { animeEpisodeId: episodeId },
+      timeout: 5000,
+    });
+
+    const servers = response.data?.data?.servers || [];
+    return servers.map((s: any) => s.serverName || 'hd-1');
+  } catch (error) {
+    console.error('[HiAnime API Error] getHiAnimeServers:', error);
+    return ['hd-1', 'hd-2']; // Default servers
+  }
+}

@@ -32,6 +32,7 @@ export interface EpisodeListResponse {
   animeId: string;
   totalEpisodes: number;
   episodes: Episode[];
+  _provider?: string; // Which provider was used (hianime, gogoanime, etc.)
 }
 
 /**

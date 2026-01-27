@@ -60,6 +60,14 @@ export interface StreamSourcesResponse {
   };
   sources: VideoSource[];
   subtitles: Subtitle[];
+  intro?: {
+    start: number;
+    end: number;
+  };
+  outro?: {
+    start: number;
+    end: number;
+  };
   download?: string;
 }
 

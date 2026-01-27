@@ -15,7 +15,9 @@ export function useStreamingSources(episodeId: string | null, provider: string =
     queryFn: async () => {
       if (!episodeId) throw new Error('Episode ID is required');
       
-      const response = await fetch(`/api/stream/${episodeId}?provider=${provider}`);
+      // Use & instead of ? if episodeId already contains a query parameter
+      const separator = episodeId.includes('?') ? '&' : '?';
+      const response = await fetch(`/api/stream/${episodeId}${separator}provider=${provider}`);
       if (!response.ok) throw new Error('Failed to fetch streaming sources');
       return response.json();
     },
@@ -35,7 +37,9 @@ export function useStreamingSourcesWithFallback(episodeId: string | null) {
     queryFn: async () => {
       if (!episodeId) throw new Error('Episode ID is required');
       
-      const response = await fetch(`/api/stream/${episodeId}?fallback=true`);
+      // Use & instead of ? if episodeId already contains a query parameter
+      const separator = episodeId.includes('?') ? '&' : '?';
+      const response = await fetch(`/api/stream/${episodeId}${separator}fallback=true`);
       if (!response.ok) throw new Error('Failed to fetch streaming sources');
       return response.json();
     },

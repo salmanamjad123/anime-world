@@ -1,10 +1,10 @@
 /**
- * Anime Detail API Route
- * GET /api/anime/[id] - Get anime by ID
+ * Anime Seasons API Route
+ * GET /api/anime/[id]/seasons - Get all seasons and related content
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnimeById } from '@/lib/api/anilist';
+import { getAnimeSeasons } from '@/lib/api/anime-relations';
 
 export async function GET(
   request: NextRequest,
@@ -12,7 +12,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    
+
     if (!id) {
       return NextResponse.json(
         { error: 'Anime ID is required' },
@@ -20,12 +20,12 @@ export async function GET(
       );
     }
 
-    const result = await getAnimeById(id);
+    const result = await getAnimeSeasons(id);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('[API Error] /api/anime/[id]:', error);
+    console.error('[API Error] /api/anime/[id]/seasons:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch anime details' },
+      { error: 'Failed to fetch seasons' },
       { status: 500 }
     );
   }
