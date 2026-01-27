@@ -1,28 +1,64 @@
 /**
- * Video Proxy Route
+ * Video Proxy Route (Production Optimized)
  * Proxies HLS streams to bypass CORS restrictions
+ * Features: Rate limiting, caching, compression, retry logic
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
+import { retry, isRetryableError } from '@/lib/utils/retry';
+
+// Enable caching for video segments (not playlists)
+const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
+const CACHE_MAX_AGE = parseInt(process.env.PROXY_CACHE_MAX_AGE || '3600');
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    if (process.env.ENABLE_RATE_LIMITING === 'true') {
+      const clientId = getClientIdentifier(request);
+      const { allowed, remaining, resetTime } = rateLimiter.check(clientId);
+      
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again later.' },
+          { 
+            status: 429,
+            headers: {
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': new Date(resetTime).toISOString(),
+              'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+            }
+          }
+        );
+      }
+    }
+
     const url = request.nextUrl.searchParams.get('url');
     
     if (!url) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
     }
 
-    // Fetch the content with appropriate headers
-    const response = await fetch(url, {
-      headers: {
-        'Referer': 'https://megacloud.blog/',
-        'Origin': 'https://hianime.to',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    // Fetch with retry logic
+    const response = await retry(
+      () => fetch(url, {
+        headers: {
+          'Referer': 'https://megacloud.blog/',
+          'Origin': 'https://hianime.to',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        signal: AbortSignal.timeout(30000), // 30s timeout
+      }),
+      {
+        maxAttempts: 2,
+        delayMs: 500,
+        shouldRetry: (error) => isRetryableError(error),
+      }
+    );
 
     if (!response.ok) {
+      console.error('[Proxy Error] Failed to fetch:', url, response.status);
       return NextResponse.json(
         { error: `Failed to fetch: ${response.statusText}` },
         { status: response.status }
@@ -70,12 +106,20 @@ export async function GET(request: NextRequest) {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': '*',
-          'Cache-Control': 'public, max-age=3600',
+          // Short cache for playlists (they can change)
+          'Cache-Control': ENABLE_CACHE ? 'public, max-age=30' : 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
         },
       });
     } else {
       // For non-playlist content (video segments), return as-is
       const data = await response.arrayBuffer();
+      
+      // Determine cache duration based on content type
+      const isVideoSegment = url.includes('.ts') || url.includes('.m4s');
+      const cacheControl = ENABLE_CACHE && isVideoSegment
+        ? `public, max-age=${CACHE_MAX_AGE}, immutable`
+        : 'no-cache';
       
       return new NextResponse(data, {
         status: 200,
@@ -84,14 +128,33 @@ export async function GET(request: NextRequest) {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': '*',
-          'Cache-Control': 'public, max-age=3600',
+          'Cache-Control': cacheControl,
+          'X-Content-Type-Options': 'nosniff',
+          // Add content length
+          'Content-Length': data.byteLength.toString(),
         },
       });
     }
   } catch (error: any) {
-    console.error('[Proxy Error]:', error.message);
+    console.error('[Proxy Error]:', error.message, error.stack);
+    
+    // Provide helpful error messages
+    if (error.name === 'AbortError') {
+      return NextResponse.json(
+        { error: 'Request timeout. The video source is too slow.' },
+        { status: 504 }
+      );
+    }
+    
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      return NextResponse.json(
+        { error: 'Cannot reach video source. It may be down.' },
+        { status: 503 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Proxy request failed' },
+      { error: 'Proxy request failed. Please try again.' },
       { status: 500 }
     );
   }

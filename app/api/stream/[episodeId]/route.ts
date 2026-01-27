@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStreamingSourcesWithFallback } from '@/lib/api/consumet';
 import { getHiAnimeStreamSources, isHiAnimeAvailable } from '@/lib/api/hianime';
+import { retry, isRetryableError } from '@/lib/utils/retry';
 
 export async function GET(
   request: NextRequest,
@@ -49,14 +50,29 @@ export async function GET(
     // TIER 1: Try HiAnime API directly (if episode ID matches HiAnime format)
     if (episodeId.includes('?ep=')) {
       try {
-        const hiAnimeAvailable = await isHiAnimeAvailable();
+        // Check availability with timeout
+        const hiAnimeAvailable = await Promise.race([
+          isHiAnimeAvailable(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]).catch(() => false) as boolean;
         
         if (hiAnimeAvailable) {
           console.log('🎯 [TIER 1] Trying HiAnime API (Direct)...');
           console.log('📺 [HiAnime API] Episode ID:', episodeId);
           console.log('🎙️ [HiAnime API] Category:', category);
           
-          const sources = await getHiAnimeStreamSources(episodeId, category);
+          // Try with retry logic (production: 2 attempts)
+          const sources = await retry(
+            () => getHiAnimeStreamSources(episodeId, category),
+            {
+              maxAttempts: 2,
+              delayMs: 1000,
+              shouldRetry: (error) => {
+                // Retry on network/server errors, not on 404s
+                return error.status >= 500 || error.name === 'FetchError';
+              },
+            }
+          );
           
           if (sources?.sources && sources.sources.length > 0) {
             console.log('═══════════════════════════════════════════════');
