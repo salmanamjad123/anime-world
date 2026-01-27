@@ -7,12 +7,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check } from 'lucide-react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { cn } from '@/lib/utils';
+import { VideoSource, Subtitle } from '@/types/stream';
 
 interface VideoPlayerProps {
   src: string;
+  sources?: VideoSource[]; // All quality sources
+  subtitles?: Subtitle[]; // Subtitle tracks
   poster?: string;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
@@ -21,6 +24,8 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({
   src,
+  sources = [],
+  subtitles = [],
   poster,
   onTimeUpdate,
   onEnded,
@@ -35,28 +40,117 @@ export function VideoPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const [currentQuality, setCurrentQuality] = useState<string>('auto');
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('off');
+  const [autoQuality, setAutoQuality] = useState(true);
   
   const { volume, playbackSpeed, setVolume } = usePlayerStore();
+
+  // Get current source based on selected quality
+  const getCurrentSource = () => {
+    if (!sources || sources.length === 0) return src;
+    
+    if (autoQuality || currentQuality === 'auto') {
+      // Return highest quality for auto mode
+      const sortedSources = [...sources].sort((a, b) => {
+        const qualityOrder: Record<string, number> = { '1080p': 4, '720p': 3, '480p': 2, '360p': 1, 'default': 0 };
+        return (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0);
+      });
+      return sortedSources[0]?.url || src;
+    }
+    
+    const selectedSource = sources.find(s => s.quality === currentQuality);
+    return selectedSource?.url || src;
+  };
+
+  // Handle quality change
+  const handleQualityChange = (quality: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    const currentPlaybackTime = video.currentTime;
+    const wasPlaying = !video.paused;
+    
+    if (quality === 'auto') {
+      setAutoQuality(true);
+      setCurrentQuality('auto');
+    } else {
+      setAutoQuality(false);
+      setCurrentQuality(quality);
+    }
+    
+    setShowQualityMenu(false);
+    
+    // HLS will reload with new source
+    // We'll restore playback position in the MANIFEST_PARSED event
+    if (hlsRef.current && wasPlaying) {
+      setTimeout(() => {
+        video.currentTime = currentPlaybackTime;
+        video.play().catch(console.error);
+      }, 100);
+    }
+  };
+
+  // Handle subtitle change
+  const handleSubtitleChange = (subtitleLang: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    console.log(`🎬 Changing subtitle to: ${subtitleLang}`);
+    setCurrentSubtitle(subtitleLang);
+    setShowSubtitleMenu(false);
+    
+    // Enable/disable text tracks
+    const tracks = video.textTracks;
+    console.log(`📝 Total tracks available: ${tracks.length}`);
+    
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      console.log(`  Track ${i}: lang="${track.language}", label="${track.label}", mode="${track.mode}"`);
+      
+      if (subtitleLang === 'off') {
+        track.mode = 'disabled';
+      } else if (
+        track.language === subtitleLang || 
+        track.label === subtitleLang ||
+        track.language === subtitleLang.toLowerCase() ||
+        track.label?.toLowerCase() === subtitleLang.toLowerCase()
+      ) {
+        track.mode = 'showing';
+        console.log(`✅ Enabled subtitle: ${track.label}`);
+      } else {
+        track.mode = 'disabled';
+      }
+    }
+  };
 
   // Initialize HLS
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !src) return;
+    const currentSrc = getCurrentSource();
+    if (!video || !currentSrc) return;
 
     setIsLoading(true);
 
     // Check if HLS is supported
-    if (src.includes('.m3u8')) {
+    if (currentSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 90,
+          // Enable adaptive bitrate streaming
+          startLevel: autoQuality ? -1 : undefined, // -1 = auto select
+          capLevelToPlayerSize: true,
+          maxMaxBufferLength: 30,
         });
 
         hlsRef.current = hls;
         // Proxy the initial m3u8 URL - the proxy will rewrite all relative URLs
-        const proxiedSrc = `/api/proxy?url=${encodeURIComponent(src)}`;
+        const proxiedSrc = `/api/proxy?url=${encodeURIComponent(currentSrc)}`;
         hls.loadSource(proxiedSrc);
         hls.attachMedia(video);
 
@@ -97,13 +191,78 @@ export function VideoPlayer({
       }
     } else {
       // Direct video file
-      video.src = src;
+      video.src = currentSrc;
       setIsLoading(false);
       if (autoPlay) {
         video.play().catch(console.error);
       }
     }
-  }, [src, autoPlay]);
+  }, [src, autoPlay, currentQuality, autoQuality]);
+
+  // Add subtitle tracks to video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Remove existing subtitle tracks
+    const existingTracks = video.querySelectorAll('track');
+    existingTracks.forEach(track => track.remove());
+
+    if (subtitles && subtitles.length > 0) {
+      console.log(`📝 Adding ${subtitles.length} subtitle track(s) to video`);
+      
+      // Add subtitle tracks
+      subtitles.forEach((subtitle, index) => {
+        // Skip if subtitle doesn't have a valid URL
+        if (!subtitle.url) {
+          console.warn(`⚠️ Subtitle missing URL:`, subtitle);
+          return;
+        }
+        
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = subtitle.label || subtitle.lang;
+        track.srclang = subtitle.lang;
+        
+        // Proxy subtitle URL to avoid CORS issues
+        const subUrl = subtitle.url.startsWith('http') 
+          ? `/api/proxy?url=${encodeURIComponent(subtitle.url)}`
+          : subtitle.url;
+        track.src = subUrl;
+        
+        // Set first subtitle as default if user hasn't disabled subtitles
+        if (index === 0 && currentSubtitle !== 'off') {
+          track.default = true;
+          setCurrentSubtitle(subtitle.lang);
+        }
+        
+        video.appendChild(track);
+        
+        // Log subtitle loading
+        track.addEventListener('load', () => {
+          console.log(`✅ Subtitle loaded: ${subtitle.label} (${subtitle.lang})`);
+          
+          // Wait a bit for textTrack to be ready, then enable if needed
+          setTimeout(() => {
+            const textTrack = video.textTracks[index];
+            if (textTrack) {
+              console.log(`  TextTrack ${index}: lang="${textTrack.language}", label="${textTrack.label}", mode="${textTrack.mode}"`);
+              
+              // If this is the first subtitle or matches current selection, enable it
+              if ((index === 0 && currentSubtitle !== 'off') || subtitle.lang === currentSubtitle) {
+                textTrack.mode = 'showing';
+                console.log(`🎬 Enabled subtitle: ${subtitle.label}`);
+              }
+            }
+          }, 100);
+        });
+        
+        track.addEventListener('error', (e) => {
+          console.error(`❌ Subtitle failed to load: ${subtitle.label}`, e);
+        });
+      });
+    }
+  }, [subtitles, currentSubtitle]);
 
   // Set volume and playback speed
   useEffect(() => {
@@ -287,6 +446,114 @@ export function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Settings Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="text-white hover:text-blue-400 transition-colors"
+              >
+                <Settings className="w-6 h-6" />
+              </button>
+
+              {/* Settings Menu */}
+              {showSettings && (
+                <div className="absolute bottom-full right-0 mb-2 bg-gray-900 rounded-lg shadow-xl border border-gray-700 min-w-[200px]">
+                  {/* Quality Option */}
+                  <button
+                    onClick={() => {
+                      setShowQualityMenu(!showQualityMenu);
+                      setShowSubtitleMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-800 flex items-center justify-between"
+                  >
+                    <span>Quality</span>
+                    <span className="text-sm text-gray-400">
+                      {sources.length > 1 ? currentQuality : 'Auto (HLS)'}
+                    </span>
+                  </button>
+
+                  {/* Quality Submenu */}
+                  {showQualityMenu && (
+                    <div className="bg-gray-800 border-t border-gray-700">
+                      {sources.length > 1 ? (
+                        <>
+                          <button
+                            onClick={() => handleQualityChange('auto')}
+                            className="w-full px-6 py-2 text-left text-white hover:bg-gray-700 flex items-center justify-between text-sm"
+                          >
+                            <span>Auto</span>
+                            {currentQuality === 'auto' && <Check className="w-4 h-4" />}
+                          </button>
+                          {sources.map((source) => (
+                            <button
+                              key={source.quality}
+                              onClick={() => handleQualityChange(source.quality)}
+                              className="w-full px-6 py-2 text-left text-white hover:bg-gray-700 flex items-center justify-between text-sm"
+                            >
+                              <span>{source.quality}</span>
+                              {currentQuality === source.quality && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="px-6 py-3 text-sm text-gray-400">
+                          <p className="mb-1">HLS Adaptive Streaming</p>
+                          <p className="text-xs">Quality adjusts automatically based on your connection speed</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtitle Option */}
+                  <button
+                    onClick={() => {
+                      setShowSubtitleMenu(!showSubtitleMenu);
+                      setShowQualityMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-800 flex items-center justify-between"
+                  >
+                    <span>Subtitles</span>
+                    <span className="text-sm text-gray-400">
+                      {currentSubtitle === 'off' ? 'Off' : currentSubtitle}
+                    </span>
+                  </button>
+
+                  {/* Subtitle Submenu */}
+                  {showSubtitleMenu && (
+                    <div className="bg-gray-800 border-t border-gray-700">
+                      {subtitles.length > 0 ? (
+                        <>
+                          <button
+                            onClick={() => handleSubtitleChange('off')}
+                            className="w-full px-6 py-2 text-left text-white hover:bg-gray-700 flex items-center justify-between text-sm"
+                          >
+                            <span>Off</span>
+                            {currentSubtitle === 'off' && <Check className="w-4 h-4" />}
+                          </button>
+                          {subtitles.map((subtitle) => (
+                            <button
+                              key={subtitle.lang}
+                              onClick={() => handleSubtitleChange(subtitle.lang)}
+                              className="w-full px-6 py-2 text-left text-white hover:bg-gray-700 flex items-center justify-between text-sm"
+                            >
+                              <span>{subtitle.label || subtitle.lang}</span>
+                              {currentSubtitle === subtitle.lang && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="px-6 py-3 text-sm text-gray-400">
+                          <p>No external subtitles found</p>
+                          <p className="text-xs mt-1">Subtitles may be embedded in video</p>
+                          <p className="text-xs mt-1">Try switching servers or different episodes</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}

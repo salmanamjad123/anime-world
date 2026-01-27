@@ -2,17 +2,14 @@
  * Stream API Route
  * GET /api/stream/[episodeId] - Get streaming sources for an episode
  * 
- * Multi-Tier Streaming Strategy:
- * TIER 1: HiAnime API (Direct) - Fastest, most reliable
- * TIER 2: Consumet Multi-Provider - Fallback
- * 
+ * Uses ONLY HiAnime API (Direct) - Production-ready, reliable
+ * NO FALLBACKS - Clean and simple
  * NO PLACEHOLDER - Only returns real anime streams or error
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getStreamingSourcesWithFallback } from '@/lib/api/consumet';
 import { getHiAnimeStreamSources, isHiAnimeAvailable } from '@/lib/api/hianime';
-import { retry, isRetryableError } from '@/lib/utils/retry';
+import { retry } from '@/lib/utils/retry';
 
 export async function GET(
   request: NextRequest,
@@ -41,96 +38,99 @@ export async function GET(
 
     console.log('═══════════════════════════════════════════════');
     console.log('🎬 [Stream API] Episode requested:', episodeId);
-    console.log('📋 [Stream API] Starting multi-tier streaming...');
+    console.log('📺 [Stream API] Using HiAnime API only');
     console.log('═══════════════════════════════════════════════');
 
-    // Get language preference
+    // Get language preference and server
     const category = (url.searchParams.get('category') || 'sub') as 'sub' | 'dub' | 'raw';
+    const server = url.searchParams.get('server') || 'hd-1';
 
-    // TIER 1: Try HiAnime API directly (if episode ID matches HiAnime format)
-    if (episodeId.includes('?ep=')) {
-      try {
-        // Check availability with timeout
-        const hiAnimeAvailable = await Promise.race([
-          isHiAnimeAvailable(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-        ]).catch(() => false) as boolean;
-        
-        if (hiAnimeAvailable) {
-          console.log('🎯 [TIER 1] Trying HiAnime API (Direct)...');
-          console.log('📺 [HiAnime API] Episode ID:', episodeId);
-          console.log('🎙️ [HiAnime API] Category:', category);
-          
-          // Try with retry logic (production: 2 attempts)
-          const sources = await retry(
-            () => getHiAnimeStreamSources(episodeId, category),
-            {
-              maxAttempts: 2,
-              delayMs: 1000,
-              shouldRetry: (error) => {
-                // Retry on network/server errors, not on 404s
-                return error.status >= 500 || error.name === 'FetchError';
-              },
-            }
-          );
-          
-          if (sources?.sources && sources.sources.length > 0) {
-            console.log('═══════════════════════════════════════════════');
-            console.log('✅ [TIER 1 - HiAnime API] SUCCESS!');
-            console.log('🎥 [HiAnime API] Found', sources.sources.length, 'sources');
-            console.log('🎬 [HiAnime API] Quality:', sources.sources[0]?.quality);
-            console.log('🎉 [HiAnime API] Ready to play REAL anime!');
-            console.log('═══════════════════════════════════════════════');
-            
-            return NextResponse.json(sources);
-          }
-        } else {
-          console.warn('⚠️ [TIER 1] HiAnime API not available');
+    // Validate episode ID format
+    if (!episodeId.includes('?ep=')) {
+      console.error('❌ [Stream API] Invalid episode ID format (missing ?ep=)');
+      return NextResponse.json(
+        { 
+          error: 'Invalid episode ID format',
+          message: 'Episode ID must be in HiAnime format (anime-id?ep=12345)',
+          episodeId,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check HiAnime API availability
+    const hiAnimeAvailable = await Promise.race([
+      isHiAnimeAvailable(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+    ]).catch(() => false) as boolean;
+    
+    if (!hiAnimeAvailable) {
+      console.error('❌ [Stream API] HiAnime API not available at localhost:4000');
+      return NextResponse.json(
+        { 
+          error: 'HiAnime API not available',
+          message: 'Make sure the HiAnime API is running at http://localhost:4000',
+          suggestions: [
+            'Check if aniwatch-api is running in terminal',
+            'Verify the API is accessible at http://localhost:4000',
+            'Restart the HiAnime API if needed',
+          ]
+        },
+        { status: 503 }
+      );
+    }
+
+    console.log('📺 [HiAnime API] Episode ID:', episodeId);
+    console.log('🎙️ [HiAnime API] Category:', category);
+    console.log('🖥️ [HiAnime API] Server:', server);
+    
+    // Fetch streaming sources with retry logic
+    try {
+      const sources = await retry(
+        () => getHiAnimeStreamSources(episodeId, category, server),
+        {
+          maxAttempts: 2,
+          delayMs: 1000,
+          shouldRetry: (error) => {
+            // Retry on network/server errors, not on 404s
+            return error.status >= 500 || error.name === 'FetchError';
+          },
         }
-      } catch (error: any) {
-        console.error('❌ [TIER 1] HiAnime API failed:', error.message);
-        console.log('🔄 [TIER 1] Falling back to TIER 2...');
-      }
-    } else {
-      console.log('⚠️ [TIER 1] Episode ID not in HiAnime format (missing ?ep=)');
-      console.log('🔄 [TIER 1] Skipping to TIER 2...');
-    }
-
-    // TIER 2: Try Consumet multi-provider fallback
-    console.log('═══════════════════════════════════════════════');
-    console.log('🎯 [TIER 2] Trying Consumet multi-provider...');
-    console.log('═══════════════════════════════════════════════');
-    
-    const sources = await getStreamingSourcesWithFallback(episodeId);
-    
-    if (sources && sources.sources && sources.sources.length > 0) {
-      console.log('═══════════════════════════════════════════════');
-      console.log('✅ [TIER 2 - Consumet] SUCCESS!');
-      console.log('🎥 [Consumet] Found', sources.sources.length, 'sources');
-      console.log('🎬 [Consumet] Ready to play REAL anime!');
-      console.log('═══════════════════════════════════════════════');
+      );
       
-      return NextResponse.json(sources);
+      if (sources?.sources && sources.sources.length > 0) {
+        console.log('═══════════════════════════════════════════════');
+        console.log('✅ [HiAnime API] SUCCESS!');
+        console.log('🎥 Found', sources.sources.length, 'source(s)');
+        console.log('📝 Found', sources.subtitles?.length || 0, 'subtitle(s)');
+        console.log('🎬 Quality:', sources.sources[0]?.quality);
+        console.log('═══════════════════════════════════════════════');
+        
+        return NextResponse.json(sources);
+      }
+      
+      // No sources found
+      console.error('❌ [HiAnime API] No sources returned');
+      throw new Error('No streaming sources available for this episode');
+      
+    } catch (error: any) {
+      console.error('═══════════════════════════════════════════════');
+      console.error('❌ [Stream API] FAILED');
+      console.error('🚫 Episode ID:', episodeId);
+      console.error('⚠️  Error:', error.message);
+      console.error('═══════════════════════════════════════════════');
+      console.error('');
+      console.error('💡 Possible reasons:');
+      console.error('   1. Episode not available on HiAnime');
+      console.error('   2. Episode ID mapping is incorrect');
+      console.error('   3. HiAnime API is experiencing issues');
+      console.error('');
+      console.error('💡 Solutions:');
+      console.error('   1. Try a different server (hd-1, hd-2, megacloud)');
+      console.error('   2. Verify the anime exists on hianime.to');
+      console.error('   3. Check HiAnime API logs at localhost:4000');
+      console.error('═══════════════════════════════════════════════');
     }
-    
-    // ALL TIERS FAILED - Return error (no placeholder)
-    console.error('═══════════════════════════════════════════════');
-    console.error('❌ [Stream API] ALL TIERS FAILED');
-    console.error('🚫 [Stream API] Episode ID:', episodeId);
-    console.error('⚠️  [Stream API] No streaming sources available');
-    console.error('═══════════════════════════════════════════════');
-    console.error('');
-    console.error('💡 Possible reasons:');
-    console.error('   1. Anime not available on any provider');
-    console.error('   2. Episode ID mapping is incorrect');
-    console.error('   3. All streaming providers are down');
-    console.error('   4. API rate limiting');
-    console.error('');
-    console.error('💡 Solutions:');
-    console.error('   1. Make sure HiAnime API is running (http://localhost:4000)');
-    console.error('   2. Try a different anime');
-    console.error('   3. Check network connectivity');
-    console.error('═══════════════════════════════════════════════');
     
     return NextResponse.json(
       { 

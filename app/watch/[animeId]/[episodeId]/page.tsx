@@ -15,7 +15,7 @@ import { useEpisodes } from '@/hooks/useEpisodes';
 import { useStreamingSourcesWithFallback } from '@/hooks/useStream';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
-import { getPreferredTitle } from '@/lib/utils';
+import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { ChevronLeft, ChevronRight, List, Settings } from 'lucide-react';
 
@@ -28,10 +28,16 @@ export default function WatchPage() {
   const [selectedLanguage, setSelectedLanguage] = useState<'sub' | 'dub'>('sub');
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [currentProvider, setCurrentProvider] = useState('gogoanime');
+  const [selectedServer, setSelectedServer] = useState<string>('hd-1');
+  const [allSubtitles, setAllSubtitles] = useState<any[]>([]);
 
   const { data: animeData } = useAnimeById(animeId);
   const { data: episodesData } = useEpisodes(animeId, selectedLanguage === 'dub');
-  const { data: streamData, isLoading: isStreamLoading, error: streamError } = useStreamingSourcesWithFallback(episodeId);
+  const { data: streamData, isLoading: isStreamLoading, error: streamError } = useStreamingSourcesWithFallback(
+    episodeId,
+    selectedLanguage,
+    selectedServer
+  );
 
   const { updateProgress } = useHistoryStore();
   const { autoNext } = usePlayerStore();
@@ -43,6 +49,50 @@ export default function WatchPage() {
   const videoSource = streamData?.sources?.[0]?.url;
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
+
+  // Auto-fetch English subtitles from external sources if not available from HiAnime
+  useEffect(() => {
+    const fetchExternalSubtitles = async () => {
+      if (!streamData?.subtitles) {
+        setAllSubtitles([]);
+        return;
+      }
+      
+      // Start with HiAnime subtitles
+      let combined = [...streamData.subtitles];
+      
+      // Check if English subtitle is available
+      const hasEnglish = combined.some(
+        s => s.lang === 'en' || s.label?.toLowerCase().includes('english')
+      );
+      
+      if (!hasEnglish && anime && currentEpisode && episodeId) {
+        console.log('🔍 [Watch] No English subtitle from HiAnime, fetching from external sources...');
+        try {
+          const response = await fetch(
+            `/api/subtitles/${episodeId}?title=${encodeURIComponent(title)}&episode=${currentEpisode.number}&animeId=${animeId}&lang=en`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.subtitles && data.subtitles.length > 0) {
+              console.log(`✅ [Watch] Found ${data.subtitles.length} external English subtitle(s)`);
+              // Merge with existing subtitles
+              combined = [...combined, ...data.subtitles];
+            } else {
+              console.log('⚠️ [Watch] No external English subtitles found');
+            }
+          }
+        } catch (error) {
+          console.error('❌ [Watch] Failed to fetch external subtitles:', error);
+        }
+      }
+      
+      setAllSubtitles(combined);
+    };
+    
+    fetchExternalSubtitles();
+  }, [streamData, anime, currentEpisode, episodeId, title, animeId]);
 
   // Handle time updates for progress tracking
   const handleTimeUpdate = (currentTime: number, duration: number) => {
@@ -171,6 +221,8 @@ export default function WatchPage() {
             ) : (
               <VideoPlayer
                 src={videoSource}
+                sources={streamData?.sources}
+                subtitles={allSubtitles}
                 poster={anime.bannerImage || anime.coverImage.large}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handleEpisodeEnd}
@@ -197,6 +249,48 @@ export default function WatchPage() {
                   Next
                   <ChevronRight className="w-5 h-5 ml-1" />
                 </Button>
+              </div>
+              
+              <div className="flex gap-2">
+                {/* Server Selector */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-400">Server:</label>
+                  <select
+                    value={selectedServer}
+                    onChange={(e) => setSelectedServer(e.target.value)}
+                    className="bg-gray-700 text-white px-3 py-2 rounded-md text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    title="Try different servers if video doesn't load"
+                  >
+                    <option value="hd-1">HD-1 (Default)</option>
+                    <option value="hd-2">HD-2</option>
+                  </select>
+                </div>
+
+                {/* Sub/Dub Toggle */}
+                <div className="flex bg-gray-700 rounded-lg p-1">
+                  <button
+                    onClick={() => setSelectedLanguage('sub')}
+                    className={cn(
+                      'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                      selectedLanguage === 'sub'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-300 hover:text-white'
+                    )}
+                  >
+                    SUB
+                  </button>
+                  <button
+                    onClick={() => setSelectedLanguage('dub')}
+                    className={cn(
+                      'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                      selectedLanguage === 'dub'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-300 hover:text-white'
+                    )}
+                  >
+                    DUB
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-2">

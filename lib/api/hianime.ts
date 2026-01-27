@@ -154,7 +154,27 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
 }
 
 /**
+ * Get available servers for an episode
+ */
+export async function getHiAnimeServers(episodeId: string): Promise<any> {
+  try {
+    const url = `${HIANIME_API_URL}/api/v2/hianime/episode/servers`;
+    const response = await axiosInstance.get(url, {
+      params: { animeEpisodeId: episodeId },
+      timeout: 5000,
+    });
+    
+    return response.data?.data || { sub: [], dub: [], raw: [] };
+  } catch (error) {
+    console.error('[HiAnime API] Failed to get servers:', error);
+    return { sub: [], dub: [], raw: [] };
+  }
+}
+
+/**
  * Get streaming sources for an episode from HiAnime
+ * Tries multiple servers to find subtitles
+ * Automatically detects and uses available category (sub/dub/raw)
  */
 export async function getHiAnimeStreamSources(
   episodeId: string,
@@ -162,23 +182,56 @@ export async function getHiAnimeStreamSources(
   server: string = 'hd-1'
 ): Promise<StreamSourcesResponse> {
   try {
-    console.log(`🎬 [HiAnime API] Getting stream for: ${episodeId} (${category})`);
+    console.log(`🎬 [HiAnime API] Getting stream for: ${episodeId} (${category}) on ${server}`);
     
+    // STEP 1: Check available servers for this episode
+    const serversData = await getHiAnimeServers(episodeId);
+    const availableCategories = {
+      sub: serversData.sub?.length > 0,
+      dub: serversData.dub?.length > 0,
+      raw: serversData.raw?.length > 0,
+    };
+    
+    console.log(`📋 [HiAnime API] Available categories - SUB: ${availableCategories.sub}, DUB: ${availableCategories.dub}, RAW: ${availableCategories.raw}`);
+    
+    // STEP 2: Auto-select category if requested one is not available
+    let actualCategory = category;
+    if (!availableCategories[category]) {
+      // Fallback priority: sub -> raw -> dub
+      if (availableCategories.sub) {
+        actualCategory = 'sub';
+      } else if (availableCategories.raw) {
+        actualCategory = 'raw';
+      } else if (availableCategories.dub) {
+        actualCategory = 'dub';
+      }
+      console.log(`🔄 [HiAnime API] Category '${category}' not available, using '${actualCategory}' instead`);
+    }
+    
+    // STEP 3: Fetch streaming sources
     const url = `${HIANIME_API_URL}/api/v2/hianime/episode/sources`;
     const response = await axiosInstance.get(url, {
       params: {
         animeEpisodeId: episodeId,
         server,
-        category,
+        category: actualCategory,
       },
       timeout: 10000,
     });
 
-    if (!response.data || !response.data.data ||!response.data.data.sources) {
+    if (!response.data || !response.data.data || !response.data.data.sources) {
       throw new Error('No sources in response');
     }
 
     const data = response.data.data;
+    
+    // DEBUG: Log raw response
+    console.log('🔍 [DEBUG] Raw API response:', JSON.stringify({
+      sourcesCount: data.sources?.length,
+      tracksCount: data.tracks?.length,
+      sources: data.sources,
+      tracks: data.tracks,
+    }, null, 2));
 
     // Convert HiAnime response to our standard format
     const sources = data.sources.map((source: any) => ({
@@ -187,16 +240,96 @@ export async function getHiAnimeStreamSources(
       isM3U8: source.type === 'hls' || source.url.includes('.m3u8'),
     }));
 
-    // Convert tracks to subtitles
-    const subtitles = (data.tracks || [])
-      .filter((track: any) => track.kind === 'captions' || track.kind === 'subtitles')
+    // Convert tracks to subtitles from current server
+    // Filter: Include tracks with kind='captions/subtitles' OR no kind (but exclude thumbnails)
+    let subtitles: any[] = (data.tracks || [])
+      .filter((track: any) => {
+        // Exclude thumbnail tracks
+        if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
+          return false;
+        }
+        // Include if it has subtitle/caption kind, or no kind at all (valid subtitle)
+        return track.kind === 'captions' || track.kind === 'subtitles' || !track.kind;
+      })
       .map((track: any) => ({
-        url: track.file,
-        lang: track.label || 'English',
+        url: track.url || track.file, // Some APIs use 'url', others use 'file'
+        lang: track.label?.toLowerCase().includes('english') ? 'en' : 
+              track.label?.toLowerCase().includes('japanese') ? 'ja' :
+              track.label?.toLowerCase().includes('spanish') ? 'es' :
+              track.label?.toLowerCase().includes('french') ? 'fr' :
+              track.label?.toLowerCase() || track.lang?.toLowerCase() || 'en',
+        label: track.label || track.lang || 'English',
       }));
 
     console.log(`✅ [HiAnime API] Found ${sources.length} sources`);
     console.log(`🎥 [HiAnime API] Quality: ${sources[0]?.quality}`);
+    console.log(`📝 [HiAnime API] Found ${subtitles.length} subtitles on ${server}`);
+    if (subtitles.length > 0) {
+      console.log(`   Languages: ${subtitles.map((s: any) => s.label).join(', ')}`);
+    }
+
+    // Try ALL working servers to collect as many subtitles as possible
+    // This maximizes subtitle availability
+    const allWorkingServers = ['hd-1', 'hd-2'];
+    const serversToTry = allWorkingServers.filter(s => s !== server);
+    
+    if (serversToTry.length > 0) {
+      console.log(`🔄 [HiAnime API] Checking ${serversToTry.length} more server(s) for additional subtitles...`);
+      
+      for (const altServer of serversToTry) {
+        try {
+          console.log(`🔄 [HiAnime API] Checking ${altServer} for subtitles...`);
+          const altResponse = await axiosInstance.get(url, {
+            params: { animeEpisodeId: episodeId, server: altServer, category },
+            timeout: 5000,
+          });
+          
+          if (altResponse.data?.data?.tracks) {
+            const altTracks = (altResponse.data.data.tracks || [])
+              .filter((track: any) => {
+                // Exclude thumbnail tracks
+                if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
+                  return false;
+                }
+                // Include if it has subtitle/caption kind, or no kind at all (valid subtitle)
+                return track.kind === 'captions' || track.kind === 'subtitles' || !track.kind;
+              })
+              .map((track: any) => ({
+                url: track.url || track.file, // Some APIs use 'url', others use 'file'
+                lang: track.label?.toLowerCase().includes('english') ? 'en' : 
+                      track.label?.toLowerCase().includes('japanese') ? 'ja' :
+                      track.label?.toLowerCase().includes('spanish') ? 'es' :
+                      track.label?.toLowerCase().includes('french') ? 'fr' :
+                      track.label?.toLowerCase() || track.lang?.toLowerCase() || 'en',
+                label: track.label || track.lang || 'English',
+              }));
+            
+            if (altTracks.length > 0) {
+              console.log(`✅ [HiAnime API] Found ${altTracks.length} additional subtitle(s) on ${altServer}`);
+              // Merge with existing subtitles
+              subtitles.push(...altTracks);
+            } else {
+              console.log(`⚠️ [HiAnime API] No subtitles on ${altServer}`);
+            }
+          }
+        } catch (error) {
+          console.log(`⚠️ [HiAnime API] ${altServer} failed or unavailable`);
+        }
+      }
+    }
+    
+    // Remove duplicate subtitles (keep unique by language)
+    const uniqueSubtitles: any[] = Array.from(
+      new Map(subtitles.map((sub: any) => [sub.lang, sub])).values()
+    );
+    
+    console.log(`📝 [HiAnime API] Total unique subtitles: ${uniqueSubtitles.length}`);
+    
+    // Check if English subtitle is available
+    const hasEnglish = uniqueSubtitles.some((s: any) => s.lang === 'en' || s.label?.toLowerCase().includes('english'));
+    if (!hasEnglish && uniqueSubtitles.length > 0) {
+      console.log(`⚠️ [HiAnime API] No English subtitle found. Available: ${uniqueSubtitles.map((s: any) => s.label).join(', ')}`);
+    }
 
     return {
       headers: {
@@ -204,7 +337,7 @@ export async function getHiAnimeStreamSources(
         Origin: 'https://hianime.to',
       },
       sources,
-      subtitles,
+      subtitles: uniqueSubtitles,
       intro: data.intro,
       outro: data.outro,
     };
@@ -298,21 +431,3 @@ export async function isHiAnimeAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * Get available servers for an episode
- */
-export async function getHiAnimeServers(episodeId: string): Promise<string[]> {
-  try {
-    const url = `${HIANIME_API_URL}/api/v2/hianime/episode/servers`;
-    const response = await axiosInstance.get(url, {
-      params: { animeEpisodeId: episodeId },
-      timeout: 5000,
-    });
-
-    const servers = response.data?.data?.servers || [];
-    return servers.map((s: any) => s.serverName || 'hd-1');
-  } catch (error) {
-    console.error('[HiAnime API Error] getHiAnimeServers:', error);
-    return ['hd-1', 'hd-2']; // Default servers
-  }
-}

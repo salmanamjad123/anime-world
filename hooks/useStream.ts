@@ -31,15 +31,21 @@ export function useStreamingSources(episodeId: string | null, provider: string =
 /**
  * Get streaming sources with automatic fallback
  */
-export function useStreamingSourcesWithFallback(episodeId: string | null) {
+export function useStreamingSourcesWithFallback(
+  episodeId: string | null,
+  category: 'sub' | 'dub' | 'raw' = 'sub',
+  server: string = 'hd-1'
+) {
   return useQuery<StreamSourcesResponse>({
-    queryKey: ['stream-fallback', episodeId],
+    queryKey: ['stream-fallback', episodeId, category, server],
     queryFn: async () => {
       if (!episodeId) throw new Error('Episode ID is required');
       
       // Use & instead of ? if episodeId already contains a query parameter
       const separator = episodeId.includes('?') ? '&' : '?';
-      const response = await fetch(`/api/stream/${episodeId}${separator}fallback=true`);
+      const response = await fetch(
+        `/api/stream/${episodeId}${separator}fallback=true&category=${category}&server=${server}`
+      );
       if (!response.ok) throw new Error('Failed to fetch streaming sources');
       return response.json();
     },

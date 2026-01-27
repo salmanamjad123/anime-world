@@ -1,0 +1,10 @@
+# Subtitle Cache Directory
+
+This directory stores cached subtitle files for instant serving.
+
+- Subtitles are cached permanently after first fetch
+- Format: {anime-id}-e{episode}-{lang}.vtt
+- Size: ~50KB per subtitle file
+- Cost: $0 (served as static files)
+
+Do not delete this directory!
