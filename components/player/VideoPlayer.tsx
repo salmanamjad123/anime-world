@@ -150,7 +150,8 @@ export function VideoPlayer({
 
         hlsRef.current = hls;
         // Proxy the initial m3u8 URL - the proxy will rewrite all relative URLs
-        const proxiedSrc = `/api/proxy?url=${encodeURIComponent(currentSrc)}`;
+        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
+        const proxiedSrc = `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`;
         hls.loadSource(proxiedSrc);
         hls.attachMedia(video);
 
@@ -225,8 +226,9 @@ export function VideoPlayer({
         track.srclang = subtitle.lang;
         
         // Proxy subtitle URL to avoid CORS issues
+        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
         const subUrl = subtitle.url.startsWith('http') 
-          ? `/api/proxy?url=${encodeURIComponent(subtitle.url)}`
+          ? `${proxyUrl}?url=${encodeURIComponent(subtitle.url)}`
           : subtitle.url;
         track.src = subUrl;
         
