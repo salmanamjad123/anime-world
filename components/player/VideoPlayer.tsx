@@ -138,6 +138,13 @@ export function VideoPlayer({
     // Check if HLS is supported
     if (currentSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
+        // Determine if we should use proxy (only for localhost dev by default)
+        const useProxy = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
+        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
+        
+        console.log(`🎬 [VideoPlayer] Streaming mode: ${useProxy ? 'PROXIED' : 'DIRECT'}`);
+        console.log(`📺 [VideoPlayer] Video URL: ${currentSrc.substring(0, 100)}...`);
+
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
@@ -146,13 +153,24 @@ export function VideoPlayer({
           startLevel: autoQuality ? -1 : undefined, // -1 = auto select
           capLevelToPlayerSize: true,
           maxMaxBufferLength: 30,
+          // Add custom loader configuration for direct streaming
+          xhrSetup: function(xhr, url) {
+            // Set headers for CDN compatibility (works from browser)
+            xhr.setRequestHeader('Referer', 'https://hianime.to/');
+            xhr.setRequestHeader('Origin', 'https://hianime.to');
+          },
         });
 
         hlsRef.current = hls;
-        // Proxy the initial m3u8 URL - the proxy will rewrite all relative URLs
-        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
-        const proxiedSrc = `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`;
-        hls.loadSource(proxiedSrc);
+        
+        // Use proxy only if explicitly enabled (localhost dev)
+        // In production (Vercel), stream directly from user's browser to avoid IP blocks
+        const finalSrc = useProxy 
+          ? `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`
+          : currentSrc; // Direct URL - browser uses user's real IP!
+        
+        console.log(`🚀 [VideoPlayer] Loading source: ${useProxy ? 'via proxy' : 'direct'}`);
+        hls.loadSource(finalSrc);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -183,8 +201,9 @@ export function VideoPlayer({
           hls.destroy();
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = src;
+        // Native HLS support (Safari) - always direct, no proxy needed
+        console.log('🍎 [VideoPlayer] Using native HLS (Safari)');
+        video.src = currentSrc;
         setIsLoading(false);
         if (autoPlay) {
           video.play().catch(console.error);
@@ -212,6 +231,10 @@ export function VideoPlayer({
     if (subtitles && subtitles.length > 0) {
       console.log(`📝 Adding ${subtitles.length} subtitle track(s) to video`);
       
+      // ALWAYS proxy external subtitles - they need it for CORS!
+      // Unlike videos, subtitle <track> elements can't set custom headers
+      const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
+      
       // Add subtitle tracks
       subtitles.forEach((subtitle, index) => {
         // Skip if subtitle doesn't have a valid URL
@@ -225,12 +248,14 @@ export function VideoPlayer({
         track.label = subtitle.label || subtitle.lang;
         track.srclang = subtitle.lang;
         
-        // Proxy subtitle URL to avoid CORS issues
-        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
-        const subUrl = subtitle.url.startsWith('http') 
+        // ALWAYS proxy external HTTP/HTTPS subtitles for CORS compatibility
+        // Only skip proxy for relative/local URLs
+        const subUrl = subtitle.url.startsWith('http')
           ? `${proxyUrl}?url=${encodeURIComponent(subtitle.url)}`
           : subtitle.url;
         track.src = subUrl;
+        
+        console.log(`📝 Subtitle track: ${subtitle.label} - ${subUrl.startsWith('/api/proxy') ? 'Proxied' : 'Direct'}`);
         
         // Set first subtitle as default if user hasn't disabled subtitles
         if (index === 0 && currentSubtitle !== 'off') {

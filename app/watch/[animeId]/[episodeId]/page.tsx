@@ -270,8 +270,12 @@ export default function WatchPage() {
                     className="bg-gray-700 text-white px-3 py-2 rounded-md text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     title="Try different servers if video doesn't load"
                   >
-                    <option value="hd-1">HD-1 (Default)</option>
-                    <option value="hd-2">HD-2</option>
+                    <option value="hd-1">HD-1 (Fast)</option>
+                    <option value="hd-2">HD-2 (Fast)</option>
+                    <option value="megacloud">MegaCloud (Reliable)</option>
+                    <option value="vidstreaming">VidStreaming</option>
+                    <option value="vidcloud">VidCloud</option>
+                    <option value="streamtape">StreamTape (Backup)</option>
                   </select>
                 </div>
 

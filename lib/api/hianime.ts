@@ -91,7 +91,7 @@ export async function searchHiAnime(
       const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
       const response = await axiosInstance.get(url, {
         params: { q: query, page },
-        timeout: 8000,
+        timeout: 15000, // Increased to 15 seconds for better reliability
       });
 
       const results = response.data?.data?.animes || [];
@@ -120,7 +120,7 @@ export async function getHiAnimeInfo(animeId: string): Promise<HiAnimeInfo> {
       
       const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}`;
       const response = await axiosInstance.get(url, {
-        timeout: 10000,
+        timeout: 15000, // Increased to 15 seconds for better reliability
       });
 
       const raw = response.data?.data?.anime;
@@ -170,7 +170,7 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
       
       const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}/episodes`;
       const response = await axiosInstance.get(url, {
-        timeout: 10000,
+        timeout: 15000, // Increased to 15 seconds for better reliability
       });
 
       const episodes = response.data?.data?.episodes || [];
@@ -194,7 +194,7 @@ export async function getHiAnimeServers(episodeId: string): Promise<any> {
     const url = `${HIANIME_API_URL}/api/v2/hianime/episode/servers`;
     const response = await axiosInstance.get(url, {
       params: { animeEpisodeId: episodeId },
-      timeout: 5000,
+      timeout: 10000, // Increased to 10 seconds for better reliability
     });
     
     return response.data?.data || { sub: [], dub: [], raw: [] };
@@ -249,7 +249,7 @@ export async function getHiAnimeStreamSources(
         server,
         category: actualCategory,
       },
-      timeout: 10000,
+      timeout: 30000, // Increased to 30 seconds for slow source extraction
     });
 
     if (!response.data || !response.data.data || !response.data.data.sources) {
@@ -314,7 +314,7 @@ export async function getHiAnimeStreamSources(
           console.log(`🔄 [HiAnime API] Checking ${altServer} for subtitles...`);
           const altResponse = await axiosInstance.get(url, {
             params: { animeEpisodeId: episodeId, server: altServer, category },
-            timeout: 5000,
+            timeout: 10000, // Increased to 10 seconds for better reliability
           });
           
           if (altResponse.data?.data?.tracks) {
@@ -455,7 +455,7 @@ export async function getHiAnimeEpisodesStandard(
 export async function isHiAnimeAvailable(): Promise<boolean> {
   try {
     const response = await axiosInstance.get(`${HIANIME_API_URL}/api/v2/hianime/home`, {
-      timeout: 3000,
+      timeout: 8000, // Increased to 8 seconds for slower API responses
     });
     return response.status === 200;
   } catch (error) {

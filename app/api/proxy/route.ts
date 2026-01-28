@@ -1,55 +1,49 @@
 /**
- * Video Proxy Route (Redirects to Railway)
- * Forwards all proxy requests to Railway API to avoid Vercel IP blocking
+ * Proxy Route (Vercel Optimized)
+ * Proxies HLS streams and subtitles to bypass CORS restrictions
+ * 
+ * IMPORTANT: On production (Vercel), this is primarily used for:
+ * - Subtitle files (.vtt) - small files, no timeout issues
+ * - M3U8 playlists - tiny files, rewritten to proxy segments
+ * 
+ * Video segments (.ts) stream directly from CDN when USE_PROXY=false
+ * This avoids Vercel serverless timeout issues!
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
 import { retry, isRetryableError } from '@/lib/utils/retry';
 
-// Use Railway proxy if available, otherwise handle locally
-const RAILWAY_PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL;
+// Enable caching for video segments (not playlists)
+const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
+const CACHE_MAX_AGE = parseInt(process.env.PROXY_CACHE_MAX_AGE || '3600');
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    if (process.env.ENABLE_RATE_LIMITING === 'true') {
+      const clientId = getClientIdentifier(request);
+      const { allowed, remaining, resetTime } = rateLimiter.check(clientId);
+      
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again later.' },
+          { 
+            status: 429,
+            headers: {
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': new Date(resetTime).toISOString(),
+              'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+            }
+          }
+        );
+      }
+    }
+
     const url = request.nextUrl.searchParams.get('url');
     
     if (!url) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
-    }
-
-    // If Railway proxy is available, redirect to it
-    if (RAILWAY_PROXY_URL) {
-      const railwayProxyUrl = `${RAILWAY_PROXY_URL}?url=${encodeURIComponent(url)}`;
-      
-      try {
-        const response = await fetch(railwayProxyUrl, {
-          headers: {
-            'Accept': '*/*',
-          },
-        });
-
-        if (!response.ok) {
-          console.error(`[Proxy] Railway proxy failed: ${response.status}`);
-          throw new Error(`Railway proxy failed: ${response.status}`);
-        }
-
-        const body = await response.arrayBuffer();
-        const contentType = response.headers.get('content-type') || 'application/octet-stream';
-
-        return new NextResponse(body, {
-          status: 200,
-          headers: {
-            'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': '*',
-            'Cache-Control': 'public, max-age=3600',
-          },
-        });
-      } catch (error) {
-        console.error('[Proxy] Failed to use Railway proxy:', error);
-        // Fall through to local proxy
-      }
     }
 
     // Fetch with retry logic
@@ -86,7 +80,6 @@ export async function GET(request: NextRequest) {
       // For m3u8 playlists, rewrite relative URLs to go through proxy
       const text = await response.text();
       const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-      const proxyBaseUrl = RAILWAY_PROXY_URL || '/api/proxy';
       
       // Rewrite all relative URLs in the playlist
       const rewrittenPlaylist = text
@@ -107,8 +100,8 @@ export async function GET(request: NextRequest) {
             targetUrl = baseUrl + targetUrl;
           }
           
-          // Proxy the URL using Railway proxy if available
-          return `${proxyBaseUrl}?url=${encodeURIComponent(targetUrl)}`;
+          // Proxy the URL
+          return `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
         })
         .join('\n');
 
