@@ -27,14 +27,16 @@ export default function WatchPage() {
 
   const [selectedLanguage, setSelectedLanguage] = useState<'sub' | 'dub'>('sub');
   const [showEpisodes, setShowEpisodes] = useState(false);
-  const [currentProvider, setCurrentProvider] = useState('gogoanime');
+  const [currentProvider] = useState('hianime');
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
   const [allSubtitles, setAllSubtitles] = useState<any[]>([]);
 
   const { data: animeData } = useAnimeById(animeId);
   const { data: episodesData } = useEpisodes(animeId, selectedLanguage === 'dub');
+  // Don't fetch stream if episode ID is fallback format (server was down when episodes were loaded)
+  const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
   const { data: streamData, isLoading: isStreamLoading, error: streamError } = useStreamingSourcesWithFallback(
-    episodeId,
+    isFallbackEpisode ? null : episodeId,
     selectedLanguage,
     selectedServer
   );
@@ -187,25 +189,23 @@ export default function WatchPage() {
                   <p className="text-gray-400">Loading video...</p>
                 </div>
               </div>
-            ) : streamError || !videoSource ? (
+            ) : isFallbackEpisode || streamError || !videoSource ? (
               <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
                 <div className="text-center max-w-md px-6">
-                  <div className="text-6xl mb-4">🚫</div>
-                  <p className="text-red-400 text-xl font-bold mb-3">Streaming Not Available</p>
+                  <div className="text-6xl mb-4">⚠️</div>
+                  <p className="text-amber-400 text-xl font-bold mb-3">Streaming Server Down</p>
                   <p className="text-gray-300 mb-4">
-                    This episode could not be found on Gogoanime.
+                    The streaming server is temporarily unavailable. Please try again later.
                   </p>
                   <p className="text-gray-400 text-sm mb-6">
-                    The anime may not be available on the streaming source, or the episode ID mapping failed. 
-                    Only real anime streams are supported - no placeholder videos.
+                    Make sure the HiAnime API is running at localhost:4000, or check back when the server is back online.
                   </p>
                   <div className="bg-gray-700/50 rounded-lg p-4 mb-6 text-left">
-                    <p className="text-gray-300 text-sm mb-2"><strong>Possible reasons:</strong></p>
+                    <p className="text-gray-300 text-sm mb-2"><strong>What you can do:</strong></p>
                     <ul className="text-gray-400 text-sm space-y-1">
-                      <li>• Anime not available on Gogoanime</li>
-                      <li>• Episode ID mapping failed</li>
-                      <li>• API rate limiting or downtime</li>
-                      <li>• Try a different anime or episode</li>
+                      <li>• Start or restart the HiAnime API (port 4000)</li>
+                      <li>• Refresh the page and try again</li>
+                      <li>• Go back and try a different anime</li>
                     </ul>
                   </div>
                   <div className="flex gap-3 justify-center">

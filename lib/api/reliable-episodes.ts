@@ -50,119 +50,34 @@ export function generateEpisodesFromCount(
  * Multi-Provider Search Result
  */
 export interface ProviderSearchResult {
-  provider: 'hianime' | 'gogoanime' | 'animepahe' | 'zoro';
+  provider: 'hianime';
   id: string;
   title: string;
 }
 
 /**
- * Search for anime across multiple providers
- * Priority: HiAnime API → Consumet providers (hianime, gogoanime, animepahe, zoro)
+ * Search for anime on HiAnime only (no Consumet fallback)
  */
 export async function searchAnimeMultiProvider(
   animeTitle: string,
   isDub: boolean = false
 ): Promise<ProviderSearchResult | null> {
-  
-  // Prepare search query
-  const searchQuery = animeTitle
-    .toLowerCase()
-    .replace(/season\s*\d+/gi, '')
-    .replace(/\d+(st|nd|rd|th)\s*season/gi, '')
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  console.log('═══════════════════════════════════════════════');
-  console.log('🔍 [Multi-Provider Search] Original:', animeTitle);
-  console.log('🔍 [Multi-Provider Search] Query:', searchQuery);
-  console.log('═══════════════════════════════════════════════');
-
-  // TIER 1: Try HiAnime API directly (fastest and most reliable)
   try {
     const hiAnimeAvailable = await isHiAnimeAvailable();
-    
-    if (hiAnimeAvailable) {
-      console.log('🎯 [TIER 1] Trying HiAnime API (Direct)...');
-      const match = await findHiAnimeMatch(animeTitle, isDub);
-      
-      if (match) {
-        console.log(`✅ [HiAnime API] FOUND!`);
-        console.log(`📺 [HiAnime API] ID:`, match.id);
-        console.log(`📺 [HiAnime API] Title:`, match.name);
-        console.log('═══════════════════════════════════════════════');
-        
-        return {
-          provider: 'hianime',
-          id: match.id,
-          title: match.name,
-        };
-      }
-    } else {
-      console.warn('⚠️ [HiAnime API] Not available, using Consumet fallback');
+    if (!hiAnimeAvailable) {
+      console.warn('⚠️ [HiAnime API] Not available');
+      return null;
     }
+    const match = await findHiAnimeMatch(animeTitle, isDub);
+    if (match) {
+      console.log(`✅ [HiAnime API] Found: ${match.id}`);
+      return { provider: 'hianime', id: match.id, title: match.name };
+    }
+    return null;
   } catch (error: any) {
-    console.warn('⚠️ [HiAnime API] Failed:', error.message);
+    console.warn('⚠️ [HiAnime API] Search failed:', error.message);
+    return null;
   }
-
-  // TIER 2: Try Consumet providers (fallback)
-  console.log('🎯 [TIER 2] Trying Consumet providers...');
-  const providers: Array<'hianime' | 'gogoanime' | 'animepahe' | 'zoro'> = [
-    'hianime',      // Best: Sub/Dub, High quality, Most reliable
-    'gogoanime',    // Good: Fallback option
-    'animepahe',    // Good: High quality encodes
-    'zoro',         // Alternative
-  ];
-
-  for (const provider of providers) {
-    try {
-      console.log(`🔍 [${provider.toUpperCase()}] Searching via Consumet...`);
-      
-      const response = await axiosInstance.get(
-        `https://api.consumet.org/anime/${provider}/${encodeURIComponent(searchQuery)}`,
-        { timeout: 8000 }
-      );
-
-      if (response.data?.results && response.data.results.length > 0) {
-        let results = response.data.results;
-        
-        // Filter for dub if requested
-        if (isDub) {
-          const dubResults = results.filter((r: any) => 
-            r.id?.toLowerCase().includes('dub') || 
-            r.title?.toLowerCase().includes('dub')
-          );
-          if (dubResults.length > 0) {
-            console.log(`🎙️ [${provider.toUpperCase()}] Found dub version`);
-            results = dubResults;
-          }
-        }
-
-        const match = results[0];
-        console.log(`✅ [${provider.toUpperCase()}] FOUND!`);
-        console.log(`📺 [${provider.toUpperCase()}] ID:`, match.id);
-        console.log(`📺 [${provider.toUpperCase()}] Title:`, match.title);
-        console.log('═══════════════════════════════════════════════');
-        
-        return {
-          provider,
-          id: match.id,
-          title: match.title,
-        };
-      }
-      
-      console.log(`⚠️ [${provider.toUpperCase()}] No results found`);
-    } catch (error: any) {
-      console.error(`❌ [${provider.toUpperCase()}] Error:`, error.message);
-      continue; // Try next provider
-    }
-  }
-
-  console.error('═══════════════════════════════════════════════');
-  console.error('❌ [Multi-Provider] ALL PROVIDERS FAILED');
-  console.error('═══════════════════════════════════════════════');
-  
-  return null;
 }
 
 /**
@@ -207,71 +122,20 @@ export async function getReliableEpisodes(
     console.warn('⚠️ [TIER 1] HiAnime API failed:', error.message);
   }
 
-  // TIER 2: Try Consumet providers (Fallback)
-  console.log('🎯 [TIER 2] Trying Consumet providers...');
-  const searchResult = await searchAnimeMultiProvider(animeTitle, isDub);
-  
-  if (searchResult) {
-    try {
-      const { provider, id } = searchResult;
-      
-      console.log('═══════════════════════════════════════════════');
-      console.log(`📺 [${provider.toUpperCase()}] Fetching episodes for:`, id);
-      console.log('═══════════════════════════════════════════════');
-      
-      const response = await axiosInstance.get(
-        `https://api.consumet.org/anime/${provider}/info/${id}`,
-        { timeout: 10000 }
-      );
-
-      if (response.data?.episodes && response.data.episodes.length > 0) {
-        const episodes = response.data.episodes;
-        
-        console.log(`✅ [${provider.toUpperCase()}] Found ${episodes.length} REAL episodes!`);
-        console.log(`🎬 [${provider.toUpperCase()}] First episode ID:`, episodes[0].id);
-        console.log(`🎬 [${provider.toUpperCase()}] Provider will be used for streaming`);
-        console.log('═══════════════════════════════════════════════');
-        
-        return {
-          animeId,
-          totalEpisodes: episodes.length,
-          episodes: episodes.map((ep: any) => ({
-            id: ep.id, // Real provider episode ID
-            number: ep.number,
-            title: ep.title || `Episode ${ep.number}`,
-            image: ep.image,
-          })),
-          _provider: provider, // Store provider for streaming
-        };
-      }
-    } catch (error: any) {
-      console.error(`❌ [${searchResult.provider.toUpperCase()}] Failed:`, error.message);
-    }
-  }
-
-  // TIER 3: Fallback - Generate episodes from AniList count (no streaming)
+  // TIER 2: Fallback - Generate episodes from AniList count (no streaming when server is down)
   console.log('═══════════════════════════════════════════════');
-  console.log('🔄 [TIER 3 - FALLBACK] Using AniList episode count:', episodeCount);
-  console.log('⚠️  [FALLBACK] Episodes will NOT have streaming (no provider found)');
+  console.log('🔄 [FALLBACK] HiAnime unavailable - using AniList episode count:', episodeCount);
+  console.log('⚠️  [FALLBACK] Streaming will show "Server down" until HiAnime API is running');
   console.log('═══════════════════════════════════════════════');
   
   return generateEpisodesFromCount(animeId, animeTitle, episodeCount);
 }
 
 /**
- * Get streaming URL for Gogoanime
- * Returns embed URL that always works
+ * Check if episode ID is fallback format (no streaming - server was down when episodes were fetched)
  */
-export function getGogoEmbedUrl(episodeId: string): string {
-  // If it's our generated ID, convert to gogoanime format
-  if (episodeId.includes('-episode-')) {
-    // This is a placeholder - in real implementation, you'd need the gogoanime ID
-    const episodeNum = episodeId.split('-episode-')[1];
-    return `https://gogoplay1.com/embedplus?id=&num=${episodeNum}`;
-  }
-  
-  // If it's already a gogoanime ID, use it directly
-  return `https://gogoplay1.com/embedplus?id=${episodeId}`;
+export function isFallbackEpisodeId(episodeId: string): boolean {
+  return episodeId.includes('-episode-') && !episodeId.includes('?ep=');
 }
 
 /**
@@ -325,15 +189,15 @@ export async function getEpisodesMultiSource(
   episodeCount: number,
   isDub: boolean = false
 ): Promise<EpisodeListResponse> {
-  // Strategy 1: Try Gogoanime via Consumet
+  // Strategy 1: Try HiAnime API
   try {
-    const gogoResult = await getReliableEpisodes(anilistId, animeTitle, episodeCount, isDub);
-    if (gogoResult.episodes.length > 0) {
-      console.log('[Episodes] Success via Gogoanime');
-      return gogoResult;
+    const result = await getReliableEpisodes(anilistId, animeTitle, episodeCount, isDub);
+    if (result.episodes.length > 0) {
+      console.log('[Episodes] Success via HiAnime');
+      return result;
     }
   } catch (error) {
-    console.log('[Episodes] Gogoanime failed, trying next source');
+    console.log('[Episodes] HiAnime failed, trying next source');
   }
 
   // Strategy 2: Try Jikan if MAL ID is available

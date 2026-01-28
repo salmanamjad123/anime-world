@@ -45,16 +45,16 @@ export async function GET(
     const category = (url.searchParams.get('category') || 'sub') as 'sub' | 'dub' | 'raw';
     const server = url.searchParams.get('server') || 'hd-1';
 
-    // Validate episode ID format
+    // Validate episode ID format (HiAnime format required)
     if (!episodeId.includes('?ep=')) {
       console.error('❌ [Stream API] Invalid episode ID format (missing ?ep=)');
       return NextResponse.json(
         { 
-          error: 'Invalid episode ID format',
-          message: 'Episode ID must be in HiAnime format (anime-id?ep=12345)',
+          error: 'Streaming server down',
+          message: 'The streaming server was unavailable when this page loaded. Please go back to the anime page and refresh, then try again.',
           episodeId,
         },
-        { status: 400 }
+        { status: 503 }
       );
     }
 
@@ -68,21 +68,16 @@ export async function GET(
       console.error('❌ [Stream API] HiAnime API not available at localhost:4000');
       return NextResponse.json(
         { 
-          error: 'HiAnime API not available',
-          message: 'Make sure the HiAnime API is running at http://localhost:4000',
+          error: 'Streaming server down',
+          message: 'The streaming server is temporarily unavailable. Please try again later.',
           suggestions: [
-            'Check if aniwatch-api is running in terminal',
-            'Verify the API is accessible at http://localhost:4000',
-            'Restart the HiAnime API if needed',
+            'Start or restart the HiAnime API (port 4000)',
+            'Refresh the page and try again',
           ]
         },
         { status: 503 }
       );
     }
-
-    console.log('📺 [HiAnime API] Episode ID:', episodeId);
-    console.log('🎙️ [HiAnime API] Category:', category);
-    console.log('🖥️ [HiAnime API] Server:', server);
     
     // Fetch streaming sources with retry logic
     try {
@@ -134,17 +129,15 @@ export async function GET(
     
     return NextResponse.json(
       { 
-        error: 'Streaming sources not available',
-        message: 'This episode could not be found on any streaming provider. The anime may not be available, or all providers are currently down.',
+        error: 'Streaming server down',
+        message: 'The streaming server is temporarily unavailable. Please try again later.',
         episodeId,
         suggestions: [
-          'Make sure HiAnime API is running at http://localhost:4000',
-          'Try a different anime or episode',
-          'Check if the anime is available on HiAnime.to',
-          'Verify your network connection',
+          'Start or restart the HiAnime API (port 4000)',
+          'Refresh the page and try again',
         ]
       },
-      { status: 404 }
+      { status: 503 }
     );
   } catch (error: any) {
     console.error('═══════════════════════════════════════════════');
