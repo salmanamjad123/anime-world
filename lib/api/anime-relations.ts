@@ -112,7 +112,14 @@ export async function getAnimeSeasons(animeId: string): Promise<{
           edge.relationType === 'ALTERNATIVE'
         ) {
           if (node.format === 'TV' || node.format === 'TV_SHORT') {
-            seasons.push(relation);
+            // Hide seasons that have not aired yet (no episodes & NOT_YET_RELEASED),
+            // so we don't show fake \"Season 2\" entries that have no real episodes (e.g. Gachiakuta S2).
+            const status = node.status;
+            const isUpcoming = status === 'NOT_YET_RELEASED';
+            const hasEpisodes = !!node.episodes && node.episodes > 0;
+            if (!isUpcoming || hasEpisodes) {
+              seasons.push(relation);
+            }
           } else if (node.format === 'SPECIAL' || node.format === 'OVA' || node.format === 'ONA') {
             specials.push(relation);
           }

@@ -48,7 +48,10 @@ export async function GET(
       relationType: 'MAIN',
       coverImage: validCover(info.poster),
     };
-    const seasonRelations: AnimeRelation[] = (info.seasons ?? []).map((s) => ({
+
+    // Only treat explicit HiAnime seasons as seasons.
+    // Related shows (spin‑offs, specials, etc.) should NOT appear in the Seasons selector.
+    const seasons: AnimeRelation[] = (info.seasons ?? []).map((s) => ({
       id: s.id,
       title: s.title || s.name,
       format: 'TV',
@@ -56,15 +59,7 @@ export async function GET(
       relationType: 'SEQUEL' as const,
       coverImage: validCover(s.poster),
     }));
-    const related: AnimeRelation[] = (info.relatedAnimes ?? []).map((r) => ({
-      id: r.id,
-      title: r.name,
-      format: (r.type ?? 'TV') as string,
-      episodes: (r.episodes?.sub ?? 0) + (r.episodes?.dub ?? 0) || 0,
-      relationType: 'SEQUEL' as const,
-      coverImage: validCover(r.poster),
-    }));
-    const seasons = [...seasonRelations, ...related];
+
     return NextResponse.json({
       main,
       seasons,

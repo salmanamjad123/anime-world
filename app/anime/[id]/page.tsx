@@ -68,6 +68,7 @@ export default function AnimeDetailPage() {
   const popularAnimeFiltered = (popularData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
+  const isTvFormat = anime?.format === 'TV' || anime?.format === 'TV_SHORT';
 
   if (isAnimeLoading) {
     return (
@@ -181,8 +182,11 @@ export default function AnimeDetailPage() {
                     <span className="text-gray-300">{formatSeasonYear(anime.season, anime.seasonYear)}</span>
                   </div>
                 )}
-                {anime.episodes && (
-                  <span className="text-gray-300">{anime.episodes} Episodes</span>
+                {/* Prefer actual loaded episodes for accuracy (HiAnime seasons, AniList season counts) */}
+                {(episodes.length > 0 || anime.episodes) && (
+                  <span className="text-gray-300">
+                    {(episodes.length > 0 ? episodes.length : anime.episodes) || 0} Episodes
+                  </span>
                 )}
               </div>
 
@@ -229,12 +233,12 @@ export default function AnimeDetailPage() {
           {/* Main Content: Episodes first so users don't need to scroll */}
           <div className="lg:col-span-2">
             {/* Season/Movie Selector */}
-            {(seasons.length > 1 || movies.length > 0) && (
+            {((isTvFormat && seasons.length > 1) || movies.length > 0) && (
               <div className="bg-gray-800/50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-bold text-white mb-4">Select Season or Movie</h3>
                 
-                {/* Seasons */}
-                {seasons.length > 1 && (
+                {/* Seasons (only for TV/TV_SHORT formats) */}
+                {isTvFormat && seasons.length > 1 && (
                   <div className="mb-4">
                     <p className="text-sm text-gray-400 mb-2">Seasons</p>
                     <div className="flex flex-wrap gap-2">
