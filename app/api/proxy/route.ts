@@ -9,6 +9,10 @@ import { retry, isRetryableError } from '@/lib/utils/retry';
 // Use Railway proxy if available, otherwise handle locally
 const RAILWAY_PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL;
 
+// Enable caching for video segments (not playlists)
+const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
+const CACHE_MAX_AGE = parseInt(process.env.PROXY_CACHE_MAX_AGE || '3600');
+
 export async function GET(request: NextRequest) {
   try {
     const url = request.nextUrl.searchParams.get('url');
