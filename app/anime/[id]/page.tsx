@@ -9,14 +9,15 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
-import { useAnimeById } from '@/hooks/useAnime';
+import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { useEpisodes, useAnimeInfo } from '@/hooks/useEpisodes';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { Heart, Play, Star, Calendar, Tv } from 'lucide-react';
+import { Heart, Play, Star, Calendar, Tv, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 
 export default function AnimeDetailPage() {
   const params = useParams();
@@ -27,8 +28,11 @@ export default function AnimeDetailPage() {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>(animeId);
   const [seasons, setSeasons] = useState<any[]>([]);
   const [movies, setMovies] = useState<any[]>([]);
+  const [synopsisExpanded, setSynopsisExpanded] = useState(false);
   
   const { data: animeData, isLoading: isAnimeLoading } = useAnimeById(animeId);
+  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
+  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
   const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
   const { data: animeInfo } = useAnimeInfo(selectedSeasonId);
 
@@ -58,6 +62,12 @@ export default function AnimeDetailPage() {
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
   const watchProgress = getProgress(animeId);
+  const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
+    (a: any) => String(a.id) !== String(animeId)
+  );
+  const popularAnimeFiltered = (popularData?.data?.Page?.media || []).filter(
+    (a: any) => String(a.id) !== String(animeId)
+  );
 
   if (isAnimeLoading) {
     return (
@@ -113,7 +123,7 @@ export default function AnimeDetailPage() {
       <Header />
 
       {/* Banner Section */}
-      <div className="relative h-[500px] w-full">
+      <div className="relative min-h-[380px] md:h-[500px] w-full">
         {/* Background Image */}
         {anime.bannerImage && (
           <div className="absolute inset-0">
@@ -128,11 +138,11 @@ export default function AnimeDetailPage() {
           </div>
         )}
 
-        {/* Content */}
-        <div className="relative container mx-auto px-4 h-full flex items-end pb-12">
-          <div className="flex gap-6 w-full">
-            {/* Cover Image */}
-            <div className="flex-shrink-0 w-48 -mb-24">
+        {/* Content: stack on mobile, side-by-side on md+ */}
+        <div className="relative container mx-auto px-4 h-full flex flex-col items-center md:items-start pt-4 pb-5  md:pt-0 md:pb-12 md:justify-end">
+          <div className="flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl">
+            {/* Cover Image: centered on mobile, left on desktop */}
+            <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48 md:-mb-24">
               <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl">
                 <Image
                   src={anime.coverImage.extraLarge || anime.coverImage.large}
@@ -145,14 +155,14 @@ export default function AnimeDetailPage() {
             </div>
 
             {/* Info */}
-            <div className="flex-1 pb-8">
-              <h1 className="text-4xl font-bold text-white mb-2">{title}</h1>
+            <div className="flex-1 md:pb-8 text-center md:text-left">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">{title}</h1>
               {anime.title.native && (
-                <p className="text-gray-400 mb-4">{anime.title.native}</p>
+                <p className="text-gray-400 mb-3 md:mb-4 text-sm sm:text-base">{anime.title.native}</p>
               )}
 
               {/* Meta Info */}
-              <div className="flex flex-wrap gap-4 mb-4 text-sm">
+              <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-3 md:mb-4 text-sm">
                 {anime.averageScore && (
                   <div className="flex items-center gap-1">
                     <Star className={`w-4 h-4 fill-current ${getScoreColor(anime.averageScore)}`} />
@@ -178,7 +188,7 @@ export default function AnimeDetailPage() {
 
               {/* Genres */}
               {anime.genres && anime.genres.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-6">
+                <div className="flex flex-wrap justify-center md:justify-start gap-2 mb-6">
                   {anime.genres.map((genre) => (
                     <span
                       key={genre}
@@ -190,20 +200,20 @@ export default function AnimeDetailPage() {
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
+              {/* Action Buttons: stack on mobile, row on sm+ */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 {watchProgress ? (
-                  <Button variant="primary" size="lg" onClick={handleContinueWatching}>
+                  <Button variant="primary" size="lg" onClick={handleContinueWatching} className="w-full sm:w-auto">
                     <Play className="w-5 h-5 mr-2" />
                     Continue Episode {watchProgress.episodeNumber}
                   </Button>
                 ) : (
-                  <Button variant="primary" size="lg" onClick={handlePlayFirst}>
+                  <Button variant="primary" size="lg" onClick={handlePlayFirst} className="w-full sm:w-auto">
                     <Play className="w-5 h-5 mr-2" />
                     Play Now
                   </Button>
                 )}
-                <Button variant="secondary" size="lg" onClick={handleWatchlistToggle}>
+                <Button variant="secondary" size="lg" onClick={handleWatchlistToggle} className="w-full sm:w-auto">
                   <Heart className={`w-5 h-5 mr-2 ${inWatchlist ? 'fill-current' : ''}`} />
                   {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
                 </Button>
@@ -214,16 +224,10 @@ export default function AnimeDetailPage() {
       </div>
 
       {/* Description and Episodes */}
-      <div className="container mx-auto px-4 py-12 mt-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
+      <div className="container mx-auto px-4 pb-5 mt-0 md:pb-12 ">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-8">
+          {/* Main Content: Episodes first so users don't need to scroll */}
           <div className="lg:col-span-2">
-            {/* Description */}
-            <div className="bg-gray-800/50 rounded-lg p-6 mb-8">
-              <h2 className="text-2xl font-bold text-white mb-4">Synopsis</h2>
-              <p className="text-gray-300 leading-relaxed">{description}</p>
-            </div>
-
             {/* Season/Movie Selector */}
             {(seasons.length > 1 || movies.length > 0) && (
               <div className="bg-gray-800/50 rounded-lg p-6 mb-6">
@@ -271,9 +275,9 @@ export default function AnimeDetailPage() {
             )}
 
             {/* Episodes */}
-            <div className="bg-gray-800/50 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">
+            <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
+              <div className="flex items-center justify-between mb-4 md:mb-6">
+                <h2 className="text-xl md:text-2xl font-bold text-white">
                   Episodes
                   {seasons.find(s => s.id === selectedSeasonId)?.relationType !== 'MAIN' && 
                     ` - ${seasons.find(s => s.id === selectedSeasonId)?.title || 'Season'}`
@@ -310,19 +314,21 @@ export default function AnimeDetailPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
                 </div>
               ) : episodes.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {episodes.map((episode) => (
-                    <button
-                      key={episode.id}
-                      onClick={() => router.push(ROUTES.WATCH(selectedSeasonId, episode.id))}
-                      className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-4 transition-colors text-left"
-                    >
-                      <div className="text-white font-semibold">Episode {episode.number}</div>
-                      {episode.title && episode.title !== `Episode ${episode.number}` && (
-                        <div className="text-gray-400 text-sm mt-1 line-clamp-2">{episode.title}</div>
-                      )}
-                    </button>
-                  ))}
+                <div className="max-h-[60vh] overflow-y-auto rounded-lg pr-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {episodes.map((episode) => (
+                      <button
+                        key={episode.id}
+                        onClick={() => router.push(ROUTES.WATCH(selectedSeasonId, episode.id))}
+                        className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-4 transition-colors text-left"
+                      >
+                        <div className="text-white font-semibold">Episode {episode.number}</div>
+                        {episode.title && episode.title !== `Episode ${episode.number}` && (
+                          <div className="text-gray-400 text-sm mt-1 line-clamp-2">{episode.title}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -332,11 +338,32 @@ export default function AnimeDetailPage() {
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* Sidebar: Synopsis at top, then Studios & Status */}
+          <div className="space-y-4 md:space-y-6">
+            {/* Synopsis (accordion: 3 lines by default, expand to see full) */}
+            <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
+              <button
+                type="button"
+                onClick={() => setSynopsisExpanded((e) => !e)}
+                className="flex items-center gap-2 w-full text-left mb-3 md:mb-4 group"
+                aria-expanded={synopsisExpanded}
+              >
+                <ChevronDown
+                  className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${synopsisExpanded ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+                <h2 className="text-xl md:text-2xl font-bold text-white group-hover:text-blue-400 transition-colors">Synopsis</h2>
+              </button>
+              <p
+                className={`text-gray-300 leading-relaxed text-sm md:text-base ${synopsisExpanded ? '' : 'line-clamp-3'}`}
+              >
+                {description}
+              </p>
+            </div>
+
             {/* Studios */}
             {anime.studios?.nodes && anime.studios.nodes.length > 0 && (
-              <div className="bg-gray-800/50 rounded-lg p-6">
+              <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
                 <h3 className="text-lg font-bold text-white mb-3">Studios</h3>
                 {anime.studios.nodes.map((studio, index) => (
                   <div key={index} className="text-gray-300">{studio.name}</div>
@@ -346,13 +373,27 @@ export default function AnimeDetailPage() {
 
             {/* Status */}
             {anime.status && (
-              <div className="bg-gray-800/50 rounded-lg p-6">
+              <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
                 <h3 className="text-lg font-bold text-white mb-3">Status</h3>
                 <p className="text-gray-300 capitalize">{anime.status.toLowerCase().replace('_', ' ')}</p>
               </div>
             )}
           </div>
         </div>
+
+        {/* Recommended for you + Most Popular */}
+        <RecommendedAnimeRow
+          title="Recommended for you"
+          anime={trendingAnime.slice(0, 12)}
+          isLoading={isTrendingLoading}
+          className="mt-8"
+        />
+        <RecommendedAnimeRow
+          title="Most Popular"
+          anime={popularAnimeFiltered.slice(0, 12)}
+          isLoading={isPopularLoading}
+          className="mt-8"
+        />
       </div>
     </div>
   );

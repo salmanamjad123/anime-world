@@ -22,8 +22,8 @@ export function AnimeCard({ anime }: AnimeCardProps) {
   const score = anime.averageScore ? anime.averageScore / 10 : null;
 
   return (
-    <Link href={ROUTES.ANIME_DETAIL(anime.id)}>
-      <Card hover className="overflow-hidden group">
+    <Link href={ROUTES.ANIME_DETAIL(anime.id)} className="block h-full">
+      <Card hover className="overflow-hidden group h-full flex flex-col">
         {/* Image Container */}
         <div className="relative aspect-[2/3] overflow-hidden">
           <Image
@@ -69,7 +69,7 @@ export function AnimeCard({ anime }: AnimeCardProps) {
         </div>
 
         {/* Content */}
-        <div className="p-3">
+        <div className="p-3 flex-1 flex flex-col justify-between">
           <h3 className="font-semibold text-sm line-clamp-2 text-white group-hover:text-blue-400 transition-colors">
             {title}
           </h3>

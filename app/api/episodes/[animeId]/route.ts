@@ -1,11 +1,16 @@
 /**
  * Episodes API Route
- * GET /api/episodes/[animeId] - Get episodes for an anime
+ * GET /api/episodes/[animeId] - Get episodes for an anime (AniList id or HiAnime slug)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getEpisodesMultiSource } from '@/lib/api/reliable-episodes';
 import { getAnimeById } from '@/lib/api/anilist';
+import { getHiAnimeEpisodesStandard } from '@/lib/api/hianime';
+
+function isAniListId(id: string): boolean {
+  return /^\d+$/.test(id);
+}
 
 export async function GET(
   request: NextRequest,
@@ -23,10 +28,24 @@ export async function GET(
       );
     }
 
-    // Get anime info from AniList first
+    // HiAnime slug: fetch episodes directly from HiAnime (no AniList)
+    if (!isAniListId(animeId)) {
+      try {
+        const result = await getHiAnimeEpisodesStandard(animeId, animeId);
+        return NextResponse.json(result);
+      } catch (error) {
+        console.error('[API Error] /api/episodes/[animeId] HiAnime:', error);
+        return NextResponse.json(
+          { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId },
+          { status: 404 }
+        );
+      }
+    }
+
+    // AniList id: get anime info then multi-source episodes
     const animeData = await getAnimeById(animeId);
     const anime = animeData.data.Media;
-    
+
     if (!anime) {
       return NextResponse.json(
         { error: 'Anime not found' },
@@ -34,12 +53,10 @@ export async function GET(
       );
     }
 
-    // Get the anime title and episode count
     const animeTitle = anime.title.english || anime.title.romaji;
     const episodeCount = anime.episodes || 0;
     const malId = anime.malId;
 
-    // Use multi-source fetcher with fallbacks
     const result = await getEpisodesMultiSource(
       animeId,
       malId,

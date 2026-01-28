@@ -53,6 +53,15 @@ export interface HiAnimeInfo {
     poster: string;
     isCurrent: boolean;
   }>;
+  genres?: string[];
+  /** From moreInfo */
+  studios?: string;
+  status?: string;
+  aired?: string;
+  /** MAL/AniList-style score (e.g. "8.3") - not content rating like PG-13 */
+  malscore?: string;
+  /** relatedAnimes from API (sequels, prequels, etc.) */
+  relatedAnimes?: Array<{ id: string; name: string; poster: string; type?: string; episodes?: { sub: number; dub: number } }>;
 }
 
 /**
@@ -99,6 +108,7 @@ export async function searchHiAnime(
 
 /**
  * Get anime info from HiAnime (with caching)
+ * API returns data.anime as array with first element { info, moreInfo, seasons, ... }
  */
 export async function getHiAnimeInfo(animeId: string): Promise<HiAnimeInfo> {
   const cacheKey = `hianime:info:${animeId}`;
@@ -113,9 +123,32 @@ export async function getHiAnimeInfo(animeId: string): Promise<HiAnimeInfo> {
         timeout: 10000,
       });
 
-      console.log(`✅ [HiAnime API] Got info for: ${response.data?.data?.anime?.name}`);
-      
-      return response.data.data.anime;
+      const raw = response.data?.data?.anime;
+      const first = Array.isArray(raw) ? raw[0] : raw;
+      const info = first?.info ?? first;
+      if (!info?.id && !info?.name) {
+        throw new Error('Invalid anime response');
+      }
+      const moreInfo = first?.moreInfo;
+      const seasons = first?.seasons ?? info?.seasons;
+      const genres = moreInfo?.genres ?? info?.genres;
+      const relatedAnimes = first?.relatedAnimes ?? first?.recommendedAnimes;
+      console.log(`✅ [HiAnime API] Got info for: ${info?.name ?? animeId}`);
+
+      return {
+        id: info.id ?? animeId,
+        name: info.name ?? '',
+        poster: info.poster ?? '',
+        description: info.description ?? '',
+        stats: info.stats ?? { rating: '', quality: '', episodes: { sub: 0, dub: 0 }, type: '', duration: '' },
+        seasons: Array.isArray(seasons) ? seasons : undefined,
+        genres: Array.isArray(genres) ? genres : undefined,
+        studios: moreInfo?.studios ?? undefined,
+        status: moreInfo?.status ?? info?.status ?? undefined,
+        aired: moreInfo?.aired ?? undefined,
+        malscore: info?.stats?.malscore ?? info?.malscore ?? moreInfo?.score ?? undefined,
+        relatedAnimes: Array.isArray(relatedAnimes) ? relatedAnimes : undefined,
+      };
     },
     CACHE_TTL.ANIME_INFO
   ).catch((error: any) => {

@@ -28,6 +28,16 @@ const nextConfig: NextConfig = {
         hostname: 'media.kitsu.io',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'hianime.to',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.noitatnemucod.net',
+        pathname: '/**',
+      },
     ],
   },
 };

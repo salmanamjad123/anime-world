@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/Button';
-import { useAnimeById } from '@/hooks/useAnime';
+import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { useEpisodes } from '@/hooks/useEpisodes';
 import { useStreamingSourcesWithFallback } from '@/hooks/useStream';
 import { useHistoryStore } from '@/store/useHistoryStore';
@@ -18,6 +18,7 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { ChevronLeft, ChevronRight, List, Settings } from 'lucide-react';
+import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 
 export default function WatchPage() {
   const params = useParams();
@@ -32,6 +33,8 @@ export default function WatchPage() {
   const [allSubtitles, setAllSubtitles] = useState<any[]>([]);
 
   const { data: animeData } = useAnimeById(animeId);
+  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
+  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
   const { data: episodesData } = useEpisodes(animeId, selectedLanguage === 'dub');
   // Don't fetch stream if episode ID is fallback format (server was down when episodes were loaded)
   const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
@@ -51,6 +54,12 @@ export default function WatchPage() {
   const videoSource = streamData?.sources?.[0]?.url;
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
+  const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
+    (a: any) => String(a.id) !== String(animeId)
+  );
+  const popularAnimeFiltered = (popularData?.data?.Page?.media || []).filter(
+    (a: any) => String(a.id) !== String(animeId)
+  );
 
   // Auto-fetch English subtitles from external sources if not available from HiAnime
   useEffect(() => {
@@ -341,6 +350,19 @@ export default function WatchPage() {
             </div>
           </div>
         </div>
+
+        <RecommendedAnimeRow
+          title="Recommended for you"
+          anime={trendingAnime.slice(0, 12)}
+          isLoading={isTrendingLoading}
+          className="mt-10"
+        />
+        <RecommendedAnimeRow
+          title="Most Popular"
+          anime={popularAnimeFiltered.slice(0, 12)}
+          isLoading={isPopularLoading}
+          className="mt-8"
+        />
       </div>
     </div>
   );
