@@ -1,0 +1,9 @@
+# Cloudflare Worker: HLS/Video proxy for anime-world
+# Deploy from this folder: npx wrangler deploy
+# Docs: https://developers.cloudflare.com/workers/
+
+name = "anime-world-proxy"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Workers.dev URL: https://anime-world-proxy.<your-subdomain>.workers.dev
