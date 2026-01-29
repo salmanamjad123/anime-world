@@ -149,16 +149,10 @@ export function VideoPlayer({
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 90,
-          // Enable adaptive bitrate streaming
-          startLevel: autoQuality ? -1 : undefined, // -1 = auto select
+          startLevel: autoQuality ? -1 : undefined,
           capLevelToPlayerSize: true,
           maxMaxBufferLength: 30,
-          // Add custom loader configuration for direct streaming
-          xhrSetup: function(xhr, url) {
-            // Set headers for CDN compatibility (works from browser)
-            xhr.setRequestHeader('Referer', 'https://hianime.to/');
-            xhr.setRequestHeader('Origin', 'https://hianime.to');
-          },
+          // Referer/Origin are set by the Cloudflare Worker when using proxy; browser blocks setting them here.
         });
 
         hlsRef.current = hls;

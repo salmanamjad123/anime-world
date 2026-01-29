@@ -1,7 +1,7 @@
 /**
  * Cloudflare Worker: HLS/Video proxy for anime-world
  * Same API as Next.js /api/proxy: GET /proxy?url=<encoded-url>
- * Adds Referer/Origin so CDNs (megacloud, hianime) allow the request.
+ * Sends Referer/Origin matching the target URL's domain so each CDN allows the request.
  */
 
 const CORS = {
@@ -10,11 +10,26 @@ const CORS = {
   'Access-Control-Allow-Headers': '*',
 };
 
-const CDN_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer': 'https://megacloud.blog/',
-  'Origin': 'https://hianime.to',
-};
+const DEFAULT_REFERER = 'https://megacloud.blog/';
+const DEFAULT_ORIGIN = 'https://hianime.to';
+
+function headersForTarget(targetUrl) {
+  try {
+    const u = new URL(targetUrl);
+    const origin = `${u.protocol}//${u.host}`;
+    return {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': origin + '/',
+      'Origin': origin,
+    };
+  } catch {
+    return {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': DEFAULT_REFERER,
+      'Origin': DEFAULT_ORIGIN,
+    };
+  }
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -40,9 +55,10 @@ export default {
     }
 
     try {
+      const cdnHeaders = headersForTarget(targetUrl);
       const response = await fetch(targetUrl, {
         method: 'GET',
-        headers: CDN_HEADERS,
+        headers: cdnHeaders,
         cf: { cacheTtl: 0 },
       });
       if (!response.ok) {
