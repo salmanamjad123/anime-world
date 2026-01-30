@@ -5,8 +5,9 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import { HlsSafeLoader } from '@/lib/hls-safe-loader';
 import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check } from 'lucide-react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const prevSubtitlesKeyRef = useRef<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -102,18 +104,15 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
     
-    console.log(`🎬 Changing subtitle to: ${subtitleLang}`);
     setCurrentSubtitle(subtitleLang);
     setShowSubtitleMenu(false);
-    
+
     // Enable/disable text tracks
     const tracks = video.textTracks;
-    console.log(`📝 Total tracks available: ${tracks.length}`);
     
     for (let i = 0; i < tracks.length; i++) {
       const track = tracks[i];
-      console.log(`  Track ${i}: lang="${track.language}", label="${track.label}", mode="${track.mode}"`);
-      
+
       if (subtitleLang === 'off') {
         track.mode = 'disabled';
       } else if (
@@ -123,7 +122,6 @@ export function VideoPlayer({
         track.label?.toLowerCase() === subtitleLang.toLowerCase()
       ) {
         track.mode = 'showing';
-        console.log(`✅ Enabled subtitle: ${track.label}`);
       } else {
         track.mode = 'disabled';
       }
@@ -148,28 +146,22 @@ export function VideoPlayer({
           ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy` 
           : '/api/proxy';
         const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
-        
-        console.log(`🎬 [VideoPlayer] Streaming mode: ${useProxy ? 'PROXIED' : 'DIRECT'}`);
-        console.log(`📺 [VideoPlayer] Video URL: ${currentSrc.substring(0, 100)}...`);
 
         const hls = new Hls({
+          loader: HlsSafeLoader,
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 90,
           startLevel: autoQuality ? -1 : undefined,
           capLevelToPlayerSize: true,
           maxMaxBufferLength: 30,
-          // Referer/Origin are set by the Cloudflare Worker when using proxy; browser blocks setting them here.
         });
 
         hlsRef.current = hls;
-        
-        // When useProxy: stream via Railway proxy (IPRoyal) to avoid CDN 403
-        const finalSrc = useProxy 
+
+        const finalSrc = useProxy
           ? `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`
-          : currentSrc; // Direct URL - browser uses user's real IP!
-        
-        console.log(`🚀 [VideoPlayer] Loading source: ${useProxy ? 'via proxy' : 'direct'}`);
+          : currentSrc;
         hls.loadSource(finalSrc);
         hls.attachMedia(video);
 
@@ -180,8 +172,7 @@ export function VideoPlayer({
           }
         });
 
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('HLS Error:', data);
+        hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
@@ -202,7 +193,6 @@ export function VideoPlayer({
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS support (Safari) - always direct, no proxy needed
-        console.log('🍎 [VideoPlayer] Using native HLS (Safari)');
         video.src = currentSrc;
         setIsLoading(false);
         if (autoPlay) {
@@ -229,70 +219,83 @@ export function VideoPlayer({
     existingTracks.forEach(track => track.remove());
 
     if (subtitles && subtitles.length > 0) {
-      console.log(`📝 Adding ${subtitles.length} subtitle track(s) to video`);
-      
+      // Prefer English as default
+      const englishIndex = subtitles.findIndex(
+        (s) =>
+          s.lang === 'en' ||
+          s.lang === 'english' ||
+          s.label?.toLowerCase().includes('english')
+      );
+      const defaultIndex = englishIndex >= 0 ? englishIndex : 0;
+      const defaultLang = subtitles[defaultIndex]?.lang;
+
+      // Only set default when subtitles change (e.g. new episode), not when user picks a different lang
+      const subtitlesKey = subtitles.map((s) => s.url).join('|');
+      if (subtitlesKey !== prevSubtitlesKeyRef.current) {
+        prevSubtitlesKeyRef.current = subtitlesKey;
+        setCurrentSubtitle(defaultLang);
+      }
+
       // ALWAYS proxy external subtitles - they need it for CORS!
       const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
       const defaultProxy = hianimeUrl.includes('railway')
         ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
         : '/api/proxy';
       const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
-      
-      // Add subtitle tracks
+
+      let addedIndex = 0;
+      let defaultTrackAddedIndex = -1;
       subtitles.forEach((subtitle, index) => {
-        // Skip if subtitle doesn't have a valid URL
-        if (!subtitle.url) {
-          console.warn(`⚠️ Subtitle missing URL:`, subtitle);
-          return;
-        }
-        
-        const track = document.createElement('track');
-        track.kind = 'subtitles';
-        track.label = subtitle.label || subtitle.lang;
-        track.srclang = subtitle.lang;
-        
-        // ALWAYS proxy external HTTP/HTTPS subtitles for CORS compatibility
-        // Only skip proxy for relative/local URLs
+        if (!subtitle.url) return;
+
+        const trackEl = document.createElement('track');
+        trackEl.kind = 'subtitles';
+        trackEl.label = subtitle.label || subtitle.lang;
+        trackEl.srclang = subtitle.lang;
+
         const subUrl = subtitle.url.startsWith('http')
           ? `${proxyUrl}?url=${encodeURIComponent(subtitle.url)}`
           : subtitle.url;
-        track.src = subUrl;
-        
-        console.log(`📝 Subtitle track: ${subtitle.label} - ${subUrl.startsWith('/api/proxy') ? 'Proxied' : 'Direct'}`);
-        
-        // Set first subtitle as default if user hasn't disabled subtitles
-        if (index === 0 && currentSubtitle !== 'off') {
-          track.default = true;
-          setCurrentSubtitle(subtitle.lang);
+        trackEl.src = subUrl;
+
+        const isDefault = index === defaultIndex;
+        if (isDefault) {
+          trackEl.default = true;
+          defaultTrackAddedIndex = addedIndex;
         }
-        
-        video.appendChild(track);
-        
-        // Log subtitle loading
-        track.addEventListener('load', () => {
-          console.log(`✅ Subtitle loaded: ${subtitle.label} (${subtitle.lang})`);
-          
-          // Wait a bit for textTrack to be ready, then enable if needed
-          setTimeout(() => {
-            const textTrack = video.textTracks[index];
-            if (textTrack) {
-              console.log(`  TextTrack ${index}: lang="${textTrack.language}", label="${textTrack.label}", mode="${textTrack.mode}"`);
-              
-              // If this is the first subtitle or matches current selection, enable it
-              if ((index === 0 && currentSubtitle !== 'off') || subtitle.lang === currentSubtitle) {
-                textTrack.mode = 'showing';
-                console.log(`🎬 Enabled subtitle: ${subtitle.label}`);
-              }
-            }
-          }, 100);
-        });
-        
-        track.addEventListener('error', (e) => {
-          console.error(`❌ Subtitle failed to load: ${subtitle.label}`, e);
-        });
+
+        video.appendChild(trackEl);
+
+        const idx = addedIndex++;
+        const enableDefault = () => {
+          const textTrack = trackEl.track ?? video.textTracks[idx];
+          if (textTrack && isDefault && textTrack.mode !== 'showing') {
+            textTrack.mode = 'showing';
+          }
+        };
+        trackEl.addEventListener('load', enableDefault);
+        trackEl.addEventListener('error', () => {});
       });
+
+      // Fallback: enable default subtitle when video is ready (some browsers need this)
+      let loadeddataHandler: (() => void) | null = null;
+      if (defaultTrackAddedIndex >= 0) {
+        loadeddataHandler = () => {
+          const textTrack = video.textTracks[defaultTrackAddedIndex];
+          if (textTrack && textTrack.mode !== 'showing') {
+            textTrack.mode = 'showing';
+          }
+        };
+        video.addEventListener('loadeddata', loadeddataHandler, { once: true });
+      }
+
+      return () => {
+        if (loadeddataHandler) {
+          video.removeEventListener('loadeddata', loadeddataHandler);
+        }
+      };
     }
-  }, [subtitles, currentSubtitle]);
+  }, [subtitles]);
 
   // Set volume and playback speed
   useEffect(() => {
@@ -389,12 +392,37 @@ export function VideoPlayer({
     };
   }, [isPlaying]);
 
-  // Embed mode: iframe loads CDN embed page (like AniWatch) - no proxy/CORS issues
+  // Embed URL with subtitle param (some embeds accept sub=, subtitle=, vtt=)
+  const embedWithSubs = useMemo(() => {
+    if (!embedUrl || !subtitles?.length) return embedUrl ?? '';
+    const english = subtitles.find(
+      (s) =>
+        s.lang === 'en' ||
+        s.lang === 'english' ||
+        s.label?.toLowerCase().includes('english')
+    );
+    const sub = english ?? subtitles[0];
+    if (!sub?.url) return embedUrl;
+    const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
+    const defaultProxy = hianimeUrl.includes('railway')
+      ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
+      : '/api/proxy';
+    const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
+    const subUrl =
+      sub.url.startsWith('http')
+        ? `${proxyUrl}?url=${encodeURIComponent(sub.url)}`
+        : sub.url;
+    const sep = embedUrl.includes('?') ? '&' : '?';
+    // Some embeds use sub=, others subtitle= or vtt= - try sub first (most common)
+    return `${embedUrl}${sep}sub=${encodeURIComponent(subUrl)}&subtitle=${encodeURIComponent(subUrl)}`;
+  }, [embedUrl, subtitles]);
+
+  // Embed mode: iframe loads CDN embed page (like AniWatch)
   if (embedUrl) {
     return (
       <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
         <iframe
-          src={embedUrl}
+          src={embedWithSubs}
           className="absolute inset-0 w-full h-full border-0"
           allowFullScreen
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
