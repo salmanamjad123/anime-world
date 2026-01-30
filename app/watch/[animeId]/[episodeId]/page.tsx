@@ -31,6 +31,13 @@ export default function WatchPage() {
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [currentProvider] = useState('hianime');
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
+
+  // Only hd-1 and hd-2 work - reset if invalid
+  useEffect(() => {
+    if (selectedServer !== 'hd-1' && selectedServer !== 'hd-2') {
+      setSelectedServer('hd-1');
+    }
+  }, [selectedServer]);
   const [allSubtitles, setAllSubtitles] = useState<any[]>([]);
 
   const { data: animeData } = useAnimeById(animeId);
@@ -284,7 +291,7 @@ export default function WatchPage() {
               </div>
               
               <div className="flex gap-2">
-                {/* Server Selector */}
+                {/* Server Selector - only hd-1 and hd-2 work */}
                 <div className="flex items-center gap-2">
                   <label className="text-sm text-gray-400">Server:</label>
                   <select
@@ -293,12 +300,8 @@ export default function WatchPage() {
                     className="bg-gray-700 text-white px-3 py-2 rounded-md text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     title="Try different servers if video doesn't load"
                   >
-                    <option value="hd-1">HD-1 (Fast)</option>
-                    <option value="hd-2">HD-2 (Fast)</option>
-                    <option value="megacloud">MegaCloud (Reliable)</option>
-                    <option value="vidstreaming">VidStreaming</option>
-                    <option value="vidcloud">VidCloud</option>
-                    <option value="streamtape">StreamTape (Backup)</option>
+                    <option value="hd-1">HD-1</option>
+                    <option value="hd-2">HD-2</option>
                   </select>
                 </div>
 
