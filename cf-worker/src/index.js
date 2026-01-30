@@ -1,7 +1,7 @@
 /**
  * Cloudflare Worker: HLS/Video proxy for anime-world
  * Same API as Next.js /api/proxy: GET /proxy?url=<encoded-url>
- * Sends Referer/Origin matching the target URL's domain so each CDN allows the request.
+ * Tries embedding-site headers first (hianime.to), then target-origin on 403 retry.
  */
 
 const CORS = {
@@ -10,24 +10,33 @@ const CORS = {
   'Access-Control-Allow-Headers': '*',
 };
 
-const DEFAULT_REFERER = 'https://megacloud.blog/';
-const DEFAULT_ORIGIN = 'https://hianime.to';
+const EMBED_REFERER = 'https://hianime.to/';
+const EMBED_ORIGIN = 'https://hianime.to';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+function headersEmbed() {
+  return {
+    'User-Agent': UA,
+    'Referer': EMBED_REFERER,
+    'Origin': EMBED_ORIGIN,
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+}
 
 function headersForTarget(targetUrl) {
   try {
     const u = new URL(targetUrl);
     const origin = `${u.protocol}//${u.host}`;
     return {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': UA,
       'Referer': origin + '/',
       'Origin': origin,
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
     };
   } catch {
-    return {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Referer': DEFAULT_REFERER,
-      'Origin': DEFAULT_ORIGIN,
-    };
+    return headersEmbed();
   }
 }
 
@@ -55,12 +64,20 @@ export default {
     }
 
     try {
-      const cdnHeaders = headersForTarget(targetUrl);
-      const response = await fetch(targetUrl, {
+      // Try embedding-site headers first (hianime.to) - many CDNs expect this
+      let response = await fetch(targetUrl, {
         method: 'GET',
-        headers: cdnHeaders,
+        headers: headersEmbed(),
         cf: { cacheTtl: 0 },
       });
+      // On 403, retry once with target-origin Referer/Origin
+      if (response.status === 403) {
+        response = await fetch(targetUrl, {
+          method: 'GET',
+          headers: headersForTarget(targetUrl),
+          cf: { cacheTtl: 0 },
+        });
+      }
       if (!response.ok) {
         return new Response(JSON.stringify({ error: `Upstream: ${response.statusText}` }), {
           status: response.status,

@@ -60,6 +60,8 @@ export interface StreamSourcesResponse {
   };
   sources: VideoSource[];
   subtitles: Subtitle[];
+  /** Embed URL for iframe playback (megacloud, vidstreaming, etc.) - works without proxy */
+  embedUrl?: string;
   intro?: {
     start: number;
     end: number;

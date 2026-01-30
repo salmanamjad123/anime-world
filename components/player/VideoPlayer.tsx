@@ -17,6 +17,8 @@ interface VideoPlayerProps {
   sources?: VideoSource[]; // All quality sources
   subtitles?: Subtitle[]; // Subtitle tracks
   poster?: string;
+  /** Embed URL (megacloud, etc.) - uses iframe, works without proxy like AniWatch */
+  embedUrl?: string;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
@@ -27,6 +29,7 @@ export function VideoPlayer({
   sources = [],
   subtitles = [],
   poster,
+  embedUrl,
   onTimeUpdate,
   onEnded,
   autoPlay = false,
@@ -138,7 +141,7 @@ export function VideoPlayer({
     // Check if HLS is supported
     if (currentSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        // Determine if we should use proxy (only for localhost dev by default)
+        // Use proxy when NEXT_PUBLIC_USE_PROXY=true (Railway + IPRoyal or Next.js /api/proxy)
         const useProxy = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
         const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
         
@@ -157,8 +160,7 @@ export function VideoPlayer({
 
         hlsRef.current = hls;
         
-        // Use proxy only if explicitly enabled (localhost dev)
-        // In production (Vercel), stream directly from user's browser to avoid IP blocks
+        // When useProxy: stream via Railway proxy (IPRoyal) to avoid CDN 403
         const finalSrc = useProxy 
           ? `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`
           : currentSrc; // Direct URL - browser uses user's real IP!
@@ -379,6 +381,27 @@ export function VideoPlayer({
       clearTimeout(timeout);
     };
   }, [isPlaying]);
+
+  // Embed mode: iframe loads CDN embed page (like AniWatch) - no proxy/CORS issues
+  if (embedUrl) {
+    return (
+      <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+        <iframe
+          src={embedUrl}
+          className="absolute inset-0 w-full h-full border-0"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          title="Anime player"
+          onLoad={() => setIsLoading(false)}
+        />
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group">

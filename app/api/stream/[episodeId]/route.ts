@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiAnimeStreamSources, isHiAnimeAvailable } from '@/lib/api/hianime';
+import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
 
 export async function GET(
@@ -58,20 +59,20 @@ export async function GET(
       );
     }
 
-    // Check HiAnime API availability
+    // Check HiAnime API availability (15s timeout for Railway cold start)
     const hiAnimeAvailable = await Promise.race([
       isHiAnimeAvailable(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
     ]).catch(() => false) as boolean;
     
     if (!hiAnimeAvailable) {
-      console.error('❌ [Stream API] HiAnime API not available at localhost:4000');
+      console.error('❌ [Stream API] HiAnime API not available at', HIANIME_API_URL);
       return NextResponse.json(
         { 
           error: 'Streaming server down',
           message: 'The streaming server is temporarily unavailable. Please try again later.',
           suggestions: [
-            'Start or restart the HiAnime API (port 4000)',
+            `Ensure HiAnime API is running at ${HIANIME_API_URL}`,
             'Refresh the page and try again',
           ]
         },
@@ -123,7 +124,7 @@ export async function GET(
       console.error('💡 Solutions:');
       console.error('   1. Try a different server (hd-1, hd-2, megacloud)');
       console.error('   2. Verify the anime exists on hianime.to');
-      console.error('   3. Check HiAnime API logs at localhost:4000');
+      console.error('   3. Check HiAnime API at', HIANIME_API_URL);
       console.error('═══════════════════════════════════════════════');
     }
     
@@ -133,7 +134,7 @@ export async function GET(
         message: 'The streaming server is temporarily unavailable. Please try again later.',
         episodeId,
         suggestions: [
-          'Start or restart the HiAnime API (port 4000)',
+          `Ensure HiAnime API is running at ${HIANIME_API_URL}`,
           'Refresh the page and try again',
         ]
       },

@@ -371,6 +371,7 @@ export async function getHiAnimeStreamSources(
       },
       sources,
       subtitles: uniqueSubtitles,
+      embedUrl: data.embedURL,
       intro: data.intro,
       outro: data.outro,
     };
@@ -455,7 +456,7 @@ export async function getHiAnimeEpisodesStandard(
 export async function isHiAnimeAvailable(): Promise<boolean> {
   try {
     const response = await axiosInstance.get(`${HIANIME_API_URL}/api/v2/hianime/home`, {
-      timeout: 8000, // Increased to 8 seconds for slower API responses
+      timeout: 15000, // 15s for Railway cold start / slow networks
     });
     return response.status === 200;
   } catch (error) {

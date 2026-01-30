@@ -6,7 +6,8 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/Button';
@@ -36,10 +37,27 @@ export default function WatchPage() {
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
   const { data: episodesData } = useEpisodes(animeId, selectedLanguage === 'dub');
-  // Don't fetch stream if episode ID is fallback format (server was down when episodes were loaded)
   const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
+  const fallbackEpisodeNum = useMemo(
+    () => (isFallbackEpisode ? parseInt(episodeId.match(/-episode-(\d+)$/)?.[1] ?? '0', 10) : null),
+    [isFallbackEpisode, episodeId]
+  );
+  // When URL is fallback format (e.g. 182587-episode-1), refetch episodes to get real HiAnime ID so we can load stream
+  const { data: resolvedEpisodeId } = useQuery({
+    queryKey: ['resolve-episode', animeId, selectedLanguage === 'dub', fallbackEpisodeNum],
+    queryFn: async () => {
+      const res = await fetch(`/api/episodes/${animeId}?dub=${selectedLanguage === 'dub'}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const ep = data.episodes?.find((e: { number: number; id: string }) => e.number === fallbackEpisodeNum);
+      return ep?.id?.includes('?ep=') ? ep.id : null;
+    },
+    enabled: !!animeId && isFallbackEpisode && !!fallbackEpisodeNum,
+    staleTime: 0,
+  });
+  const streamEpisodeId = isFallbackEpisode ? (resolvedEpisodeId ?? null) : episodeId;
   const { data: streamData, isLoading: isStreamLoading, error: streamError } = useStreamingSourcesWithFallback(
-    isFallbackEpisode ? null : episodeId,
+    streamEpisodeId,
     selectedLanguage,
     selectedServer
   );
@@ -49,9 +67,13 @@ export default function WatchPage() {
 
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
-  const currentEpisodeIndex = episodes.findIndex((ep) => ep.id === episodeId);
+  const currentEpisodeIndex = episodes.findIndex(
+    (ep) => ep.id === episodeId || (isFallbackEpisode && fallbackEpisodeNum != null && ep.number === fallbackEpisodeNum)
+  );
   const currentEpisode = episodes[currentEpisodeIndex];
   const videoSource = streamData?.sources?.[0]?.url;
+  const resolvingFallback = isFallbackEpisode && resolvedEpisodeId === undefined;
+  const showStreamDown = (isFallbackEpisode && resolvedEpisodeId === null) || streamError || (!videoSource && !isStreamLoading && !resolvingFallback);
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
@@ -191,14 +213,14 @@ export default function WatchPage() {
             </div>
 
             {/* Video Player */}
-            {isStreamLoading ? (
+            {isStreamLoading || resolvingFallback ? (
               <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
-                  <p className="text-gray-400">Loading video...</p>
+                  <p className="text-gray-400">{resolvingFallback ? 'Resolving episode...' : 'Loading video...'}</p>
                 </div>
               </div>
-            ) : isFallbackEpisode || streamError || !videoSource ? (
+            ) : showStreamDown ? (
               <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
                 <div className="text-center max-w-md px-6">
                   <div className="text-6xl mb-4">⚠️</div>
@@ -207,12 +229,12 @@ export default function WatchPage() {
                     The streaming server is temporarily unavailable. Please try again later.
                   </p>
                   <p className="text-gray-400 text-sm mb-6">
-                    Make sure the HiAnime API is running at localhost:4000, or check back when the server is back online.
+                    Ensure the HiAnime API is running at {process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000'}, or check back when the server is back online.
                   </p>
                   <div className="bg-gray-700/50 rounded-lg p-4 mb-6 text-left">
                     <p className="text-gray-300 text-sm mb-2"><strong>What you can do:</strong></p>
                     <ul className="text-gray-400 text-sm space-y-1">
-                      <li>• Start or restart the HiAnime API (port 4000)</li>
+                      <li>• Ensure HiAnime API is running at the configured URL</li>
                       <li>• Refresh the page and try again</li>
                       <li>• Go back and try a different anime</li>
                     </ul>
@@ -229,10 +251,11 @@ export default function WatchPage() {
               </div>
             ) : (
               <VideoPlayer
-                src={videoSource}
+                src={videoSource ?? ''}
                 sources={streamData?.sources}
                 subtitles={allSubtitles}
                 poster={anime.bannerImage || anime.coverImage.large}
+                embedUrl={streamData?.embedUrl}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handleEpisodeEnd}
                 autoPlay

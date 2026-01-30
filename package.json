@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:proxy": "node scripts/test-proxy.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
