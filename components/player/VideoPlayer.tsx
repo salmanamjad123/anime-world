@@ -236,12 +236,9 @@ export function VideoPlayer({
         setCurrentSubtitle(defaultLang);
       }
 
-      // ALWAYS proxy external subtitles - they need it for CORS!
-      const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
-      const defaultProxy = hianimeUrl.includes('railway')
-        ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
-        : '/api/proxy';
-      const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
+      // Use same-origin proxy for subtitles (browser blocks cross-origin e.g. Railway)
+      const subtitleProxyUrl =
+        typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
 
       let addedIndex = 0;
       let defaultTrackAddedIndex = -1;
@@ -254,7 +251,7 @@ export function VideoPlayer({
         trackEl.srclang = subtitle.lang;
 
         const subUrl = subtitle.url.startsWith('http')
-          ? `${proxyUrl}?url=${encodeURIComponent(subtitle.url)}`
+          ? `${subtitleProxyUrl}?url=${encodeURIComponent(subtitle.url)}`
           : subtitle.url;
         trackEl.src = subUrl;
 
@@ -393,6 +390,7 @@ export function VideoPlayer({
   }, [isPlaying]);
 
   // Embed URL with subtitle param (some embeds accept sub=, subtitle=, vtt=)
+  // Use same-origin proxy for subtitles (browser blocks cross-origin e.g. Railway)
   const embedWithSubs = useMemo(() => {
     if (!embedUrl || !subtitles?.length) return embedUrl ?? '';
     const english = subtitles.find(
@@ -403,14 +401,11 @@ export function VideoPlayer({
     );
     const sub = english ?? subtitles[0];
     if (!sub?.url) return embedUrl;
-    const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
-    const defaultProxy = hianimeUrl.includes('railway')
-      ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
-      : '/api/proxy';
-    const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
+    const subtitleProxyUrl =
+      typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
     const subUrl =
       sub.url.startsWith('http')
-        ? `${proxyUrl}?url=${encodeURIComponent(sub.url)}`
+        ? `${subtitleProxyUrl}?url=${encodeURIComponent(sub.url)}`
         : sub.url;
     const sep = embedUrl.includes('?') ? '&' : '?';
     // Some embeds use sub=, others subtitle= or vtt= - try sub first (most common)
@@ -439,11 +434,11 @@ export function VideoPlayer({
   }
 
   return (
-    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group">
+    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group video-player-main">
       {/* Video Element */}
       <video
         ref={videoRef}
-        className="w-full h-full"
+        className="w-full h-full video-subtitles"
         poster={poster}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}

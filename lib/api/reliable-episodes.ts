@@ -104,7 +104,7 @@ export async function getReliableEpisodes(
     
     if (hiAnimeAvailable) {
       console.log('🎯 [TIER 1] Trying HiAnime API...');
-      const match = await findHiAnimeMatch(animeTitle, isDub);
+      const match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
       
       if (match) {
         console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
