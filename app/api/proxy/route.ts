@@ -12,7 +12,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
-import { retry, isRetryableError } from '@/lib/utils/retry';
 
 // Enable caching for video segments (not playlists)
 const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
@@ -46,22 +45,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
     }
 
-    // Fetch with retry logic
-    const response = await retry(
-      () => fetch(url, {
-        headers: {
-          'Referer': 'https://megacloud.blog/',
-          'Origin': 'https://hianime.to',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-        signal: AbortSignal.timeout(30000), // 30s timeout
-      }),
-      {
-        maxAttempts: 2,
-        delayMs: 500,
-        shouldRetry: (error) => isRetryableError(error),
+    // CDN header variants - try alternate Referers on 403 (stormshade, fogtwist, etc.)
+    const headerSets: Record<string, string>[] = [
+      { 'Referer': 'https://megacloud.blog/', 'Origin': 'https://hianime.to' },
+      { 'Referer': 'https://hianime.to/', 'Origin': 'https://hianime.to' },
+      { 'Referer': 'https://stormshade84.live/', 'Origin': 'https://stormshade84.live' },
+    ];
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+
+    let response: Response | null = null;
+    let lastError: any;
+
+    for (const headers of headerSets) {
+      try {
+        response = await fetch(url, {
+          headers: {
+            ...headers,
+            'Accept': '*/*',
+            'User-Agent': userAgent,
+          },
+          signal: AbortSignal.timeout(30000),
+        });
+        if (response.ok) break;
+        if (response.status === 403 && headerSets.indexOf(headers) < headerSets.length - 1) {
+          continue;
+        }
+        break;
+      } catch (err) {
+        lastError = err;
+        break;
       }
-    );
+    }
+
+    if (!response) {
+      throw lastError || new Error('Failed to fetch');
+    }
 
     if (!response.ok) {
       console.error('[Proxy Error] Failed to fetch:', url, response.status);

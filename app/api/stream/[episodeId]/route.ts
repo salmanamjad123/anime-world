@@ -80,35 +80,48 @@ export async function GET(
       );
     }
     
-    // Fetch streaming sources with retry logic
+    // Fetch streaming sources with retry + server fallback
+    const serversToTry = server === 'hd-1' ? ['hd-1', 'hd-2'] : [server];
+    let lastError: any;
+    
     try {
-      const sources = await retry(
-        () => getHiAnimeStreamSources(episodeId, category, server),
-        {
-          maxAttempts: 2,
-          delayMs: 1000,
-          shouldRetry: (error) => {
-            // Retry on network/server errors, not on 404s
-            return error.status >= 500 || error.name === 'FetchError';
+      for (const tryServer of serversToTry) {
+        try {
+          const sources = await retry(
+            () => getHiAnimeStreamSources(episodeId, category, tryServer),
+            {
+              maxAttempts: tryServer === server ? 2 : 1,
+              delayMs: 1000,
+              shouldRetry: (error) => {
+            const status = error?.response?.status ?? error?.status;
+            return (status >= 500) || error?.name === 'FetchError';
           },
+            }
+          );
+          
+          if (sources?.sources && sources.sources.length > 0) {
+            if (tryServer !== server) {
+              console.log(`✅ [Stream API] Fallback succeeded: ${server} failed, ${tryServer} worked`);
+            }
+            console.log('═══════════════════════════════════════════════');
+            console.log('✅ [HiAnime API] SUCCESS!');
+            console.log('🎥 Found', sources.sources.length, 'source(s)');
+            console.log('📝 Found', sources.subtitles?.length || 0, 'subtitle(s)');
+            if (sources.embedUrl) {
+              console.log('📺 Embed URL available (iframe mode)');
+            }
+            console.log('═══════════════════════════════════════════════');
+            return NextResponse.json(sources);
+          }
+        } catch (err: any) {
+          lastError = err;
+          if (tryServer !== serversToTry[serversToTry.length - 1]) {
+            console.log(`⚠️ [Stream API] ${tryServer} failed, trying next server...`);
+          }
         }
-      );
-      
-      if (sources?.sources && sources.sources.length > 0) {
-        console.log('═══════════════════════════════════════════════');
-        console.log('✅ [HiAnime API] SUCCESS!');
-        console.log('🎥 Found', sources.sources.length, 'source(s)');
-        console.log('📝 Found', sources.subtitles?.length || 0, 'subtitle(s)');
-        console.log('🎬 Quality:', sources.sources[0]?.quality);
-        console.log('═══════════════════════════════════════════════');
-        
-        return NextResponse.json(sources);
       }
       
-      // No sources found
-      console.error('❌ [HiAnime API] No sources returned');
-      throw new Error('No streaming sources available for this episode');
-      
+      throw lastError || new Error('No streaming sources available');
     } catch (error: any) {
       console.error('═══════════════════════════════════════════════');
       console.error('❌ [Stream API] FAILED');

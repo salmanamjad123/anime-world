@@ -141,9 +141,13 @@ export function VideoPlayer({
     // Check if HLS is supported
     if (currentSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        // Use proxy when NEXT_PUBLIC_USE_PROXY=true (Railway + IPRoyal or Next.js /api/proxy)
+        // Use proxy when NEXT_PUBLIC_USE_PROXY=true (Railway or Next.js /api/proxy)
         const useProxy = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
-        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
+        const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
+        const defaultProxy = hianimeUrl.includes('railway') 
+          ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy` 
+          : '/api/proxy';
+        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
         
         console.log(`🎬 [VideoPlayer] Streaming mode: ${useProxy ? 'PROXIED' : 'DIRECT'}`);
         console.log(`📺 [VideoPlayer] Video URL: ${currentSrc.substring(0, 100)}...`);
@@ -228,8 +232,11 @@ export function VideoPlayer({
       console.log(`📝 Adding ${subtitles.length} subtitle track(s) to video`);
       
       // ALWAYS proxy external subtitles - they need it for CORS!
-      // Unlike videos, subtitle <track> elements can't set custom headers
-      const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || '/api/proxy';
+      const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
+      const defaultProxy = hianimeUrl.includes('railway')
+        ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
+        : '/api/proxy';
+      const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
       
       // Add subtitle tracks
       subtitles.forEach((subtitle, index) => {
