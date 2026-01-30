@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Play, ChevronRight, ChevronLeft, Tv, Clock, Calendar } from 'lucide-react';
@@ -29,17 +29,56 @@ type Props = {
   autoPlayInterval?: number; // ms, 0 = off
 };
 
-export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: Props) {
-  const [index, setIndex] = useState(0);
+export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: Props) {
   const total = anime.length;
+  const [index, setIndex] = useState(1);
+  const [isTransitioning, setIsTransitioning] = useState(true);
+  const isJumpingRef = useRef(false);
+
+  const extendedAnime = useMemo(() => {
+    if (total <= 1) return anime;
+    return [anime[total - 1], ...anime, anime[0]];
+  }, [anime, total]);
+
+  const displayIndex = total <= 1 ? 0 : index;
+  const realIndex = total <= 1 ? 0 : ((index - 1 + total) % total);
 
   const goNext = useCallback(() => {
-    setIndex((i) => (i + 1) % Math.max(total, 1));
+    if (total <= 1) return;
+    if (isJumpingRef.current) return;
+    setIndex((i) => (i >= total ? total + 1 : i + 1));
   }, [total]);
 
   const goPrev = useCallback(() => {
-    setIndex((i) => (total ? (i - 1 + total) % total : 0));
+    if (total <= 1) return;
+    if (isJumpingRef.current) return;
+    setIndex((i) => (i <= 1 ? 0 : i - 1));
   }, [total]);
+
+  const handleTransitionEnd = useCallback(() => {
+    if (total <= 1) return;
+    if (index === 0) {
+      isJumpingRef.current = true;
+      setIsTransitioning(false);
+      setIndex(total);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsTransitioning(true);
+          isJumpingRef.current = false;
+        });
+      });
+    } else if (index === total + 1) {
+      isJumpingRef.current = true;
+      setIsTransitioning(false);
+      setIndex(1);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsTransitioning(true);
+          isJumpingRef.current = false;
+        });
+      });
+    }
+  }, [index, total]);
 
   useEffect(() => {
     if (!autoPlayInterval || total <= 1) return;
@@ -71,14 +110,15 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: P
   if (!anime || anime.length === 0) return null;
 
   return (
-    <section className="relative w-full h-[260px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
+    <section className="relative w-full h-[340px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
       {/* Slides container with smooth horizontal swipe */}
       <div className="relative w-full h-full overflow-hidden">
         <div
-          className="flex h-full transition-transform duration-700 ease-out"
-          style={{ transform: `translateX(-${index * 100}%)` }}
+          className={`flex h-full ease-out ${isTransitioning ? 'transition-transform duration-700' : ''}`}
+          style={{ transform: `translateX(-${displayIndex * 100}%)` }}
+          onTransitionEnd={handleTransitionEnd}
         >
-          {anime.map((item, slideIndex) => {
+          {extendedAnime.map((item, slideIndex) => {
             const title = getPreferredTitle(item.title);
             const description = item.description ? stripHtml(item.description) : '';
             const imageUrl = item.bannerImage || item.coverImage?.extraLarge || item.coverImage?.large;
@@ -87,7 +127,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: P
               item.format === 'TV_SHORT' ? 'TV Short' : item.format?.replace('_', ' ') || 'TV';
 
             return (
-              <div key={item.id} className="relative min-w-full h-full">
+              <div key={`spotlight-${slideIndex}-${item.id}`} className="relative min-w-full h-full">
                 {/* Background image for this slide */}
                 {imageUrl && (
                   <>
@@ -95,9 +135,9 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: P
                       src={imageUrl}
                       alt={title}
                       fill
-                      className="object-contain object-center md:object-cover md:object-center"
+                      className="object-cover object-center"
                       quality={90}
-                      priority={slideIndex === 0}
+                      priority={slideIndex === 1 || (total <= 1 && slideIndex === 0)}
                       sizes="100vw"
                     />
                     {/* Dark fade from left so text stays readable */}
@@ -105,65 +145,65 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: P
                   </>
                 )}
 
-                {/* Content sits on top, aligned to left */}
-                <div className="relative z-10 h-full flex flex-col justify-center p-6 md:p-8 lg:p-10 max-w-3xl">
-                  <span className="text-blue-400 font-semibold text-sm mb-2">
-                    #{slideIndex + 1} Spotlight
+                {/* Content sits on top, aligned to left - mobile: compact, desktop: spacious */}
+                <div className="relative z-10 h-full flex flex-col justify-center p-4 sm:p-6 md:p-8 lg:p-10 max-w-3xl">
+                  <span className="text-blue-400 font-semibold text-xs sm:text-sm mb-1 sm:mb-2">
+                    #{total > 1 ? ((slideIndex - 1 + total) % total) + 1 : slideIndex + 1} Spotlight
                   </span>
-                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4 line-clamp-2">
+                  <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 sm:mb-4 line-clamp-2 leading-tight">
                     {title}
                   </h2>
 
-                  {/* Metadata row */}
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-300 mb-4">
+                  {/* Metadata row - tighter on mobile */}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-300 mb-2 sm:mb-4">
                     <span className="flex items-center gap-1">
-                      <Tv className="w-4 h-4 text-gray-400" />
-                      {formatLabel}
+                      <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 shrink-0" />
+                      <span className="truncate">{formatLabel}</span>
                     </span>
                     {item.duration != null && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4 text-gray-400" />
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                         {item.duration}m
                       </span>
                     )}
                     {dateStr && (
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {dateStr}
+                      <span className="hidden sm:flex items-center gap-1 shrink-0">
+                        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                        <span className="truncate">{dateStr}</span>
                       </span>
                     )}
-                    <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">
+                    <span className="px-1.5 py-0.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-400 text-[10px] sm:text-xs font-medium shrink-0">
                       HD
                     </span>
                     {item.episodes != null && (
-                      <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">
+                      <span className="hidden sm:inline px-1.5 py-0.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-400 text-[10px] sm:text-xs font-medium shrink-0">
                         CC {item.episodes}
                       </span>
                     )}
                   </div>
 
-                  {/* Synopsis */}
+                  {/* Synopsis - fewer lines on mobile */}
                   {description && (
-                    <p className="text-gray-300 text-sm md:text-base line-clamp-3 mb-6 max-w-xl">
+                    <p className="text-gray-300 text-xs sm:text-sm md:text-base line-clamp-2 sm:line-clamp-3 mb-3 sm:mb-6 max-w-xl">
                       {description}
                     </p>
                   )}
 
-                  {/* Actions */}
-                  <div className="flex flex-wrap gap-3">
+                  {/* Actions - stacked on mobile for easier tap, row on desktop */}
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                     <Link
                       href={ROUTES.ANIME_DETAIL(item.id)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-colors"
                     >
-                      <Play className="w-5 h-5 fill-current" />
+                      <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current shrink-0" />
                       Watch Now
                     </Link>
                     <Link
                       href={ROUTES.ANIME_DETAIL(item.id)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-white font-medium transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-white text-sm sm:text-base font-medium transition-colors"
                     >
                       Detail
-                      <ChevronRight className="w-5 h-5" />
+                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                     </Link>
                   </div>
                 </div>
@@ -172,43 +212,44 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 6000 }: P
           })}
         </div>
 
-        {/* Slider arrows on the right edge */}
+        {/* Slider arrows + dots: bottom bar on mobile, separate on desktop */}
         {total > 1 && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">
-            <button
-              type="button"
-              onClick={goPrev}
-              className="w-10 h-10 rounded-full bg-gray-900/80 hover:bg-gray-800 text-white flex items-center justify-center transition-colors"
-              aria-label="Previous spotlight"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={goNext}
-              className="w-10 h-10 rounded-full bg-gray-900/80 hover:bg-gray-800 text-white flex items-center justify-center transition-colors"
-              aria-label="Next spotlight"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+          <>
+            {/* Arrows - bottom right on mobile, right side on desktop */}
+            <div className="absolute bottom-3 right-4 sm:bottom-auto sm:right-3 sm:top-1/2 sm:-translate-y-1/2 flex flex-row sm:flex-col gap-2 z-20">
+              <button
+                type="button"
+                onClick={goPrev}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition-colors touch-manipulation"
+                aria-label="Previous spotlight"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition-colors touch-manipulation"
+                aria-label="Next spotlight"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
 
-        {/* Dots indicator (optional, mobile-friendly) */}
-        {total > 1 && (
-          <div className="absolute bottom-4 left-6 lg:left-10 flex gap-2 z-20">
+            {/* Dots - bottom left on mobile, same on desktop */}
+            <div className="absolute bottom-3 sm:bottom-4 left-4 sm:left-6 lg:left-10 flex gap-1.5 sm:gap-2 z-20">
             {anime.slice(0, Math.min(total, 8)).map((_, i) => (
               <button
                 key={i}
                 type="button"
-                onClick={() => setIndex(i)}
+                onClick={() => total > 1 && setIndex(i + 1)}
                 className={`h-2 rounded-full transition-all ${
-                  i === index ? 'bg-blue-500 w-6' : 'bg-gray-500 hover:bg-gray-400 w-2'
+                  i === realIndex ? 'bg-blue-500 w-6' : 'bg-gray-500 hover:bg-gray-400 w-2'
                 }`}
                 aria-label={`Go to spotlight ${i + 1}`}
               />
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </section>

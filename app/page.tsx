@@ -23,7 +23,7 @@ export default function Home() {
         <SpotlightSlider
           anime={trendingAnime.slice(0, 8)}
           isLoading={isTrendingLoading}
-          autoPlayInterval={6000}
+          autoPlayInterval={8000}
         />
 
         {/* Hero Section */}
