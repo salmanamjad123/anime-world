@@ -11,6 +11,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, Ro
 import { HlsSafeLoader } from '@/lib/hls-safe-loader';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { VideoSource, Subtitle } from '@/types/stream';
 
@@ -67,6 +68,7 @@ export function VideoPlayer({
   const [autoQuality, setAutoQuality] = useState(true);
   
   const { volume, playbackSpeed, setVolume } = usePlayerStore();
+  const isMobile = useIsMobile();
 
   // Keep ref in sync for timeout callback
   useEffect(() => {
@@ -361,16 +363,55 @@ export function VideoPlayer({
     }
   };
 
-  // Handle fullscreen
-  const toggleFullscreen = () => {
+  // Handle fullscreen - on mobile, lock to landscape when entering fullscreen
+  const toggleFullscreen = async () => {
+    const container = containerRef.current;
+    if (!container) return;
+
     if (!document.fullscreenElement) {
-      videoRef.current?.parentElement?.requestFullscreen();
-      setIsFullscreen(true);
+      try {
+        await container.requestFullscreen();
+        setIsFullscreen(true);
+        // On mobile: auto-rotate to landscape for better viewing (Chrome Android, etc.)
+        const orientation = screen.orientation as unknown as { lock?: (m: string) => Promise<void> };
+        if (isMobile && typeof orientation?.lock === 'function') {
+          try {
+            await orientation.lock('landscape');
+          } catch {
+            // Orientation lock may fail (e.g. iOS); ignore
+          }
+        }
+      } catch {
+        setIsFullscreen(false);
+      }
     } else {
-      document.exitFullscreen();
+      try {
+        const orient = screen.orientation as unknown as { unlock?: () => void };
+        if (typeof orient?.unlock === 'function') orient.unlock();
+      } catch {
+        // Ignore unlock errors
+      }
+      await document.exitFullscreen();
       setIsFullscreen(false);
     }
   };
+
+  // Sync fullscreen state when user exits via system UI (e.g. Android back)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+        try {
+          const orient = screen.orientation as unknown as { unlock?: () => void };
+          if (typeof orient?.unlock === 'function') orient.unlock();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Handle time update
   const handleTimeUpdate = () => {
@@ -457,27 +498,42 @@ export function VideoPlayer({
     }, 3000);
   };
 
-  // Zone-based tap: sides = show/hide bar only, center = play/pause
+  // Zone-based tap: mobile = only center/icon plays; anywhere else toggles controls. Desktop = sides = controls, center = play.
   const handleContainerTap = (clientX: number) => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
     const w = rect.width;
-    const leftZone = w * 0.15;
-    const rightZone = w * 0.85;
 
-    if (x < leftZone || x > rightZone) {
-      // Sides: only show/hide controls (don't toggle play)
-      setShowControls((prev) => {
-        const next = !prev;
-        if (next) resetHideTimer();
-        return next;
-      });
+    if (isMobile) {
+      // Mobile: only center (where play icon is) = play/pause; anywhere else = show/hide controls
+      const leftZone = w * 0.35;
+      const rightZone = w * 0.65;
+      if (x >= leftZone && x <= rightZone) {
+        togglePlay();
+        resetHideTimer();
+      } else {
+        setShowControls((prev) => {
+          const next = !prev;
+          if (next) resetHideTimer();
+          return next;
+        });
+      }
     } else {
-      // Center: play/pause and show controls
-      togglePlay();
-      resetHideTimer();
+      // Desktop: sides = show/hide controls, center = play/pause
+      const leftZone = w * 0.15;
+      const rightZone = w * 0.85;
+      if (x < leftZone || x > rightZone) {
+        setShowControls((prev) => {
+          const next = !prev;
+          if (next) resetHideTimer();
+          return next;
+        });
+      } else {
+        togglePlay();
+        resetHideTimer();
+      }
     }
   };
 
@@ -644,6 +700,34 @@ export function VideoPlayer({
         </div>
       )}
 
+      {/* Pause icon overlay - when playing + controls visible; tap to pause; hides with controls */}
+      {isPlaying && showControls && (
+        <div
+          className="absolute inset-0 z-[2] flex items-center justify-center pointer-events-none"
+          aria-hidden
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+              resetHideTimer();
+            }}
+            onTouchEnd={(e) => {
+              if (e.changedTouches[0]) {
+                e.preventDefault();
+                togglePlay();
+                resetHideTimer();
+              }
+            }}
+            className="pointer-events-auto w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors"
+            aria-label="Pause"
+          >
+            <Pause className="w-10 h-10 text-white" />
+          </button>
+        </div>
+      )}
+
       {/* Skip Intro / Skip Outro overlays (AniWatch-style) - right side of video */}
       {(showSkipIntro || showSkipOutro) && (showControls || !isPlaying) && (
         <div className="absolute right-4 bottom-20 z-[3] flex flex-col gap-2">
@@ -753,11 +837,12 @@ export function VideoPlayer({
               {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
             </button>
 
-            {/* Volume */}
+            {/* Volume - mute button only on mobile; slider shown on sm+ */}
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleMute}
-                className="text-white hover:text-blue-400 transition-colors"
+                className="text-white hover:text-blue-400 transition-colors shrink-0"
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
                 {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
               </button>
@@ -768,7 +853,8 @@ export function VideoPlayer({
                 step="0.1"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                className="hidden sm:block w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                aria-label="Volume"
               />
             </div>
 
