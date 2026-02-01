@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, Forward, SkipForward, Square } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, Forward, SkipForward } from 'lucide-react';
 import { HlsSafeLoader } from '@/lib/hls-safe-loader';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
@@ -573,6 +573,7 @@ export function VideoPlayer({
           setIsPlaying(true);
           setIsLoading(false);
         }}
+        onPlaying={() => setIsLoading(false)}
         onPause={() => setIsPlaying(false)}
         onWaiting={() => setIsLoading(true)}
         onTimeUpdate={handleTimeUpdate}
@@ -621,7 +622,7 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* Play / Stop Button Overlay - stop icon at start, play when paused mid-video */}
+      {/* Play Button Overlay - single play icon when paused (at start or mid-video) */}
       {!isPlaying && !isLoading && (
         <div
           className="absolute inset-0 z-[2] flex items-center justify-center bg-black/30 cursor-pointer"
@@ -638,11 +639,7 @@ export function VideoPlayer({
           onTouchMove={() => resetHideTimer()}
         >
           <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center pointer-events-none">
-            {currentTime === 0 ? (
-              <Square className="w-10 h-10 text-white" fill="currentColor" />
-            ) : (
-              <Play className="w-10 h-10 text-white ml-2" />
-            )}
+            <Play className="w-10 h-10 text-white ml-1" />
           </div>
         </div>
       )}
@@ -683,12 +680,17 @@ export function VideoPlayer({
       <div
         className={cn(
           'absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 transition-opacity duration-300',
-          showControls || !isPlaying || currentTime === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          showControls || !isPlaying || currentTime === 0 || isLoading ? 'opacity-100' : 'opacity-0 pointer-events-none',
           showSettings && 'overflow-visible'
         )}
       >
-        {/* Progress Bar - played = light blue, intro/outro = dark blue, thumb aligned */}
+        {/* Progress Bar - always show track; when duration=0 show gray placeholder during fetch */}
         <div className="relative w-full mb-2 min-h-6 flex items-center overflow-visible">
+          {/* Base track - always visible (gray when loading, or behind segments when loaded) */}
+          <div
+            className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-lg pointer-events-none bg-gray-600"
+            aria-hidden
+          />
           {/* Intro (dark blue) | main (gray) | outro (dark blue) - behind */}
           {duration > 0 && (
             <div
@@ -730,11 +732,12 @@ export function VideoPlayer({
           <input
             type="range"
             min="0"
-            max={duration || 0}
+            max={duration > 0 ? duration : 1}
             value={currentTime}
             onChange={handleSeek}
             step={0.1}
-            className="relative w-full h-1 rounded-lg appearance-none cursor-pointer bg-transparent [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:block [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+            disabled={duration <= 0}
+            className="relative w-full h-1 rounded-lg appearance-none cursor-pointer bg-transparent disabled:cursor-default disabled:opacity-70 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:block [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
           />
         </div>
 
