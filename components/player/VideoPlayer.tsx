@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, Forward, SkipForward, Square } from 'lucide-react';
 import { HlsSafeLoader } from '@/lib/hls-safe-loader';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
@@ -24,7 +24,14 @@ interface VideoPlayerProps {
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
+  /** End time of intro/OP in seconds (default 90). Show "Skip Intro" when currentTime is in [5, introEndSeconds). */
+  introEndSeconds?: number;
+  /** Length of outro/ED in seconds (default 90). Show "Skip Outro" when currentTime is in [duration - outroLengthSeconds, duration). */
+  outroLengthSeconds?: number;
 }
+
+const DEFAULT_INTRO_END = 90;
+const DEFAULT_OUTRO_LENGTH = 90;
 
 export function VideoPlayer({
   src,
@@ -35,6 +42,8 @@ export function VideoPlayer({
   onTimeUpdate,
   onEnded,
   autoPlay = false,
+  introEndSeconds = DEFAULT_INTRO_END,
+  outroLengthSeconds = DEFAULT_OUTRO_LENGTH,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -403,6 +412,23 @@ export function VideoPlayer({
     }
   };
 
+  // Intro/outro skip (AniWatch-style)
+  const showSkipIntro =
+    duration > introEndSeconds && currentTime >= 5 && currentTime < introEndSeconds;
+  const showSkipOutro =
+    duration > outroLengthSeconds * 2 && currentTime >= Math.max(0, duration - outroLengthSeconds);
+
+  const skipIntro = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = introEndSeconds;
+      setCurrentTime(introEndSeconds);
+    }
+  };
+
+  const skipOutro = () => {
+    onEnded?.();
+  };
+
   // Handle volume change
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
@@ -543,8 +569,12 @@ export function VideoPlayer({
         ref={videoRef}
         className="w-full h-full video-subtitles"
         poster={poster}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+        }}
         onPause={() => setIsPlaying(false)}
+        onWaiting={() => setIsLoading(true)}
         onTimeUpdate={handleTimeUpdate}
         onEnded={onEnded}
       />
@@ -566,14 +596,32 @@ export function VideoPlayer({
         aria-hidden
       />
 
-      {/* Loading Spinner */}
+      {/* Loading Spinner - click to stop loading and show stop state */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+        <div
+          className="absolute inset-0 z-[2] flex items-center justify-center bg-black/50 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsLoading(false);
+            videoRef.current?.pause();
+            resetHideTimer();
+          }}
+          onTouchEnd={(e) => {
+            if (e.changedTouches[0]) {
+              e.preventDefault();
+              setIsLoading(false);
+              videoRef.current?.pause();
+              resetHideTimer();
+            }
+          }}
+          onTouchMove={() => resetHideTimer()}
+          aria-label="Stop loading"
+        >
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
         </div>
       )}
 
-      {/* Play Button Overlay - same zone tap: sides = bar, center = play */}
+      {/* Play / Stop Button Overlay - stop icon at start, play when paused mid-video */}
       {!isPlaying && !isLoading && (
         <div
           className="absolute inset-0 z-[2] flex items-center justify-center bg-black/30 cursor-pointer"
@@ -590,8 +638,44 @@ export function VideoPlayer({
           onTouchMove={() => resetHideTimer()}
         >
           <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center pointer-events-none">
-            <Play className="w-10 h-10 text-white ml-2" />
+            {currentTime === 0 ? (
+              <Square className="w-10 h-10 text-white" fill="currentColor" />
+            ) : (
+              <Play className="w-10 h-10 text-white ml-2" />
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Skip Intro / Skip Outro overlays (AniWatch-style) - right side of video */}
+      {(showSkipIntro || showSkipOutro) && (showControls || !isPlaying) && (
+        <div className="absolute right-4 bottom-20 z-[3] flex flex-col gap-2">
+          {showSkipIntro && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                skipIntro();
+              }}
+              className="px-4 py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-sm shadow-lg transition-colors flex items-center gap-2"
+              aria-label="Skip intro"
+            >
+              Skip Intro
+            </button>
+          )}
+          {showSkipOutro && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                skipOutro();
+              }}
+              className="px-4 py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-sm shadow-lg transition-colors flex items-center gap-2"
+              aria-label="Skip outro / Next episode"
+            >
+              Next Episode
+            </button>
+          )}
         </div>
       )}
 
@@ -599,19 +683,60 @@ export function VideoPlayer({
       <div
         className={cn(
           'absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 transition-opacity duration-300',
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          showControls || !isPlaying || currentTime === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none',
           showSettings && 'overflow-visible'
         )}
       >
-        {/* Progress Bar */}
-        <input
-          type="range"
-          min="0"
-          max={duration || 0}
-          value={currentTime}
-          onChange={handleSeek}
-          className="w-full mb-2 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
-        />
+        {/* Progress Bar - played = light blue, intro/outro = dark blue, thumb aligned */}
+        <div className="relative w-full mb-2 min-h-6 flex items-center overflow-visible">
+          {/* Intro (dark blue) | main (gray) | outro (dark blue) - behind */}
+          {duration > 0 && (
+            <div
+              className="absolute left-0 right-0 h-1 rounded-lg pointer-events-none"
+              style={{
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: (() => {
+                  const introPct = Math.min(100, (introEndSeconds / duration) * 100);
+                  const outroStartPct = Math.max(0, ((duration - outroLengthSeconds) / duration) * 100);
+                  return `linear-gradient(to right, rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%, rgb(75, 85, 99) ${introPct}%, rgb(75, 85, 99) ${outroStartPct}%, rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%)`;
+                })(),
+              }}
+              aria-hidden
+            />
+          )}
+          {/* Played portion = light blue */}
+          {duration > 0 && (
+            <div
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-1 rounded-l-lg pointer-events-none bg-blue-300"
+              style={{ width: `${(currentTime / duration) * 100}%` }}
+              aria-hidden
+            />
+          )}
+          {/* Intro/outro dark blue on top so always visible even over played bar */}
+          {duration > 0 && (
+            <div
+              className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-lg pointer-events-none"
+              style={{
+                background: (() => {
+                  const introPct = Math.min(100, (introEndSeconds / duration) * 100);
+                  const outroStartPct = Math.max(0, ((duration - outroLengthSeconds) / duration) * 100);
+                  return `linear-gradient(to right, rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%, transparent ${introPct}%, transparent ${outroStartPct}%, rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%)`;
+                })(),
+              }}
+              aria-hidden
+            />
+          )}
+          <input
+            type="range"
+            min="0"
+            max={duration || 0}
+            value={currentTime}
+            onChange={handleSeek}
+            step={0.1}
+            className="relative w-full h-1 rounded-lg appearance-none cursor-pointer bg-transparent [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:block [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+          />
+        </div>
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between">
@@ -651,6 +776,38 @@ export function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Skip Intro - in control bar when in intro range */}
+            {showSkipIntro && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  skipIntro();
+                }}
+                className="text-white hover:text-blue-400 transition-colors flex items-center gap-1.5 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs font-medium"
+                aria-label="Skip intro"
+                title="Skip intro"
+              >
+                <Forward className="w-5 h-5 shrink-0" />
+                <span className="hidden sm:inline">Skip Intro</span>
+              </button>
+            )}
+
+            {/* Skip Outro / Next Episode - in control bar when in outro range */}
+            {showSkipOutro && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  skipOutro();
+                }}
+                className="text-white hover:text-blue-400 transition-colors flex items-center gap-1.5 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs font-medium"
+                aria-label="Next episode"
+                title="Next episode"
+              >
+                <SkipForward className="w-5 h-5 shrink-0" />
+                <span className="hidden sm:inline">Next Episode</span>
+              </button>
+            )}
+
             {/* Skip backward 10s */}
             <button
               onClick={skipBackward}
