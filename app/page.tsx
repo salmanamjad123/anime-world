@@ -23,7 +23,7 @@ export default function Home() {
         <SpotlightSlider
           anime={trendingAnime.slice(0, 8)}
           isLoading={isTrendingLoading}
-          autoPlayInterval={6000}
+          autoPlayInterval={8000}
         />
 
         {/* Hero Section */}
@@ -64,18 +64,6 @@ export default function Home() {
           className="mb-4"
         />
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-800 py-8 mt-12">
-        <div className="container mx-auto px-4 text-center text-gray-400">
-          <p className="text-sm">
-            Built with Next.js, TypeScript, and TanStack Query
-          </p>
-          <p className="text-xs mt-2">
-            For educational purposes only. Please support the official release.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

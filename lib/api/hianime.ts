@@ -381,16 +381,50 @@ export async function getHiAnimeStreamSources(
   }
 }
 
+const SEQUEL_KEYWORDS = [
+  'culling game',
+  'shibuya incident',
+  'part 2',
+  'part 3',
+  '2nd season',
+  '3rd season',
+  'second season',
+  'the movie',
+  '-part-2',
+  '-part-3',
+];
+
+function looksLikeSequel(id: string, name: string): boolean {
+  const lower = `${id} ${name}`.toLowerCase();
+  return SEQUEL_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+function searchTitleSuggestsSequel(cleanTitle: string): boolean {
+  const lower = cleanTitle.toLowerCase();
+  return SEQUEL_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+/**
+ * Check if result name/id reasonably matches the search (avoids cross-anime matches)
+ */
+function titleOverlap(searchWords: string[], resultId: string, resultName: string): boolean {
+  const text = `${resultId} ${resultName}`.toLowerCase();
+  const core = searchWords.filter((w) => w.length >= 3);
+  if (core.length === 0) return true;
+  return core.every((w) => text.includes(w));
+}
+
 /**
  * Search and get the best match for an anime
- * Returns null if not found
+ * When expectedEpisodeCount is provided, prefers results with matching episode count.
+ * Only penalizes sequel results when we're clearly looking for the main season.
  */
 export async function findHiAnimeMatch(
   animeTitle: string,
-  isDub: boolean = false
+  isDub: boolean = false,
+  expectedEpisodeCount?: number
 ): Promise<HiAnimeSearchResult | null> {
   try {
-    // Clean up the title for better search results
     const cleanTitle = animeTitle
       .toLowerCase()
       .replace(/season\s*\d+/gi, '')
@@ -399,24 +433,50 @@ export async function findHiAnimeMatch(
       .replace(/\s+/g, ' ')
       .trim();
 
+    const searchWords = cleanTitle.split(/\s+/).filter(Boolean);
+    const weWantSequel = searchTitleSuggestsSequel(cleanTitle);
+
     const results = await searchHiAnime(cleanTitle);
 
-    if (results.length === 0) {
-      return null;
-    }
+    if (results.length === 0) return null;
 
-    // Filter for dub if requested
     let matches = results;
     if (isDub) {
       const dubMatches = results.filter(
         (r) => r.id.includes('-dub') || r.name.toLowerCase().includes('dub')
       );
-      if (dubMatches.length > 0) {
-        matches = dubMatches;
-      }
+      if (dubMatches.length > 0) matches = dubMatches;
     }
 
-    // Return the first/best match
+    // Filter to results that actually match the search (avoid cross-anime like Sword Gai for Jujutsu Kaisen)
+    const titleMatched = matches.filter((r) =>
+      titleOverlap(searchWords, r.id, r.name ?? '')
+    );
+    if (titleMatched.length > 0) matches = titleMatched;
+
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+
+    // Prefer best match when we have expected episode count
+    if (expectedEpisodeCount != null && expectedEpisodeCount > 0) {
+      const score = (r: HiAnimeSearchResult): number => {
+        const sub = r.episodes?.sub ?? 0;
+        const dub = r.episodes?.dub ?? 0;
+        const count = Math.max(sub, dub) || sub + dub;
+        const epDiff = count ? Math.abs(count - expectedEpisodeCount) : 999;
+        // Only penalize sequel results when we're looking for the main season
+        const sequelPenalty =
+          looksLikeSequel(r.id, r.name ?? '') &&
+          expectedEpisodeCount <= 24 &&
+          !weWantSequel
+            ? 50
+            : 0;
+        return epDiff + sequelPenalty;
+      };
+      const best = matches.reduce((a, b) => (score(a) <= score(b) ? a : b));
+      return best;
+    }
+
     return matches[0];
   } catch (error) {
     console.error('[HiAnime API Error] findHiAnimeMatch:', error);
@@ -448,6 +508,73 @@ export async function getHiAnimeEpisodesStandard(
     console.error('[HiAnime API Error] getHiAnimeEpisodesStandard:', error.message);
     throw error;
   }
+}
+
+/**
+ * HiAnime AZ list item (from scraper)
+ */
+export interface HiAnimeAZItem {
+  id: string | null;
+  name: string | null;
+  jname?: string | null;
+  poster: string | null;
+  duration?: string | null;
+  type?: string | null;
+  rating?: string | null;
+  episodes?: { sub: number | null; dub: number | null };
+}
+
+/**
+ * HiAnime AZ list response
+ */
+export interface HiAnimeAZListResponse {
+  sortOption: string;
+  animes: HiAnimeAZItem[];
+  totalPages: number;
+  hasNextPage: boolean;
+  currentPage: number;
+}
+
+/**
+ * Get A-Z anime list from HiAnime (with caching)
+ */
+export async function getHiAnimeAZList(
+  sortOption: string,
+  page: number = 1
+): Promise<HiAnimeAZListResponse> {
+  const normalized = sortOption.toLowerCase();
+  const validOptions = ['all', 'other', '0-9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
+  const apiOption = normalized === '0-9' ? '0-9' : normalized === 'other' ? 'other' : normalized === 'all' ? 'all' : normalized.toUpperCase();
+
+  if (!validOptions.includes(normalized)) {
+    throw new Error(`Invalid AZ sort option: ${sortOption}`);
+  }
+
+  const cacheKey = `hianime:azlist:${apiOption}:${page}`;
+
+  return getCached(
+    cacheKey,
+    async () => {
+      const url = `${HIANIME_API_URL}/api/v2/hianime/azlist/${apiOption}`;
+      const response = await axiosInstance.get(url, {
+        params: { page },
+        timeout: 15000,
+      });
+
+      const data = response.data?.data ?? response.data;
+      return {
+        sortOption: data.sortOption ?? apiOption,
+        animes: data.animes ?? [],
+        totalPages: data.totalPages ?? 1,
+        hasNextPage: data.hasNextPage ?? false,
+        currentPage: data.currentPage ?? page,
+      };
+    },
+    CACHE_TTL.ANIME_SEARCH
+  ).catch((error: any) => {
+    console.error('[HiAnime API Error] getHiAnimeAZList:', error.message);
+    throw new Error(`HiAnime A-Z list failed: ${error.message}`);
+  });
 }
 
 /**

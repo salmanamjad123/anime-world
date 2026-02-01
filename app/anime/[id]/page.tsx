@@ -29,7 +29,7 @@ export default function AnimeDetailPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [movies, setMovies] = useState<any[]>([]);
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
-  
+
   const { data: animeData, isLoading: isAnimeLoading } = useAnimeById(animeId);
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
@@ -242,17 +242,21 @@ export default function AnimeDetailPage() {
                   <div className="mb-4">
                     <p className="text-sm text-gray-400 mb-2">Seasons</p>
                     <div className="flex flex-wrap gap-2">
-                      {seasons.map((season, index) => (
-                        <Button
-                          key={season.id}
-                          variant={selectedSeasonId === season.id ? 'primary' : 'ghost'}
-                          size="sm"
-                          onClick={() => setSelectedSeasonId(season.id)}
-                        >
-                          {season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`}
-                          {season.episodes > 0 && ` (${season.episodes} eps)`}
-                        </Button>
-                      ))}
+                      {seasons.map((season, index) => {
+                        const isSelected = selectedSeasonId === season.id;
+                        const displayCount = isSelected && !isEpisodesLoading && episodes.length > 0 ? episodes.length : season.episodes;
+                        return (
+                          <Button
+                            key={season.id}
+                            variant={isSelected ? 'primary' : 'ghost'}
+                            size="sm"
+                            onClick={() => setSelectedSeasonId(season.id)}
+                          >
+                            {season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`}
+                            {displayCount > 0 && ` (${displayCount} eps)`}
+                          </Button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

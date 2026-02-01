@@ -57,3 +57,12 @@ body {
   background: linear-gradient(to right, #374151 0%, #4b5563 50%, #374151 100%);
   background-size: 1000px 100%;
 }
+
+/* Subtitle position: move up from bottom to avoid overlap with controls */
+.video-subtitles::cue {
+  transform: translateY(-32px);
+}
+/* WebKit: move subtitle container up */
+.video-player-main video::-webkit-media-text-track-container {
+  bottom: 2.5rem;
+}

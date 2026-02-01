@@ -31,6 +31,7 @@ export default function WatchPage() {
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [currentProvider] = useState('hianime');
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
+
   // Only hd-1 and hd-2 work - reset if invalid
   useEffect(() => {
     if (selectedServer !== 'hd-1' && selectedServer !== 'hd-2') {
@@ -299,6 +300,7 @@ export default function WatchPage() {
                   onClick={() => setShowEpisodes(!showEpisodes)}
                   className="sm:ml-auto text-sm"
                 >
+
                   <List className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 shrink-0" />
                   Episodes
                 </Button>
