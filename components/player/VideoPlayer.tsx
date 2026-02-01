@@ -37,6 +37,7 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isPlayingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,6 +60,25 @@ export function VideoPlayer({
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    if (!showSettings) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(target)) {
+        setShowSettings(false);
+        setShowQualityMenu(false);
+        setShowSubtitleMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showSettings]);
 
   // Get current source based on selected quality
   const getCurrentSource = () => {
@@ -94,6 +114,7 @@ export function VideoPlayer({
     }
     
     setShowQualityMenu(false);
+    setShowSettings(false);
     
     // HLS will reload with new source
     // We'll restore playback position in the MANIFEST_PARSED event
@@ -113,6 +134,7 @@ export function VideoPlayer({
     console.log(`🎬 Changing subtitle to: ${subtitleLang}`);
     setCurrentSubtitle(subtitleLang);
     setShowSubtitleMenu(false);
+    setShowSettings(false);
     
     // Enable/disable text tracks
     const tracks = video.textTracks;
@@ -486,7 +508,10 @@ export function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group"
+      className={cn(
+        'relative w-full aspect-video bg-black rounded-lg group',
+        showSettings ? 'overflow-visible' : 'overflow-hidden'
+      )}
     >
       {/* Video Element - no onClick; tap handled by overlay */}
       <video
@@ -545,11 +570,12 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* Controls - z-10 so above tap overlay and clickable; pointer-events-none when hidden so taps reach overlay */}
+      {/* Controls - z-10 so above tap overlay; overflow-visible when settings open so menu is not clipped */}
       <div
         className={cn(
           'absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 transition-opacity duration-300',
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          showSettings && 'overflow-visible'
         )}
       >
         {/* Progress Bar */}
@@ -622,8 +648,8 @@ export function VideoPlayer({
               <span className="text-xs font-medium hidden sm:inline">10</span>
             </button>
 
-            {/* Settings Button */}
-            <div className="relative">
+            {/* Settings Button + Menu (ref for click-outside) */}
+            <div ref={settingsMenuRef} className="relative">
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className="text-white hover:text-blue-400 transition-colors"
@@ -631,9 +657,12 @@ export function VideoPlayer({
                 <Settings className="w-6 h-6" />
               </button>
 
-              {/* Settings Menu */}
+              {/* Settings Menu - fixed max-height for mobile, scroll inside, never clipped */}
               {showSettings && (
-                <div className="absolute bottom-full right-0 mb-2 bg-gray-900 rounded-lg shadow-xl border border-gray-700 min-w-[200px]">
+                <div
+                  className="absolute bottom-full right-0 mb-2 bg-gray-900 rounded-lg shadow-xl border border-gray-700 min-w-[200px] overflow-y-auto overscroll-contain"
+                  style={{ maxHeight: 'min(56vh, 320px)' }}
+                >
                   {/* Quality Option */}
                   <button
                     onClick={() => {
@@ -694,9 +723,12 @@ export function VideoPlayer({
                     </span>
                   </button>
 
-                  {/* Subtitle Submenu */}
+                  {/* Subtitle Submenu - scrollable when many options, fits in menu */}
                   {showSubtitleMenu && (
-                    <div className="bg-gray-800 border-t border-gray-700">
+                    <div
+                      className="bg-gray-800 border-t border-gray-700 overflow-y-auto overscroll-contain"
+                      style={{ maxHeight: 'min(40vh, 240px)' }}
+                    >
                       {subtitles.length > 0 ? (
                         <>
                           <button
