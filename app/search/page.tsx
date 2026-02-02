@@ -59,6 +59,10 @@ function SearchPageContent() {
     setFilters({
       search: '',
       genres: [],
+      format: undefined,
+      status: undefined,
+      season: undefined,
+      year: undefined,
       sort: 'POPULARITY_DESC',
     });
   };

@@ -3,7 +3,7 @@
  * React Query hook for fetching anime episodes
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import type { EpisodeListResponse } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
 
@@ -23,6 +23,43 @@ export function useEpisodes(animeId: string | null, isDub: boolean = false) {
     enabled: !!animeId,
     staleTime: CACHE_DURATIONS.EPISODE_LIST * 1000,
   });
+}
+
+/**
+ * Get episode counts for all seasons in parallel.
+ * Returns a map of seasonId -> episode count (or null if still loading/failed).
+ */
+export function useEpisodesForSeasons(
+  seasons: Array<{ id: string }>,
+  isDub: boolean = false
+): Record<string, number | null> {
+  const results = useQueries({
+    queries: seasons.map((season) => ({
+      queryKey: ['episodes', season.id, isDub ? 'dub' : 'sub'],
+      queryFn: async () => {
+        const response = await fetch(`/api/episodes/${season.id}?dub=${isDub}`);
+        if (!response.ok) throw new Error('Failed to fetch episodes');
+        return response.json() as Promise<EpisodeListResponse>;
+      },
+      enabled: seasons.length > 0,
+      staleTime: CACHE_DURATIONS.EPISODE_LIST * 1000,
+    })),
+  });
+
+  const counts: Record<string, number | null> = {};
+  seasons.forEach((season, i) => {
+    const result = results[i];
+    if (result?.data?.episodes) {
+      counts[season.id] = result.data.episodes.length;
+    } else if (result?.data?.totalEpisodes != null) {
+      counts[season.id] = result.data.totalEpisodes;
+    } else if (result?.isSuccess && result?.data) {
+      counts[season.id] = 0;
+    } else {
+      counts[season.id] = null;
+    }
+  });
+  return counts;
 }
 
 /**

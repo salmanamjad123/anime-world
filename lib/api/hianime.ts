@@ -389,6 +389,8 @@ const SEQUEL_KEYWORDS = [
   '2nd season',
   '3rd season',
   'second season',
+  'season 2',
+  'season 3',
   'the movie',
   '-part-2',
   '-part-3',
@@ -415,9 +417,34 @@ function titleOverlap(searchWords: string[], resultId: string, resultName: strin
 }
 
 /**
+ * Normalize title for search while preserving season/part info (for multi-season matching)
+ */
+function buildSearchTitlePreservingSeason(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Normalize title for fallback search (strips season info - used when full-title search returns nothing)
+ */
+function buildSearchTitleStripped(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/season\s*\d+/gi, '')
+    .replace(/\d+(st|nd|rd|th)\s*season/gi, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Search and get the best match for an anime
  * When expectedEpisodeCount is provided, prefers results with matching episode count.
  * Only penalizes sequel results when we're clearly looking for the main season.
+ * Preserves season/part info in search so multi-season anime (e.g. Frieren S1 vs S2) match correctly.
  */
 export async function findHiAnimeMatch(
   animeTitle: string,
@@ -425,18 +452,18 @@ export async function findHiAnimeMatch(
   expectedEpisodeCount?: number
 ): Promise<HiAnimeSearchResult | null> {
   try {
-    const cleanTitle = animeTitle
-      .toLowerCase()
-      .replace(/season\s*\d+/gi, '')
-      .replace(/\d+(st|nd|rd|th)\s*season/gi, '')
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const fullSearchTitle = buildSearchTitlePreservingSeason(animeTitle);
+    const strippedTitle = buildSearchTitleStripped(animeTitle);
+    const searchWords = strippedTitle.split(/\s+/).filter(Boolean);
+    const weWantSequel = searchTitleSuggestsSequel(fullSearchTitle);
 
-    const searchWords = cleanTitle.split(/\s+/).filter(Boolean);
-    const weWantSequel = searchTitleSuggestsSequel(cleanTitle);
+    // First try with full title (preserving "season 2", "2nd season", "part 2", etc.)
+    // so HiAnime entries like "frieren-beyond-journeys-end-season-2" are found
+    let results = await searchHiAnime(fullSearchTitle);
 
-    const results = await searchHiAnime(cleanTitle);
+    if (results.length === 0 && fullSearchTitle !== strippedTitle) {
+      results = await searchHiAnime(strippedTitle);
+    }
 
     if (results.length === 0) return null;
 
@@ -456,6 +483,13 @@ export async function findHiAnimeMatch(
 
     if (matches.length === 0) return null;
     if (matches.length === 1) return matches[0];
+
+    // When searching for a sequel (e.g. "Hell's Paradise Season 2"), prefer results whose id/name
+    // contains sequel keywords (season 2, 2nd season, etc.) over the base series
+    if (weWantSequel) {
+      const sequelMatches = matches.filter((r) => looksLikeSequel(r.id, r.name ?? ''));
+      if (sequelMatches.length > 0) matches = sequelMatches;
+    }
 
     // Prefer best match when we have expected episode count
     if (expectedEpisodeCount != null && expectedEpisodeCount > 0) {

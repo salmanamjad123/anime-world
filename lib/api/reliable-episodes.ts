@@ -9,8 +9,14 @@ import type { Episode, EpisodeListResponse } from '@/types';
 import { 
   findHiAnimeMatch, 
   getHiAnimeEpisodesStandard, 
-  isHiAnimeAvailable 
+  isHiAnimeAvailable,
+  searchHiAnime 
 } from './hianime';
+
+/** AniList IDs that must use HiAnime for episodes (AniList lacks full episode data) */
+const HIANIME_REQUIRED_SEARCH: Record<string, string> = {
+  '21': 'one piece', // One Piece - AniList doesn't have full 1000+ episode list
+};
 
 /**
  * Generate episodes based on AniList episode count
@@ -103,8 +109,42 @@ export async function getReliableEpisodes(
     const hiAnimeAvailable = await isHiAnimeAvailable();
     
     if (hiAnimeAvailable) {
-      console.log('🎯 [TIER 1] Trying HiAnime API...');
-      const match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
+      let match: Awaited<ReturnType<typeof findHiAnimeMatch>> = null;
+
+      const requiredSearch = HIANIME_REQUIRED_SEARCH[animeId];
+      if (requiredSearch) {
+        console.log(`🎯 [TIER 1] HiAnime required for anime ${animeId} - searching "${requiredSearch}"`);
+        const results = await searchHiAnime(requiredSearch, 1);
+        const filtered = results.filter(
+          (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
+        );
+        const candidates = filtered.length > 0 ? filtered : results;
+        if (candidates.length > 0) {
+          const best = candidates.reduce((a, b) => {
+            const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
+            const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
+            return aCount >= bCount ? a : b;
+          });
+          match = best;
+        }
+        if (isDub && !match) {
+          const dubResults = results.filter(
+            (r) => r.id.includes('-dub') || r.name?.toLowerCase().includes('dub')
+          );
+          if (dubResults.length > 0) {
+            match = dubResults.reduce((a, b) => {
+              const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
+              const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
+              return aCount >= bCount ? a : b;
+            });
+          }
+        }
+      }
+
+      if (!match) {
+        console.log('🎯 [TIER 1] Trying HiAnime API...');
+        match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
+      }
       
       if (match) {
         console.log(`✅ [HiAnime API] Found anime: ${match.id}`);

@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
-import { useEpisodes, useAnimeInfo } from '@/hooks/useEpisodes';
+import { useEpisodes, useEpisodesForSeasons, useAnimeInfo } from '@/hooks/useEpisodes';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
@@ -35,6 +35,7 @@ export default function AnimeDetailPage() {
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
   const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
   const { data: animeInfo } = useAnimeInfo(selectedSeasonId);
+  const seasonEpisodeCounts = useEpisodesForSeasons(seasons, selectedLanguage === 'dub');
 
   // Fetch seasons and movies
   useEffect(() => {
@@ -68,8 +69,6 @@ export default function AnimeDetailPage() {
   const popularAnimeFiltered = (popularData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
-  const isTvFormat = anime?.format === 'TV' || anime?.format === 'TV_SHORT';
-
   if (isAnimeLoading) {
     return (
       <div className="min-h-screen bg-gray-900">
@@ -182,10 +181,10 @@ export default function AnimeDetailPage() {
                     <span className="text-gray-300">{formatSeasonYear(anime.season, anime.seasonYear)}</span>
                   </div>
                 )}
-                {/* Prefer actual loaded episodes for accuracy (HiAnime seasons, AniList season counts) */}
-                {(episodes.length > 0 || anime.episodes) && (
+                {/* Show episode count when we've fetched for selected season */}
+                {(seasonEpisodeCounts[selectedSeasonId] ?? (!isEpisodesLoading ? episodes.length : null)) != null && (
                   <span className="text-gray-300">
-                    {(episodes.length > 0 ? episodes.length : anime.episodes) || 0} Episodes
+                    {seasonEpisodeCounts[selectedSeasonId] ?? episodes.length} Episodes
                   </span>
                 )}
               </div>
@@ -233,18 +232,18 @@ export default function AnimeDetailPage() {
           {/* Main Content: Episodes first so users don't need to scroll */}
           <div className="lg:col-span-2">
             {/* Season/Movie Selector */}
-            {((isTvFormat && seasons.length > 1) || movies.length > 0) && (
+            {(seasons.length >= 1 || movies.length > 0) && (
               <div className="bg-gray-800/50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-bold text-white mb-4">Select Season or Movie</h3>
                 
-                {/* Seasons (only for TV/TV_SHORT formats) */}
-                {isTvFormat && seasons.length > 1 && (
+                {/* Seasons - show main series even when alone (e.g. One Piece 1000+ eps); also PARENT when viewing a movie */}
+                {seasons.length >= 1 && (
                   <div className="mb-4">
                     <p className="text-sm text-gray-400 mb-2">Seasons</p>
                     <div className="flex flex-wrap gap-2">
                       {seasons.map((season, index) => {
                         const isSelected = selectedSeasonId === season.id;
-                        const displayCount = isSelected && !isEpisodesLoading && episodes.length > 0 ? episodes.length : season.episodes;
+                        const displayCount = seasonEpisodeCounts[season.id];
                         return (
                           <Button
                             key={season.id}
@@ -252,8 +251,8 @@ export default function AnimeDetailPage() {
                             size="sm"
                             onClick={() => setSelectedSeasonId(season.id)}
                           >
-                            {season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`}
-                            {displayCount > 0 && ` (${displayCount} eps)`}
+                            {season.title || (season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`)}
+                            {displayCount != null && ` (${displayCount} eps)`}
                           </Button>
                         );
                       })}

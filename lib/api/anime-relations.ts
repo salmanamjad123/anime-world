@@ -5,6 +5,7 @@
 
 import { axiosInstance } from './axios';
 import { ANILIST_API_URL } from '@/constants/api';
+import { getPreferredTitle } from '@/lib/utils';
 
 const RELATIONS_QUERY = `
   query ($id: Int) {
@@ -18,6 +19,10 @@ const RELATIONS_QUERY = `
       }
       episodes
       format
+      coverImage {
+        medium
+        large
+      }
       relations {
         edges {
           relationType
@@ -76,7 +81,7 @@ export async function getAnimeSeasons(animeId: string): Promise<{
     const main: AnimeRelation = {
       id: anime.id.toString(),
       malId: anime.idMal,
-      title: anime.title.english || anime.title.romaji,
+      title: getPreferredTitle(anime.title),
       format: anime.format,
       episodes: anime.episodes || 0,
       seasonYear: anime.seasonYear,
@@ -95,7 +100,7 @@ export async function getAnimeSeasons(animeId: string): Promise<{
         const relation: AnimeRelation = {
           id: node.id.toString(),
           malId: node.idMal,
-          title: node.title.english || node.title.romaji,
+          title: getPreferredTitle(node.title),
           format: node.format,
           episodes: node.episodes || 0,
           seasonYear: node.seasonYear,
@@ -109,11 +114,10 @@ export async function getAnimeSeasons(animeId: string): Promise<{
         } else if (
           edge.relationType === 'SEQUEL' ||
           edge.relationType === 'PREQUEL' ||
-          edge.relationType === 'ALTERNATIVE'
+          edge.relationType === 'ALTERNATIVE' ||
+          edge.relationType === 'PARENT' // Main series when viewing a movie (e.g. One Piece TV from a movie page)
         ) {
           if (node.format === 'TV' || node.format === 'TV_SHORT') {
-            // Hide seasons that have not aired yet (no episodes & NOT_YET_RELEASED),
-            // so we don't show fake \"Season 2\" entries that have no real episodes (e.g. Gachiakuta S2).
             const status = node.status;
             const isUpcoming = status === 'NOT_YET_RELEASED';
             const hasEpisodes = !!node.episodes && node.episodes > 0;

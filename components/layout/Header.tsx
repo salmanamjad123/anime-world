@@ -17,14 +17,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Anime } from '@/types';
-import type { HiAnimeSearchResult } from '@/lib/api/hianime';
 import { Sidebar } from './Sidebar';
-
-type SearchResultItem = Anime | HiAnimeSearchResult;
-
-function isHiAnimeResult(item: SearchResultItem): item is HiAnimeSearchResult {
-  return 'poster' in item && 'name' in item && !('coverImage' in item);
-}
 
 export function Header() {
   const pathname = usePathname();
@@ -34,7 +27,7 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [searchResults, setSearchResults] = useState<Anime[]>([]);
   const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
   const [isSearching, setIsSearching] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -48,7 +41,7 @@ export function Header() {
   //   { label: 'History', href: ROUTES.HISTORY, icon: History },
   // ];
 
-  // Fetch search: HiAnime first (anime you can watch), then AniList search, then trending fallback
+  // Fetch search: AniList only (canonical IDs for reviews, watchlist, etc.)
   useEffect(() => {
     if (!debouncedQuery || debouncedQuery.length < 1) {
       setSearchResults([]);
@@ -61,7 +54,7 @@ export function Header() {
 
     const setTrendingFallback = () => {
       if (cancelled) return;
-      return fetch('/api/anime?type=trending&page=1&perPage=15')
+      return fetch('/api/anime?type=trending&page=1&perPage=20')
         .then((r) => (r.ok ? r.json() : null))
         .then((fallback) => {
           if (cancelled) return;
@@ -71,50 +64,65 @@ export function Header() {
         });
     };
 
-    // 1) Try HiAnime search (aniwatch-api) – anime that exist on the site
-    fetch(`/api/search/hianime?q=${encodeURIComponent(debouncedQuery)}&page=1`)
+    fetch(`/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+      .then(async (anilistData) => {
         if (cancelled) return;
-        const animes = data?.data?.animes ?? [];
-        if (Array.isArray(animes) && animes.length > 0) {
-          setSearchResults(animes);
-          setIsSimilarAnime(false);
-          setIsSearching(false);
-          return;
-        }
-        // 2) No HiAnime results: try AniList search
-        return fetch(`/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=15`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((anilistData) => {
-            if (cancelled) return;
-            const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
-            if (media.length > 0) {
-              setSearchResults(Array.isArray(media) ? media : []);
+        const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
+        if (media.length === 0) return setTrendingFallback();
+
+        const first = media[0];
+        const relationIds = new Set<string>();
+
+        if (first.id) {
+          try {
+            const seasonsRes = await fetch(`/api/anime/${first.id}/seasons`);
+            if (seasonsRes.ok && !cancelled) {
+              const seasonsData = await seasonsRes.json();
+              const main = seasonsData.main;
+              const seasons = seasonsData.seasons ?? [];
+              const movies = seasonsData.movies ?? [];
+              const allRelations = [main, ...seasons, ...movies].filter(Boolean);
+              allRelations.forEach((r: { id: string }) => relationIds.add(String(r.id)));
+
+              const mediaById = new Map<string, Anime>(media.map((m: Anime) => [String(m.id), m]));
+              const firstCover = (first as Anime).coverImage?.medium || (first as Anime).coverImage?.large;
+              const genericPlaceholder = 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
+              const relationToAnime = (r: { id: string; title: string; coverImage?: string; format?: string }) => {
+                const original = mediaById.get(String(r.id)) as Anime | undefined;
+                const origCover = original?.coverImage as { medium?: string; large?: string } | undefined;
+                const img =
+                  r.coverImage ||
+                  origCover?.medium ||
+                  origCover?.large ||
+                  firstCover ||
+                  genericPlaceholder;
+                return {
+                  id: String(r.id),
+                  title: { romaji: r.title, english: r.title, native: '' },
+                  coverImage: { large: img, medium: img },
+                  genres: r.format ? [r.format] : [],
+                } as Anime;
+              };
+
+              const enriched: Anime[] = allRelations.map(relationToAnime);
+              const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
+              setSearchResults([...enriched, ...rest]);
               setIsSimilarAnime(false);
               setIsSearching(false);
               return;
             }
-            return setTrendingFallback();
-          });
+          } catch {
+            /* fall through to default */
+          }
+        }
+
+        setSearchResults(Array.isArray(media) ? media : []);
+        setIsSimilarAnime(false);
+        setIsSearching(false);
       })
       .catch(() => {
-        if (!cancelled) {
-          // HiAnime failed: try AniList search, then trending
-          return fetch(`/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=15`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((anilistData) => {
-              if (cancelled) return;
-              const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
-              if (media.length > 0) {
-                setSearchResults(Array.isArray(media) ? media : []);
-                setIsSimilarAnime(false);
-                return;
-              }
-              return setTrendingFallback();
-            })
-            .catch(() => setTrendingFallback());
-        }
+        if (!cancelled) return setTrendingFallback();
       })
       .finally(() => {
         if (!cancelled) setIsSearching(false);
@@ -237,10 +245,9 @@ export function Header() {
                       </li>
                     )}
                     {searchResults.map((item) => {
-                      const isHiAnime = isHiAnimeResult(item);
-                      const title = isHiAnime ? item.name : getPreferredTitle(item.title);
-                      const imageUrl = isHiAnime ? item.poster : item.coverImage.medium;
-                      const subtitle = isHiAnime ? item.type : item.genres?.[0];
+                      const title = getPreferredTitle(item.title);
+                      const imageUrl = item.coverImage.medium;
+                      const subtitle = item.genres?.[0];
                       return (
                         <li key={item.id}>
                           <button
@@ -360,10 +367,9 @@ export function Header() {
                       </li>
                     )}
                     {searchResults.map((item) => {
-                      const isHiAnime = isHiAnimeResult(item);
-                      const title = isHiAnime ? item.name : getPreferredTitle(item.title);
-                      const imageUrl = isHiAnime ? item.poster : item.coverImage.medium;
-                      const subtitle = isHiAnime ? item.type : item.genres?.[0];
+                      const title = getPreferredTitle(item.title);
+                      const imageUrl = item.coverImage.medium;
+                      const subtitle = item.genres?.[0];
                       return (
                         <li key={item.id}>
                           <button
