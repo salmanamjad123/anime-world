@@ -6,8 +6,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { FilterSection } from '@/components/search/FilterSection';
@@ -16,13 +17,32 @@ import { Filter, X } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 import type { AnimeFilters } from '@/types';
 
-export default function SearchPage() {
+function SearchPageContent() {
+  const searchParams = useSearchParams();
   const [showFilters, setShowFilters] = useState(true);
   const [filters, setFilters] = useState<AnimeFilters>({
     search: '',
     genres: [],
     sort: 'POPULARITY_DESC',
   });
+
+  // Initialize filters from URL params on mount (e.g. from sidebar links)
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    const format = searchParams.get('format') as AnimeFilters['format'] | null;
+    const genres = searchParams.get('genres')?.split(',').filter(Boolean);
+    const sort = searchParams.get('sort') as AnimeFilters['sort'] | null;
+    if (format || genres?.length || sort) {
+      hasInitialized.current = true;
+      setFilters((prev) => ({
+        ...prev,
+        ...(format && { format }),
+        ...(genres?.length && { genres }),
+        ...(sort && { sort }),
+      }));
+    }
+  }, [searchParams]);
 
   const { data, isLoading } = useSearchAnime(filters, 1, 30);
 
@@ -117,5 +137,20 @@ export default function SearchPage() {
         <AnimeGrid anime={results} isLoading={isLoading} />
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="container mx-auto px-4 py-8 flex justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+        </div>
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }

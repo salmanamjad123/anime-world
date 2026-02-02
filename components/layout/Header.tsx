@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Search, Heart, History, Moon, Sun, Loader2, Filter } from 'lucide-react';
+import { Search, Heart, History, Moon, Sun, Loader2, Filter, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/constants/routes';
 import { useThemeStore } from '@/store/useThemeStore';
@@ -18,6 +18,7 @@ import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Anime } from '@/types';
 import type { HiAnimeSearchResult } from '@/lib/api/hianime';
+import { Sidebar } from './Sidebar';
 
 type SearchResultItem = Anime | HiAnimeSearchResult;
 
@@ -32,6 +33,7 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
   const [isSearching, setIsSearching] = useState(false);
@@ -158,18 +160,29 @@ export function Header() {
   }, []);
 
   return (
+    <>
     <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
       <div className="relative w-full">
         {/* Header row */}
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between gap-4">
-            {/* Logo */}
-            <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center space-x-2">
-              <div className="text-2xl font-bold">
-                <span className="text-blue-500">Anime</span>
-                <span className="text-white">World</span>
-              </div>
-            </Link>
+            {/* Toggle + Logo - grouped together */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center">
+                <div className="text-2xl font-bold">
+                  <span className="text-blue-500">Anime</span>
+                  <span className="text-white">World</span>
+                </div>
+              </Link>
+            </div>
 
             {/* Mobile: Search icon only - tap to open/close */}
             <button
@@ -385,5 +398,8 @@ export function Header() {
         )}
       </div>
     </header>
+
+    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    </>
   );
 }
