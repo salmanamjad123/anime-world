@@ -363,28 +363,30 @@ export default function WatchPage() {
             <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 lg:sticky lg:top-20">
               <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Episodes</h3>
               
-              <div className="max-h-[50vh] sm:max-h-[calc(100vh-200px)] overflow-y-auto space-y-1.5 sm:space-y-2">
-                {episodes.map((episode) => {
-                  const isCurrent = episode.id === episodeId;
-                  return (
-                    <button
-                      key={episode.id}
-                      onClick={() => handleEpisodeSelect(episode.id)}
-                      className={`w-full text-left p-2.5 sm:p-3 rounded-lg transition-colors text-sm sm:text-base ${
-                        isCurrent
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700/50 hover:bg-gray-700 text-gray-300'
-                      }`}
-                    >
-                      <div className="font-semibold">Episode {episode.number}</div>
-                      {episode.title && (
-                        <div className="text-sm mt-1 line-clamp-2 opacity-80">
-                          {episode.title}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="max-h-[50vh] sm:max-h-[calc(100vh-200px)] overflow-y-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-2">
+                  {episodes.map((episode) => {
+                    const isCurrent = episode.id === episodeId;
+                    return (
+                      <button
+                        key={episode.id}
+                        onClick={() => handleEpisodeSelect(episode.id)}
+                        className={`w-full text-left p-2 sm:p-2.5 lg:p-3 rounded-lg transition-colors text-xs sm:text-sm lg:text-base ${
+                          isCurrent
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700/50 hover:bg-gray-700 text-gray-300'
+                        }`}
+                      >
+                        <div className="font-semibold truncate">Ep {episode.number}</div>
+                        {episode.title && (
+                          <div className="text-[10px] sm:text-xs mt-0.5 line-clamp-2 opacity-80 truncate">
+                            {episode.title}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

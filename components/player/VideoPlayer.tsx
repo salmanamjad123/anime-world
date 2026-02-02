@@ -498,51 +498,36 @@ export function VideoPlayer({
     }, 3000);
   };
 
-  // Zone-based tap: mobile = only center/icon plays; anywhere else toggles controls. Desktop = sides = controls, center = play.
+  // Zone-based tap/click: center = play/pause; sides = show/hide controls (same on mobile, desktop, fullscreen)
   const handleContainerTap = (clientX: number) => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
     const w = rect.width;
+    const leftZone = w * 0.35;
+    const rightZone = w * 0.65;
 
-    if (isMobile) {
-      // Mobile: only center (where play icon is) = play/pause; anywhere else = show/hide controls
-      const leftZone = w * 0.35;
-      const rightZone = w * 0.65;
-      if (x >= leftZone && x <= rightZone) {
-        togglePlay();
-        resetHideTimer();
-      } else {
-        setShowControls((prev) => {
-          const next = !prev;
-          if (next) resetHideTimer();
-          return next;
-        });
-      }
+    if (x >= leftZone && x <= rightZone) {
+      togglePlay();
+      resetHideTimer();
     } else {
-      // Desktop: sides = show/hide controls, center = play/pause
-      const leftZone = w * 0.15;
-      const rightZone = w * 0.85;
-      if (x < leftZone || x > rightZone) {
-        setShowControls((prev) => {
-          const next = !prev;
-          if (next) resetHideTimer();
-          return next;
-        });
-      } else {
-        togglePlay();
-        resetHideTimer();
-      }
+      setShowControls((prev) => {
+        const next = !prev;
+        if (next) resetHideTimer();
+        return next;
+      });
     }
   };
 
-  // Auto-hide controls (mouse move + touch on overlay resets via resetHideTimer)
+  // Auto-hide controls: only reset when mouse moves inside the video player (not outside)
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
     const handleMouseMove = () => resetHideTimer();
-    window.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mousemove', handleMouseMove);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mousemove', handleMouseMove);
       if (hideControlsTimeoutRef.current) clearTimeout(hideControlsTimeoutRef.current);
     };
   }, []);
