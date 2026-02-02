@@ -29,11 +29,21 @@ type Props = {
   autoPlayInterval?: number; // ms, 0 = off
 };
 
+const SWIPE_THRESHOLD = 50;
+const SWIPE_VELOCITY_THRESHOLD = 0.3;
+
 export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: Props) {
   const total = anime.length;
   const [index, setIndex] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(true);
+  const [dragOffset, setDragOffset] = useState(0);
   const isJumpingRef = useRef(false);
+
+  const touchState = useRef<{
+    startX: number;
+    startY: number;
+    startTime: number;
+  } | null>(null);
 
   const extendedAnime = useMemo(() => {
     if (total <= 1) return anime;
@@ -80,6 +90,81 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
     }
   }, [index, total]);
 
+  const handleSwipeStart = useCallback(
+    (clientX: number, clientY: number) => {
+      if (total <= 1) return;
+      touchState.current = { startX: clientX, startY: clientY, startTime: Date.now() };
+      setDragOffset(0);
+    },
+    [total]
+  );
+
+  const handleSwipeMove = useCallback(
+    (clientX: number, clientY: number) => {
+      if (total <= 1 || !touchState.current || isJumpingRef.current) return;
+      const { startX, startY } = touchState.current;
+      const deltaX = clientX - startX;
+      const deltaY = clientY - startY;
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        setDragOffset(deltaX);
+      }
+    },
+    [total]
+  );
+
+  const handleSwipeEnd = useCallback(
+    (clientX: number, clientY: number) => {
+      if (total <= 1 || !touchState.current) return;
+      const { startX, startY, startTime } = touchState.current;
+      touchState.current = null;
+      setDragOffset(0);
+
+      const deltaX = clientX - startX;
+      const deltaY = clientY - startY;
+      const deltaTime = Date.now() - startTime;
+      const velocity = Math.abs(deltaX) / Math.max(deltaTime, 1);
+
+      const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      const isStrongSwipe = Math.abs(deltaX) > SWIPE_THRESHOLD || velocity > SWIPE_VELOCITY_THRESHOLD;
+
+      if (isHorizontalSwipe && isStrongSwipe) {
+        if (deltaX > 0) goPrev();
+        else goNext();
+      }
+    },
+    [total, goNext, goPrev]
+  );
+
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent) => handleSwipeStart(e.touches[0].clientX, e.touches[0].clientY),
+    [handleSwipeStart]
+  );
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent) => handleSwipeMove(e.touches[0].clientX, e.touches[0].clientY),
+    [handleSwipeMove]
+  );
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) =>
+      handleSwipeEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY),
+    [handleSwipeEnd]
+  );
+
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (total <= 1) return;
+      handleSwipeStart(e.clientX, e.clientY);
+      const onMouseMove = (ev: MouseEvent) => handleSwipeMove(ev.clientX, ev.clientY);
+      const onMouseUp = (ev: MouseEvent) => {
+        handleSwipeEnd(ev.clientX, ev.clientY);
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    },
+    [total, handleSwipeStart, handleSwipeMove, handleSwipeEnd]
+  );
+
   useEffect(() => {
     if (!autoPlayInterval || total <= 1) return;
     const id = setInterval(goNext, autoPlayInterval);
@@ -111,11 +196,20 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
 
   return (
     <section className="relative w-full h-[340px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
-      {/* Slides container with smooth horizontal swipe */}
-      <div className="relative w-full h-full overflow-hidden">
+      {/* Slides container - swipeable on touch and mouse drag */}
+      <div
+        className="relative w-full h-full overflow-hidden touch-pan-y select-none cursor-grab active:cursor-grabbing"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+      >
         <div
-          className={`flex h-full ease-out ${isTransitioning ? 'transition-transform duration-700' : ''}`}
-          style={{ transform: `translateX(-${displayIndex * 100}%)` }}
+          className={`flex h-full ease-out ${isTransitioning && dragOffset === 0 ? 'transition-transform duration-700' : ''}`}
+          style={{
+            transform: `translateX(calc(-${displayIndex * 100}% + ${dragOffset}px))`,
+          }}
           onTransitionEnd={handleTransitionEnd}
         >
           {extendedAnime.map((item, slideIndex) => {

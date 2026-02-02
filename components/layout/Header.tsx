@@ -5,11 +5,11 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Search, Heart, History, Moon, Sun, Loader2 } from 'lucide-react';
+import { Search, Heart, History, Moon, Sun, Loader2, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/constants/routes';
 import { useThemeStore } from '@/store/useThemeStore';
@@ -31,10 +31,12 @@ export function Header() {
   const { theme, toggleTheme } = useThemeStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
   const [isSearching, setIsSearching] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
 
   const debouncedQuery = useDebounce(searchQuery.trim(), 300);
 
@@ -118,11 +120,14 @@ export function Header() {
     return () => { cancelled = true; };
   }, [debouncedQuery]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (exclude search toggle button)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (searchToggleRef.current?.contains(target)) return;
+      if (searchRef.current && !searchRef.current.contains(target)) {
         setSearchOpen(false);
+        setMobileSearchOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -134,25 +139,60 @@ export function Header() {
   const handleResultClick = (animeId: string) => {
     setSearchQuery('');
     setSearchOpen(false);
+    setMobileSearchOpen(false);
     setSearchResults([]);
     router.push(ROUTES.ANIME_DETAIL(animeId));
   };
 
+  const toggleMobileSearch = () => {
+    setMobileSearchOpen((prev) => {
+      if (prev) setSearchOpen(false);
+      else setSearchOpen(true);
+      return !prev;
+    });
+  };
+
+  const closeMobileSearch = useCallback(() => {
+    setMobileSearchOpen(false);
+    setSearchOpen(false);
+  }, []);
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
-      <div className="container mx-auto px-4">
-        <div className="flex h-16 items-center justify-between gap-4">
-          {/* Logo */}
-          <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center space-x-2">
-            <div className="text-2xl font-bold">
-              <span className="text-blue-500">Anime</span>
-              <span className="text-white">World</span>
-            </div>
-          </Link>
+      <div className="relative w-full">
+        {/* Header row */}
+        <div className="container mx-auto px-4">
+          <div className="flex h-16 items-center justify-between gap-4">
+            {/* Logo */}
+            <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center space-x-2">
+              <div className="text-2xl font-bold">
+                <span className="text-blue-500">Anime</span>
+                <span className="text-white">World</span>
+              </div>
+            </Link>
 
-          {/* Inline Search - same page, no navigation */}
-          <div ref={searchRef} className="relative flex-1 max-w-xl mx-4">
-            <div className="relative">
+            {/* Mobile: Search icon only - tap to open/close */}
+            <button
+              ref={searchToggleRef}
+              type="button"
+              onClick={toggleMobileSearch}
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-blue-500 hover:bg-gray-800 transition-colors"
+              aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
+              aria-expanded={mobileSearchOpen}
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
+            {/* Desktop: Filter + Search bar */}
+            <div ref={searchRef} className="relative flex-1 max-w-xl mx-4 hidden md:flex items-center gap-2 min-w-0">
+            <Link
+              href={ROUTES.SEARCH}
+              className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+              aria-label="Filters"
+            >
+              <Filter className="w-4 h-4" />
+            </Link>
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
@@ -218,7 +258,7 @@ export function Header() {
                 )}
               </div>
             )}
-          </div>
+            </div>
 
           {/* Navigation */}
           {/* <nav className="hidden md:flex items-center space-x-6 flex-shrink-0">
@@ -256,7 +296,93 @@ export function Header() {
               )}
             </Button>
           </div> */}
+          </div>
         </div>
+
+        {/* Mobile Search Bar - absolute overlay below header, takes extra space */}
+        {mobileSearchOpen && (
+          <div
+            ref={searchRef}
+            className="md:hidden absolute top-full left-0 right-0 z-50 w-full px-4 py-4 border-t border-gray-800 bg-gray-900 shadow-xl"
+          >
+            <div className="flex gap-2 w-full">
+              <Link
+                href={ROUTES.SEARCH}
+                onClick={closeMobileSearch}
+                className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                aria-label="Filters"
+              >
+                <Filter className="w-5 h-5" />
+              </Link>
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search anime..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchOpen(true)}
+                  autoFocus
+                  className="w-full h-12 pl-10 pr-10 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                )}
+              </div>
+            </div>
+            {/* Search results dropdown */}
+            {showDropdown && (
+              <div className="mt-2 rounded-lg bg-gray-800 border border-gray-700 max-h-[60vh] overflow-y-auto">
+                {isSearching ? (
+                  <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
+                ) : searchResults.length === 0 ? (
+                  <div className="p-4 text-center text-gray-400 text-sm">
+                    {searchQuery.length < 1 ? 'Type to search' : 'No anime found'}
+                  </div>
+                ) : (
+                  <ul className="py-2">
+                    {debouncedQuery && searchResults.length > 0 && (
+                      <li className="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
+                        {isSimilarAnime ? 'Similar / Popular anime' : 'Search results'}
+                      </li>
+                    )}
+                    {searchResults.map((item) => {
+                      const isHiAnime = isHiAnimeResult(item);
+                      const title = isHiAnime ? item.name : getPreferredTitle(item.title);
+                      const imageUrl = isHiAnime ? item.poster : item.coverImage.medium;
+                      const subtitle = isHiAnime ? item.type : item.genres?.[0];
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleResultClick(item.id)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
+                          >
+                            <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
+                              <Image
+                                src={imageUrl}
+                                alt={title}
+                                fill
+                                className="object-cover"
+                                sizes="48px"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-white font-medium truncate">{title}</p>
+                              {subtitle && (
+                                <p className="text-gray-400 text-xs truncate">{subtitle}</p>
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

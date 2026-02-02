@@ -92,7 +92,7 @@ export function useSearchAnime(filters: AnimeFilters, page = 1, perPage = 20) {
       if (!response.ok) throw new Error('Failed to search anime');
       return response.json();
     },
-    enabled: !!(filters.search || filters.genres?.length || filters.year),
+    enabled: true,
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
   });
 }

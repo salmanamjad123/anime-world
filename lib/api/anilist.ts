@@ -165,25 +165,37 @@ export async function getPopularAnime(page = 1, perPage = 20): Promise<AnimeSear
   return executeQuery<AnimeSearchResult>(POPULAR_QUERY, { page, perPage });
 }
 
+// AniList uses different names for some genres
+const GENRE_ANILIST_MAP: Record<string, string> = {
+  'Shoujo Ai': 'Girls Love',
+  'Shounen Ai': 'Boys Love',
+};
+
+function mapGenresForAniList(genres: string[]): string[] {
+  return genres.map((g) => GENRE_ANILIST_MAP[g] ?? g);
+}
+
 /**
  * Search anime with filters
+ * Only pass defined filters - empty arrays/strings would restrict results to nothing
  */
 export async function searchAnime(
   filters: AnimeFilters,
   page = 1,
   perPage = 20
 ): Promise<AnimeSearchResult> {
-  const variables = {
+  const variables: Record<string, unknown> = {
     page,
     perPage,
-    search: filters.search,
-    genres: filters.genres,
-    year: filters.year,
-    season: filters.season,
-    format: filters.format,
-    status: filters.status,
     sort: filters.sort ? [filters.sort] : ['POPULARITY_DESC'],
   };
+
+  if (filters.search?.trim()) variables.search = filters.search.trim();
+  if (filters.genres?.length) variables.genres = mapGenresForAniList(filters.genres);
+  if (filters.year) variables.year = filters.year;
+  if (filters.season) variables.season = filters.season;
+  if (filters.format) variables.format = filters.format;
+  if (filters.status) variables.status = filters.status;
 
   return executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
 }
