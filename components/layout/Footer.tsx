@@ -76,12 +76,12 @@ export function Footer() {
         <div className="border-t border-gray-800 pt-6 text-center">
           <p className="text-gray-500 text-sm">
             <Link href={ROUTES.HOME} className="hover:text-blue-400 transition-colors">
-              Anime World
+              Anime Village
             </Link>
             {' — '}
             Watch anime online free. Like Aniwatch, Anilab, HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer, Dragon Ball and 10000+ anime with sub and dub.
           </p>
-          <p className="mt-1 text-xs text-gray-600">2026. All rights reserved.</p>
+          <p className="mt-1 text-xs text-gray-600">2026 Anime Village. All rights reserved.</p>
         </div>
       </div>
     </footer>

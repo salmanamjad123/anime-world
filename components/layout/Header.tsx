@@ -187,7 +187,7 @@ export function Header() {
               <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center">
                 <div className="text-2xl font-bold">
                   <span className="text-blue-500">Anime</span>
-                  <span className="text-white">World</span>
+                  <span className="text-white">Village</span>
                 </div>
               </Link>
             </div>

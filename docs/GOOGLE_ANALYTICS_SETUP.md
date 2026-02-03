@@ -1,6 +1,6 @@
 # Google Analytics 4 Setup Guide
 
-Track visitors, page views, and traffic sources on Anime World.
+Track visitors, page views, and traffic sources on Anime Village.
 
 ## Step 1: Create a GA4 Property
 
@@ -9,7 +9,7 @@ Track visitors, page views, and traffic sources on Anime World.
 3. Click **Admin** (gear icon, bottom left)
 4. Under **Property**, click **Create property**
 5. Enter:
-   - **Property name:** Anime World
+   - **Property name:** Anime Village
    - **Reporting time zone:** Your timezone
    - **Currency:** Your currency
 6. Click **Next** → Complete business details → **Create**
@@ -18,8 +18,8 @@ Track visitors, page views, and traffic sources on Anime World.
 
 1. Select **Web** as the platform
 2. Enter:
-   - **Website URL:** `https://anime-world-tan.vercel.app`
-   - **Stream name:** Anime World (or leave default)
+   - **Website URL:** `https://animevillage.org`
+   - **Stream name:** Anime Village (or leave default)
 3. Click **Create stream**
 4. Copy your **Measurement ID** (format: `G-XXXXXXXXXX`)
 

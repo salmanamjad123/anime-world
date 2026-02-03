@@ -4,7 +4,7 @@
 
 import { ImageResponse } from 'next/og';
 
-export const alt = 'Anime World - Watch Anime Online Free';
+export const alt = 'Anime Village - Watch Anime Online Free';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -31,7 +31,7 @@ export default async function Image() {
             marginBottom: 16,
           }}
         >
-          Anime World
+          Anime Village
         </div>
         <div
           style={{

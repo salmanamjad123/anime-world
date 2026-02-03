@@ -57,23 +57,23 @@ const FAQ_JSON_LD = {
       name: "How can I watch anime online for free?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Anime World lets you stream thousands of anime series for free with both sub (subtitles) and dub (English dubbed) options. Just search for your favorite anime and start watching.",
+        text: "Anime Village lets you stream thousands of anime series for free with both sub (subtitles) and dub (English dubbed) options. Just search for your favorite anime and start watching.",
       },
     },
     {
       "@type": "Question",
-      name: "Is Anime World like Aniwatch or Anilab?",
+      name: "Is Anime Village like Aniwatch or Anilab?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Anime World is a free anime streaming site similar to Aniwatch, Anilab, and HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10000+ anime with sub and dub.",
+        text: "Yes. Anime Village is a free anime streaming site similar to Aniwatch, Anilab, and HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10000+ anime with sub and dub.",
       },
     },
     {
       "@type": "Question",
-      name: "Does Anime World have sub and dub?",
+      name: "Does Anime Village have sub and dub?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Most anime on Anime World are available in both sub (Japanese with English subtitles) and dub (English dubbed) versions. Toggle between them on each anime page.",
+        text: "Yes. Most anime on Anime Village are available in both sub (Japanese with English subtitles) and dub (English dubbed) versions. Toggle between them on each anime page.",
       },
     },
   ],

@@ -106,7 +106,7 @@ export async function searchOpenSubtitles(
         headers: {
           'Api-Key': API_KEY,
           'Content-Type': 'application/json',
-          'User-Agent': 'AnimeWorld v1.0',
+          'User-Agent': 'AnimeVillage v1.0',
         },
         timeout: 10000,
       }
@@ -176,7 +176,7 @@ async function getDownloadLink(fileId: number, subtitleId: string): Promise<stri
         headers: {
           'Api-Key': API_KEY,
           'Content-Type': 'application/json',
-          'User-Agent': 'AnimeWorld v1.0',
+          'User-Agent': 'AnimeVillage v1.0',
         },
         timeout: 10000,
       }
@@ -207,7 +207,7 @@ export async function downloadOpenSubtitle(url: string): Promise<string> {
       responseType: 'text',
       timeout: 15000,
       headers: {
-        'User-Agent': 'AnimeWorld v1.0',
+        'User-Agent': 'AnimeVillage v1.0',
       },
     });
 
