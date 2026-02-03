@@ -74,17 +74,32 @@ export async function generateMetadata({
     anime.coverImage?.large ||
     `${SITE_URL}/opengraph-image`;
 
+  // Title variants for alternate search terms (romaji, english, native)
+  const titleVariants = [
+    anime.title.english,
+    anime.title.romaji,
+    anime.title.native,
+  ].filter((t): t is string => Boolean(t?.trim()));
+
+  // AniList tags - high-rank tags are popular search terms
+  const tagKeywords = (anime.tags || [])
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
+    .slice(0, 10)
+    .map((t) => t.name);
+
   return {
     title: `Watch ${title} Online Free`,
     description,
     keywords: [
       title,
+      ...titleVariants.filter((t) => t !== title),
       `watch ${title}`,
       `${title} online`,
       `${title} episodes`,
       `${title} sub`,
       `${title} dub`,
       ...(anime.genres || []),
+      ...tagKeywords,
     ],
     openGraph: {
       title: `Watch ${title} Online Free | ${SITE_NAME}`,
@@ -127,6 +142,11 @@ function buildAnimeJsonLd(anime: Anime, id: string) {
     anime.coverImage?.large;
   const url = `${SITE_URL}/anime/${id}`;
 
+  const keywords = [
+    ...(anime.genres || []),
+    ...(anime.tags?.slice(0, 8).map((t) => t.name) || []),
+  ].filter(Boolean);
+
   const tvSeries = {
     '@context': 'https://schema.org',
     '@type': 'TVSeries',
@@ -135,6 +155,7 @@ function buildAnimeJsonLd(anime: Anime, id: string) {
     image: image ? [image] : undefined,
     url,
     genre: anime.genres || [],
+    ...(keywords.length > 0 && { keywords: keywords.join(', ') }),
     aggregateRating: anime.averageScore
       ? {
           '@type': 'AggregateRating',

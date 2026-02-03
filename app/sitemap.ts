@@ -63,6 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     const results = await Promise.allSettled(promises);
     const seen = new Set<string>();
+    const searchTermsFromAnime = new Set<string>();
 
     for (const r of results) {
       if (r.status !== 'fulfilled') continue;
@@ -77,6 +78,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           changeFrequency: 'weekly' as const,
           priority: 0.9,
         });
+        // Extract titles for dynamic search URLs (trending + popular anime keywords)
+        const eng = m.title?.english?.trim();
+        const romaji = m.title?.romaji?.trim();
+        if (eng) searchTermsFromAnime.add(eng.toLowerCase());
+        if (romaji && romaji.toLowerCase() !== eng?.toLowerCase()) {
+          searchTermsFromAnime.add(romaji.toLowerCase());
+        }
+      }
+    }
+
+    // Dynamic search URLs from AniList anime - auto-includes trending/popular
+    const dynamicSearchPages: MetadataRoute.Sitemap = [...searchTermsFromAnime]
+      .slice(0, 200)
+      .map((term) => ({
+        url: `${baseUrl}/search?search=${encodeURIComponent(term)}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.8,
+      }));
+
+    // Merge static + dynamic search pages, dedupe by URL
+    const searchUrlSet = new Set(searchPages.map((s) => s.url));
+    for (const s of dynamicSearchPages) {
+      if (!searchUrlSet.has(s.url)) {
+        searchUrlSet.add(s.url);
+        searchPages.push(s);
       }
     }
   } catch (err) {
