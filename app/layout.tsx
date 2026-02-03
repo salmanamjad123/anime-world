@@ -123,7 +123,7 @@ export const metadata: Metadata = {
   },
   category: "entertainment",
   verification: {
-    google: "k_dhP-cfjAwq6oSqt-mEcUwTt670M4Aza1QWCgshNEg",
+    google: "QFwlV5RYwIEsVd1vRMwIDymOoFTbsXXymurEz8kmBtc",
   },
 };
 
