@@ -121,6 +121,11 @@ export const CACHE_TTL = {
   EPISODE_LIST: 15 * 60 * 1000, // 15 minutes (new episodes visible within 15 min)
   STREAM_SOURCES: 5 * 60 * 1000,     // 5 minutes (links expire)
   PROVIDER_HEALTH: 1 * 60 * 1000,    // 1 minute
+  MANGA_LIST: 5 * 60 * 1000,         // 5 minutes (trending, popular, search)
+  MANGA_INFO: 60 * 60 * 1000,        // 1 hour
+  MANGA_CHAPTERS_LIST: 30 * 60 * 1000, // 30 min - keep fresh for new chapters
+  MANGA_CHAPTER_PAGES: 12 * 60 * 60 * 1000, // 12h for chapter content (Consumet)
+  MANGA_DEX_CHAPTER_PAGES: 10 * 60 * 1000, // 10 min - MangaDex baseUrl expires in ~15 min
 } as const;
 
 /**

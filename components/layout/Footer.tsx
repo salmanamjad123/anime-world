@@ -25,12 +25,14 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export function Footer() {
   const pathname = usePathname();
+  const isManga = pathname.startsWith('/manga');
   const match = pathname.match(/^\/anime\/az\/([^/]+)$/);
   const activeLetter = match ? decodeURIComponent(match[1]).toLowerCase() : null;
 
   return (
     <footer className="mt-auto border-t border-gray-800 bg-gray-900/50">
       <div className="container mx-auto px-4 py-8">
+        {!isManga && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           {/* Popular Genres - SEO internal linking */}
           <div>
@@ -85,6 +87,7 @@ export function Footer() {
             </div>
           </div>
         </div>
+        )}
 
         <div className="border-t border-gray-800 pt-6 text-center">
           <p className="text-gray-500 text-sm">

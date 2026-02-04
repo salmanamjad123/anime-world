@@ -23,6 +23,14 @@ export const ROUTES = {
     tab ? `/profile?section=${section}&tab=${tab}` : `/profile?section=${section}`,
   SETTINGS: '/settings',
   ADMIN: '/admin',
+  MANGA: '/manga',
+  MANGA_GENRE: (genre: string) => `/manga?genres=${encodeURIComponent(genre)}`,
+  MANGA_DETAIL: (id: string) => `/manga/${id}`,
+  MANGA_READ: (mangaId: string, chapterId: string, provider?: string) => {
+    const params = new URLSearchParams({ chapterId });
+    if (provider) params.set('provider', provider);
+    return `/manga/${mangaId}/read?${params.toString()}`;
+  },
 } as const;
 
 export const AZ_LETTERS = [

@@ -81,6 +81,11 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'uploads.mangadex.org',
+        pathname: '/covers/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'res.cloudinary.com',
         pathname: '/**',
       },

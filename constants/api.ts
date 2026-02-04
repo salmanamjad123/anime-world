@@ -45,6 +45,7 @@ export const RATE_LIMITS = {
 export const CACHE_DURATIONS = {
   ANIME_LIST: 300, // 5 minutes
   ANIME_DETAIL: 600, // 10 minutes
+  MANGA_LIST: 300, // 5 minutes
   EPISODE_LIST: 300, // 5 minutes
   STREAM_SOURCES: 0, // Don't cache - links expire quickly
 } as const;

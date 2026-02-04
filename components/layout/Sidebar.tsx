@@ -9,17 +9,19 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, BookOpen } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 import { GENRES } from '@/constants/genres';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  activeTab?: 'anime' | 'manga';
 };
 
-const NAV_ITEMS = [
+const ANIME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
   { label: 'Home', href: ROUTES.HOME },
+  { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
   { label: 'Most Popular', href: `${ROUTES.SEARCH}?sort=POPULARITY_DESC` },
   { label: 'Movies', href: `${ROUTES.SEARCH}?format=MOVIE` },
   { label: 'TV Series', href: `${ROUTES.SEARCH}?format=TV` },
@@ -29,7 +31,15 @@ const NAV_ITEMS = [
   { label: 'Filter Anime', href: ROUTES.SEARCH },
 ];
 
-export function Sidebar({ isOpen, onClose }: Props) {
+const MANGA_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
+  { label: 'Home', href: ROUTES.HOME },
+  { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
+  { label: 'Most Popular', href: ROUTES.MANGA },
+  { label: 'Filter Manga', href: ROUTES.MANGA },
+];
+
+export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
+  const navItems = activeTab === 'manga' ? MANGA_NAV_ITEMS : ANIME_NAV_ITEMS;
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -84,19 +94,29 @@ export function Sidebar({ isOpen, onClose }: Props) {
                 <h3 className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Browse
                 </h3>
-                {NAV_ITEMS.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onClose}
-                    className="block px-4 py-3 rounded-lg text-gray-200 hover:bg-gray-800 hover:text-white transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const isMangaLink = item.href === ROUTES.MANGA;
+                  const isActive = isMangaLink && activeTab === 'manga';
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onClose}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors ${
+                        isMangaLink || isActive
+                          ? 'text-amber-400 hover:bg-gray-800 hover:text-amber-300'
+                          : 'text-gray-200 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      {Icon && <Icon className="w-4 h-4 shrink-0" />}
+                      {item.label}
+                    </Link>
+                  );
+                })}
               </nav>
 
-              {/* Genre section */}
+              {/* Genre section - anime genres or manga genres based on context */}
               <div className="mt-6">
                 <h3 className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Genre
@@ -105,21 +125,27 @@ export function Sidebar({ isOpen, onClose }: Props) {
                   {GENRES.slice(0, 16).map((genre) => (
                     <Link
                       key={genre}
-                      href={`${ROUTES.SEARCH}?genres=${encodeURIComponent(genre)}`}
+                      href={activeTab === 'manga' ? ROUTES.MANGA_GENRE(genre) : `${ROUTES.SEARCH}?genres=${encodeURIComponent(genre)}`}
                       onClick={onClose}
-                      className="px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors truncate"
+                      className={`px-3 py-2 rounded-lg text-sm transition-colors truncate ${
+                        activeTab === 'manga'
+                          ? 'text-gray-300 hover:bg-gray-800 hover:text-amber-400'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      }`}
                     >
                       {genre}
                     </Link>
                   ))}
                 </div>
-                <Link
-                  href={ROUTES.SEARCH}
-                  onClick={onClose}
-                  className="flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-blue-400 hover:bg-gray-800 hover:text-blue-300 transition-colors text-sm font-medium"
-                >
-                  <span>+ More genres</span>
-                </Link>
+                {activeTab !== 'manga' && (
+                  <Link
+                    href={ROUTES.SEARCH}
+                    onClick={onClose}
+                    className="flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-sm font-medium text-blue-400 hover:bg-gray-800 hover:text-blue-300 transition-colors"
+                  >
+                    <span>+ More genres</span>
+                  </Link>
+                )}
               </div>
             </div>
           </motion.aside>

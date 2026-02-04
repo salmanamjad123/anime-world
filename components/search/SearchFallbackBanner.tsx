@@ -1,18 +1,26 @@
-import type { AnimeSearchFallbackSource } from '@/types';
+import type { AnimeSearchFallbackSource, MangaSearchFallbackSource } from '@/types';
 
-const MESSAGES: Record<AnimeSearchFallbackSource, string> = {
+type FallbackSource = AnimeSearchFallbackSource | MangaSearchFallbackSource;
+
+const MESSAGES: Record<FallbackSource, string> = {
   'hianime-genre':
     'AniList is temporarily unavailable. Showing similar anime from our catalog — genre matching may be approximate.',
   'hianime-search':
     'AniList is temporarily unavailable. Showing search results from our catalog.',
   'hianime-browse':
     'AniList is temporarily unavailable. Showing popular anime until filters can be applied again.',
+  'mangadex-genre':
+    'AniList is temporarily unavailable. Showing similar manga from our catalog — genre matching may be approximate.',
+  'mangadex-search':
+    'AniList is temporarily unavailable. Showing search results from our catalog.',
+  'mangadex-browse':
+    'AniList is temporarily unavailable. Showing popular manga until filters can be applied again.',
 };
 
 export function SearchFallbackBanner({
   source,
 }: {
-  source?: AnimeSearchFallbackSource;
+  source?: FallbackSource;
 }) {
   if (!source) return null;
 
