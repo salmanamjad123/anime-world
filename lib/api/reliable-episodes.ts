@@ -6,6 +6,7 @@
 
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse } from '@/types';
+import { getEpisodeCountFromRelations } from './anime-relations';
 import { 
   findHiAnimeMatch, 
   getHiAnimeEpisodesStandard, 
@@ -105,57 +106,54 @@ export async function getReliableEpisodes(
   console.log('═══════════════════════════════════════════════');
 
   // TIER 1: Try HiAnime API directly (Primary source)
+  // Skip health check - it blocks 15s on Railway cold start. Try HiAnime directly; fallback on failure.
   try {
-    const hiAnimeAvailable = await isHiAnimeAvailable();
-    
-    if (hiAnimeAvailable) {
-      let match: Awaited<ReturnType<typeof findHiAnimeMatch>> = null;
+    let match: Awaited<ReturnType<typeof findHiAnimeMatch>> = null;
 
-      const requiredSearch = HIANIME_REQUIRED_SEARCH[animeId];
-      if (requiredSearch) {
-        console.log(`🎯 [TIER 1] HiAnime required for anime ${animeId} - searching "${requiredSearch}"`);
-        const results = await searchHiAnime(requiredSearch, 1);
-        const filtered = results.filter(
-          (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
+    const requiredSearch = HIANIME_REQUIRED_SEARCH[animeId];
+    if (requiredSearch) {
+      console.log(`🎯 [TIER 1] HiAnime required for anime ${animeId} - searching "${requiredSearch}"`);
+      const results = await searchHiAnime(requiredSearch, 1);
+      const filtered = results.filter(
+        (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
+      );
+      const candidates = filtered.length > 0 ? filtered : results;
+      if (candidates.length > 0) {
+        const best = candidates.reduce((a, b) => {
+          const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
+          const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
+          return aCount >= bCount ? a : b;
+        });
+        match = best;
+      }
+      if (isDub && !match) {
+        const dubResults = results.filter(
+          (r) => r.id.includes('-dub') || r.name?.toLowerCase().includes('dub')
         );
-        const candidates = filtered.length > 0 ? filtered : results;
-        if (candidates.length > 0) {
-          const best = candidates.reduce((a, b) => {
+        if (dubResults.length > 0) {
+          match = dubResults.reduce((a, b) => {
             const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
             const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
             return aCount >= bCount ? a : b;
           });
-          match = best;
-        }
-        if (isDub && !match) {
-          const dubResults = results.filter(
-            (r) => r.id.includes('-dub') || r.name?.toLowerCase().includes('dub')
-          );
-          if (dubResults.length > 0) {
-            match = dubResults.reduce((a, b) => {
-              const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
-              const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
-              return aCount >= bCount ? a : b;
-            });
-          }
         }
       }
+    }
 
-      if (!match) {
-        console.log('🎯 [TIER 1] Trying HiAnime API...');
-        match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
-      }
+    if (!match) {
+      console.log('🎯 [TIER 1] Trying HiAnime API...');
+      match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
+    }
+    
+    if (match) {
+      console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
+      const episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
       
-      if (match) {
-        console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
-        const episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
-        
-        if (episodes.episodes.length > 0) {
-          console.log(`🎉 [HiAnime API] SUCCESS! ${episodes.episodes.length} episodes`);
-          console.log(`🎬 [HiAnime API] First episode:`, episodes.episodes[0].id);
-          console.log('═══════════════════════════════════════════════');
-          return episodes;
-        }
+      if (episodes.episodes.length > 0) {
+        console.log(`🎉 [HiAnime API] SUCCESS! ${episodes.episodes.length} episodes`);
+        console.log(`🎬 [HiAnime API] First episode:`, episodes.episodes[0].id);
+        console.log('═══════════════════════════════════════════════');
+        return episodes;
       }
     }
   } catch (error: any) {
@@ -253,7 +251,14 @@ export async function getEpisodesMultiSource(
     }
   }
 
-  // Strategy 3: Always works - generate from AniList count
+  // Strategy 3: Generate from AniList count. If 0, try relations (e.g. One Piece)
+  let count = episodeCount;
+  if (count <= 0) {
+    count = await getEpisodeCountFromRelations(anilistId);
+    if (count > 0) {
+      console.log(`[Episodes] Using episode count from relations: ${count}`);
+    }
+  }
   console.log('[Episodes] Using generated episodes from AniList data');
-  return generateEpisodesFromCount(anilistId, animeTitle, episodeCount);
+  return generateEpisodesFromCount(anilistId, animeTitle, count);
 }

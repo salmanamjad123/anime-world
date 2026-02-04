@@ -4,6 +4,8 @@
  */
 
 import axios from 'axios';
+import { ANILIST_API_URL } from '@/constants/api';
+import { acquireAnilistSlot } from './anilist-throttle';
 
 export const axiosInstance = axios.create({
   timeout: 30000, // 30 seconds
@@ -11,6 +13,18 @@ export const axiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// AniList rate throttle - prevents 429 when many users open different anime
+axiosInstance.interceptors.request.use(
+  async (config) => {
+    const url = config.url ?? config.baseURL ?? '';
+    if (url.includes('anilist') || url === ANILIST_API_URL) {
+      await acquireAnilistSlot();
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 // Request interceptor for logging (development only)
 if (process.env.NODE_ENV === 'development') {

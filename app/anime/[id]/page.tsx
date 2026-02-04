@@ -44,14 +44,25 @@ export default function AnimeDetailPage() {
         const response = await fetch(`/api/anime/${animeId}/seasons`);
         if (response.ok) {
           const data = await response.json();
+
+          // Debug: log full seasons API response
+          console.log('📺 [Seasons] Anime ID:', animeId);
+          console.log('📺 [Seasons] Full API response:', data);
+          console.log('📺 [Seasons] Main:', data.main);
+          console.log('📺 [Seasons] Seasons (related):', data.seasons);
+          console.log('📺 [Seasons] Movies:', data.movies);
+          console.log('📺 [Seasons] Specials (not shown on UI):', data.specials);
+
           setSeasons([data.main, ...data.seasons]);
           setMovies(data.movies);
+        } else {
+          console.warn('📺 [Seasons] API failed:', response.status);
         }
       } catch (error) {
-        console.error('Failed to fetch seasons:', error);
+        console.error('📺 [Seasons] Failed to fetch:', error);
       }
     }
-    
+
     if (animeId) {
       fetchSeasons();
     }
@@ -249,7 +260,15 @@ export default function AnimeDetailPage() {
                             key={season.id}
                             variant={isSelected ? 'primary' : 'ghost'}
                             size="sm"
-                            onClick={() => setSelectedSeasonId(season.id)}
+                            onClick={() => {
+                              setSelectedSeasonId(season.id);
+                              console.log('📺 [Season Selected]', {
+                                id: season.id,
+                                title: season.title,
+                                relationType: season.relationType,
+                                episodes: season.episodes,
+                              });
+                            }}
                           >
                             {season.title || (season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`)}
                             {displayCount != null && ` (${displayCount} eps)`}
@@ -270,7 +289,13 @@ export default function AnimeDetailPage() {
                           key={movie.id}
                           variant={selectedSeasonId === movie.id ? 'primary' : 'ghost'}
                           size="sm"
-                          onClick={() => setSelectedSeasonId(movie.id)}
+                          onClick={() => {
+                            setSelectedSeasonId(movie.id);
+                            console.log('📺 [Movie Selected]', {
+                              id: movie.id,
+                              title: movie.title,
+                            });
+                          }}
                         >
                           {movie.title}
                         </Button>
@@ -339,7 +364,11 @@ export default function AnimeDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-gray-400">No episode information available for this anime.</p>
+                  <p className="text-gray-400">
+                    {seasons.length > 1 || movies.length > 0
+                      ? 'No episodes for this season. Try selecting another season or movie above.'
+                      : 'No episode information available for this anime.'}
+                  </p>
                 </div>
               )}
             </div>

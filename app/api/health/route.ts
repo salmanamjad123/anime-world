@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { isRedisAvailable } from '@/lib/cache';
 import { isHiAnimeAvailable } from '@/lib/api/hianime';
 
 export async function GET() {
@@ -19,6 +20,14 @@ export async function GET() {
       )
     ]).catch(() => false);
 
+    // Check Redis (when REDIS_URL is set)
+    const redisUp = process.env.REDIS_URL
+      ? await Promise.race([
+          isRedisAvailable(),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+        ])
+      : null;
+
     const responseTime = Date.now() - startTime;
 
     const health = {
@@ -29,6 +38,7 @@ export async function GET() {
       services: {
         hiAnime: hiAnimeUp ? 'up' : 'down',
         proxy: 'up', // If this endpoint responds, proxy is working
+        redis: redisUp === null ? 'not configured' : redisUp ? 'up' : 'down',
       },
       version: '1.0.0',
       environment: process.env.NODE_ENV || 'development',

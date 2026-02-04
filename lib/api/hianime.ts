@@ -7,7 +7,7 @@
 
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
-import { getCached, CACHE_TTL } from '@/lib/cache/memory-cache';
+import { getCached, CACHE_TTL } from '@/lib/cache';
 
 // HiAnime API base URL (default to localhost, override via env)
 const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';

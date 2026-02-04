@@ -4,11 +4,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnimeSeasons } from '@/lib/api/anime-relations';
+import { getAnimeSeasonsUnified } from '@/lib/api/anime-relations';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
 import type { AnimeRelation } from '@/lib/api/anime-relations';
 
 const PLACEHOLDER_IMAGE = 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
+const SEASONS_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
 
 function isAniListId(id: string): boolean {
   return /^\d+$/.test(id);
@@ -33,8 +34,12 @@ export async function GET(
     }
 
     if (isAniListId(id)) {
-      const result = await getAnimeSeasons(id);
-      return NextResponse.json(result);
+      const result = await getAnimeSeasonsUnified(id);
+      return NextResponse.json(result, {
+        headers: {
+          'Cache-Control': SEASONS_CACHE_CONTROL,
+        },
+      });
     }
 
     const info = await getHiAnimeInfo(id);
@@ -60,12 +65,19 @@ export async function GET(
       coverImage: validCover(s.poster),
     }));
 
-    return NextResponse.json({
-      main,
-      seasons,
-      movies: [] as AnimeRelation[],
-      specials: [] as AnimeRelation[],
-    });
+    return NextResponse.json(
+      {
+        main,
+        seasons,
+        movies: [] as AnimeRelation[],
+        specials: [] as AnimeRelation[],
+      },
+      {
+        headers: {
+          'Cache-Control': SEASONS_CACHE_CONTROL,
+        },
+      }
+    );
   } catch (error) {
     console.error('[API Error] /api/anime/[id]/seasons:', error);
     return NextResponse.json(
