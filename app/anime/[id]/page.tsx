@@ -33,7 +33,12 @@ export default function AnimeDetailPage() {
   const { data: animeData, isLoading: isAnimeLoading } = useAnimeById(animeId);
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
-  const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
+  const {
+    data: episodesData,
+    isLoading: isEpisodesLoading,
+    isError: isEpisodesError,
+    refetch: refetchEpisodes,
+  } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
   const { data: animeInfo } = useAnimeInfo(selectedSeasonId);
   const seasonEpisodeCounts = useEpisodesForSeasons(seasons, selectedLanguage === 'dub');
 
@@ -341,7 +346,19 @@ export default function AnimeDetailPage() {
                 )}
               </div>
 
-              {isEpisodesLoading ? (
+              {isEpisodesError ? (
+                <div className="text-center py-12">
+                  <p className="text-amber-400 font-medium mb-2">
+                    Streaming server is temporarily unavailable
+                  </p>
+                  <p className="text-gray-400 text-sm mb-4">
+                    Please try again later. Episodes will load when the server is back online.
+                  </p>
+                  <Button variant="secondary" size="sm" onClick={() => refetchEpisodes()}>
+                    Retry
+                  </Button>
+                </div>
+              ) : isEpisodesLoading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
                 </div>

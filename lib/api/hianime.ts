@@ -268,10 +268,12 @@ export async function getHiAnimeStreamSources(
 
     const data = response.data.data;
     
-    // DEBUG: Log raw response
+    // DEBUG: Log raw response (intro/outro for skip-button debugging)
     console.log('🔍 [DEBUG] Raw API response:', JSON.stringify({
       sourcesCount: data.sources?.length,
       tracksCount: data.tracks?.length,
+      intro: data.intro,
+      outro: data.outro,
       sources: data.sources,
       tracks: data.tracks,
     }, null, 2));
@@ -283,9 +285,9 @@ export async function getHiAnimeStreamSources(
       isM3U8: source.type === 'hls' || source.url.includes('.m3u8'),
     }));
 
-    // Convert tracks to subtitles from current server
-    // Filter: Include tracks with kind='captions/subtitles' OR no kind (but exclude thumbnails)
-    let subtitles: any[] = (data.tracks || [])
+    // Convert tracks/subtitles to our format - API may return tracks (vidstreaming) or subtitles (megacloud)
+    const rawTracks = data.tracks || data.subtitles || [];
+    let subtitles: any[] = rawTracks
       .filter((track: any) => {
         // Exclude thumbnail tracks
         if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
@@ -327,8 +329,10 @@ export async function getHiAnimeStreamSources(
             timeout: 15000,
           });
           
-          if (altResponse.data?.data?.tracks) {
-            const altTracks = (altResponse.data.data.tracks || [])
+          const altData = altResponse.data?.data;
+          const altRawTracks = altData?.tracks || altData?.subtitles;
+          if (altRawTracks?.length) {
+            const altTracks = (altRawTracks || [])
               .filter((track: any) => {
                 // Exclude thumbnail tracks
                 if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
@@ -374,6 +378,21 @@ export async function getHiAnimeStreamSources(
       console.log(`⚠️ [HiAnime API] No English subtitle found. Available: ${uniqueSubtitles.map((s: any) => s.label).join(', ')}`);
     }
 
+    // Only pass intro/outro when API returns real data - filter out default { start: 0, end: 0 }
+    // Some hosts return milliseconds (e.g. 90000 for 90s) - convert if value > 7200 (2h threshold)
+    const toSeconds = (n: unknown): number => {
+      const num = typeof n === 'number' ? n : Number(n);
+      return !Number.isFinite(num) ? 0 : num > 7200 ? num / 1000 : num;
+    };
+    const introRaw = data.intro;
+    const intro = introRaw && toSeconds(introRaw.end) > 0
+      ? { start: toSeconds(introRaw.start), end: toSeconds(introRaw.end) }
+      : undefined;
+    const outroRaw = data.outro;
+    const outro = outroRaw && (toSeconds(outroRaw.end) - toSeconds(outroRaw.start)) > 0
+      ? { start: toSeconds(outroRaw.start), end: toSeconds(outroRaw.end) }
+      : undefined;
+
     return {
       headers: {
         Referer: 'https://hianime.to',
@@ -382,8 +401,8 @@ export async function getHiAnimeStreamSources(
       sources,
       subtitles: uniqueSubtitles,
       embedUrl: data.embedURL,
-      intro: data.intro,
-      outro: data.outro,
+      intro,
+      outro,
     };
   } catch (error: any) {
     console.error('[HiAnime API Error] getHiAnimeStreamSources:', error.message);

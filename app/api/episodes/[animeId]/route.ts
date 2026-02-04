@@ -4,9 +4,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getEpisodesMultiSource } from '@/lib/api/reliable-episodes';
+import {
+  getEpisodesMultiSource,
+  EpisodesUnavailableError,
+} from '@/lib/api/reliable-episodes';
 import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeEpisodesStandard } from '@/lib/api/hianime';
+import { saveEpisodesToFirestoreBackground } from '@/lib/api/episode-cache';
 
 function isAniListId(id: string): boolean {
   return /^\d+$/.test(id);
@@ -28,18 +32,27 @@ export async function GET(
       );
     }
 
-    // HiAnime slug: fetch episodes directly from HiAnime (no AniList)
+    // HiAnime slug: fetch from HiAnime, fallback to Firebase cache
     if (!isAniListId(animeId)) {
+      const category = dub ? 'dub' : 'sub';
       try {
         const result = await getHiAnimeEpisodesStandard(animeId, animeId);
-        return NextResponse.json(result);
+        if (result.episodes.length > 0) {
+          saveEpisodesToFirestoreBackground(animeId, category, animeId, result);
+          return NextResponse.json(result);
+        }
       } catch (error) {
-        console.error('[API Error] /api/episodes/[animeId] HiAnime:', error);
-        return NextResponse.json(
-          { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId },
-          { status: 404 }
-        );
+        console.warn('[Episodes] HiAnime slug fetch failed, trying Firebase cache');
       }
+      const { getEpisodesFromFirestore } = await import('@/lib/api/episode-cache');
+      const cached = await getEpisodesFromFirestore(animeId, category);
+      if (cached?.episodes?.length) {
+        return NextResponse.json(cached);
+      }
+      return NextResponse.json(
+        { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId },
+        { status: 404 }
+      );
     }
 
     // AniList id: get anime info then multi-source episodes
@@ -67,6 +80,16 @@ export async function GET(
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof EpisodesUnavailableError) {
+      return NextResponse.json(
+        {
+          error: 'Streaming server unavailable',
+          message: error.message,
+          code: 'EPISODES_UNAVAILABLE',
+        },
+        { status: 503 }
+      );
+    }
     console.error('[API Error] /api/episodes/[animeId]:', error);
     return NextResponse.json(
       { error: 'Failed to fetch episodes' },

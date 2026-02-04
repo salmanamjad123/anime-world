@@ -267,9 +267,14 @@ export default function WatchPage() {
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEpisodeEnd}
                   autoPlay
-                  introEndSeconds={streamData?.intro?.end}
+                  introEndSeconds={
+                    streamData?.intro && streamData.intro.end > 0
+                      ? streamData.intro.end
+                      : undefined
+                  }
                   outroLengthSeconds={
-                    streamData?.outro
+                    streamData?.outro &&
+                    streamData.outro.end > streamData.outro.start
                       ? streamData.outro.end - streamData.outro.start
                       : undefined
                   }

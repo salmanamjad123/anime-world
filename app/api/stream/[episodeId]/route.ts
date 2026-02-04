@@ -1,14 +1,14 @@
 /**
  * Stream API Route
  * GET /api/stream/[episodeId] - Get streaming sources for an episode
- * 
- * Uses ONLY HiAnime API (Direct) - Production-ready, reliable
- * NO FALLBACKS - Clean and simple
- * NO PLACEHOLDER - Only returns real anime streams or error
+ *
+ * 3-tier cache: Redis → Firestore → HiAnime
+ * ?refresh=true - bypass cache for broken link recovery
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiAnimeStreamSources, isHiAnimeAvailable } from '@/lib/api/hianime';
+import { getStreamCached } from '@/lib/api/stream-cache';
 import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
 
@@ -45,6 +45,7 @@ export async function GET(
     // Get language preference and server
     const category = (url.searchParams.get('category') || 'sub') as 'sub' | 'dub' | 'raw';
     const server = url.searchParams.get('server') || 'hd-1';
+    const forceRefresh = url.searchParams.get('refresh') === 'true';
 
     // Validate episode ID format (HiAnime format required)
     if (!episodeId.includes('?ep=')) {
@@ -80,31 +81,39 @@ export async function GET(
       );
     }
     
-    // Fetch streaming sources with retry + server fallback
+    // Fetch streaming sources: Redis → Firestore → HiAnime (with retry + server fallback)
     const serversToTry = server === 'hd-1' ? ['hd-1', 'hd-2'] : [server];
-    let lastError: any;
-    
+    let lastError: unknown;
+
     try {
       for (const tryServer of serversToTry) {
         try {
-          const sources = await retry(
-            () => getHiAnimeStreamSources(episodeId, category, tryServer),
-            {
-              maxAttempts: tryServer === server ? 2 : 1,
-              delayMs: 1000,
-              shouldRetry: (error) => {
-            const status = error?.response?.status ?? error?.status;
-            return (status >= 500) || error?.name === 'FetchError';
-          },
-            }
+          const sources = await getStreamCached(
+            episodeId,
+            tryServer,
+            category,
+            () =>
+              retry(
+                () => getHiAnimeStreamSources(episodeId, category, tryServer),
+                {
+                  maxAttempts: tryServer === server ? 2 : 1,
+                  delayMs: 1000,
+                  shouldRetry: (error: unknown) => {
+                    const err = error as { response?: { status?: number }; status?: number; name?: string };
+                    const status = err?.response?.status ?? err?.status ?? 0;
+                    return status >= 500 || err?.name === 'FetchError';
+                  },
+                }
+              ),
+            forceRefresh
           );
-          
+
           if (sources?.sources && sources.sources.length > 0) {
             if (tryServer !== server) {
               console.log(`✅ [Stream API] Fallback succeeded: ${server} failed, ${tryServer} worked`);
             }
             console.log('═══════════════════════════════════════════════');
-            console.log('✅ [HiAnime API] SUCCESS!');
+            console.log('✅ [Stream API] SUCCESS!');
             console.log('🎥 Found', sources.sources.length, 'source(s)');
             console.log('📝 Found', sources.subtitles?.length || 0, 'subtitle(s)');
             if (sources.embedUrl) {
@@ -113,15 +122,15 @@ export async function GET(
             console.log('═══════════════════════════════════════════════');
             return NextResponse.json(sources);
           }
-        } catch (err: any) {
+        } catch (err) {
           lastError = err;
           if (tryServer !== serversToTry[serversToTry.length - 1]) {
             console.log(`⚠️ [Stream API] ${tryServer} failed, trying next server...`);
           }
         }
       }
-      
-      throw lastError || new Error('No streaming sources available');
+
+      throw lastError ?? new Error('No streaming sources available');
     } catch (error: any) {
       console.error('═══════════════════════════════════════════════');
       console.error('❌ [Stream API] FAILED');

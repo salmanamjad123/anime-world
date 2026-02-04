@@ -1,18 +1,32 @@
 /**
  * Reliable Episodes API
- * Multi-provider approach: HiAnime (primary) → Consumet providers (fallback)
- * This ensures maximum anime coverage and reliability
+ * HiAnime (primary) → Firebase cache (when HiAnime fails) → Server down (no wrong fallbacks)
+ *
+ * - Save to Firebase in background when HiAnime succeeds (no extra latency)
+ * - Serve from Firebase when HiAnime is down
+ * - If Firebase miss: show "server down" instead of broken fallback episodes
  */
 
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse } from '@/types';
-import { getEpisodeCountFromRelations } from './anime-relations';
-import { 
-  findHiAnimeMatch, 
-  getHiAnimeEpisodesStandard, 
+import {
+  findHiAnimeMatch,
+  getHiAnimeEpisodesStandard,
   isHiAnimeAvailable,
-  searchHiAnime 
+  searchHiAnime,
 } from './hianime';
+import {
+  getEpisodesFromFirestore,
+  saveEpisodesToFirestoreBackground,
+} from './episode-cache';
+
+/** Thrown when no episodes available (HiAnime down + Firebase miss) */
+export class EpisodesUnavailableError extends Error {
+  constructor(message = 'Streaming server is temporarily unavailable. Please try again later.') {
+    super(message);
+    this.name = 'EpisodesUnavailableError';
+  }
+}
 
 /** AniList IDs that must use HiAnime for episodes (AniList lacks full episode data) */
 const HIANIME_REQUIRED_SEARCH: Record<string, string> = {
@@ -148,11 +162,18 @@ export async function getReliableEpisodes(
     if (match) {
       console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
       const episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
-      
+
       if (episodes.episodes.length > 0) {
         console.log(`🎉 [HiAnime API] SUCCESS! ${episodes.episodes.length} episodes`);
         console.log(`🎬 [HiAnime API] First episode:`, episodes.episodes[0].id);
         console.log('═══════════════════════════════════════════════');
+        // Save to Firebase in background (fire-and-forget, no extra latency)
+        saveEpisodesToFirestoreBackground(
+          animeId,
+          isDub ? 'dub' : 'sub',
+          match.id,
+          episodes
+        );
         return episodes;
       }
     }
@@ -160,13 +181,20 @@ export async function getReliableEpisodes(
     console.warn('⚠️ [TIER 1] HiAnime API failed:', error.message);
   }
 
-  // TIER 2: Fallback - Generate episodes from AniList count (no streaming when server is down)
+  // TIER 2: Firebase cache (when HiAnime fails)
+  const category = isDub ? 'dub' : 'sub';
+  const cached = await getEpisodesFromFirestore(animeId, category);
+  if (cached?.episodes?.length) {
+    console.log(`💾 [Episode Cache] Serving ${cached.episodes.length} episodes from Firestore`);
+    console.log('═══════════════════════════════════════════════');
+    return cached;
+  }
+
+  // No cache: server down, don't show wrong fallbacks
   console.log('═══════════════════════════════════════════════');
-  console.log('🔄 [FALLBACK] HiAnime unavailable - using AniList episode count:', episodeCount);
-  console.log('⚠️  [FALLBACK] Streaming will show "Server down" until HiAnime API is running');
+  console.log('❌ [Episodes] HiAnime down + Firebase miss - server unavailable');
   console.log('═══════════════════════════════════════════════');
-  
-  return generateEpisodesFromCount(animeId, animeTitle, episodeCount);
+  throw new EpisodesUnavailableError();
 }
 
 /**
@@ -218,47 +246,15 @@ export async function getEpisodesFromJikan(
 }
 
 /**
- * Multi-source episode fetcher with fallbacks
+ * Multi-source episode fetcher
+ * HiAnime → Firebase cache. Throws EpisodesUnavailableError when both fail.
  */
 export async function getEpisodesMultiSource(
   anilistId: string,
-  malId: number | undefined,
+  _malId: number | undefined,
   animeTitle: string,
   episodeCount: number,
   isDub: boolean = false
 ): Promise<EpisodeListResponse> {
-  // Strategy 1: Try HiAnime API
-  try {
-    const result = await getReliableEpisodes(anilistId, animeTitle, episodeCount, isDub);
-    if (result.episodes.length > 0) {
-      console.log('[Episodes] Success via HiAnime');
-      return result;
-    }
-  } catch (error) {
-    console.log('[Episodes] HiAnime failed, trying next source');
-  }
-
-  // Strategy 2: Try Jikan if MAL ID is available
-  if (malId) {
-    try {
-      const jikanResult = await getEpisodesFromJikan(malId, episodeCount);
-      if (jikanResult.episodes.length > 0) {
-        console.log('[Episodes] Success via Jikan');
-        return jikanResult;
-      }
-    } catch (error) {
-      console.log('[Episodes] Jikan failed, using generated episodes');
-    }
-  }
-
-  // Strategy 3: Generate from AniList count. If 0, try relations (e.g. One Piece)
-  let count = episodeCount;
-  if (count <= 0) {
-    count = await getEpisodeCountFromRelations(anilistId);
-    if (count > 0) {
-      console.log(`[Episodes] Using episode count from relations: ${count}`);
-    }
-  }
-  console.log('[Episodes] Using generated episodes from AniList data');
-  return generateEpisodesFromCount(anilistId, animeTitle, count);
+  return getReliableEpisodes(anilistId, animeTitle, episodeCount, isDub);
 }
