@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, Forward, SkipForward } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, SkipForward } from 'lucide-react';
 import { HlsSafeLoader } from '@/lib/hls-safe-loader';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
@@ -860,23 +860,7 @@ export function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Skip Intro - in control bar when in intro range */}
-            {showSkipIntro && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  skipIntro();
-                }}
-                className="text-white hover:text-blue-400 transition-colors flex items-center gap-1.5 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs font-medium"
-                aria-label="Skip intro"
-                title="Skip intro"
-              >
-                <Forward className="w-5 h-5 shrink-0" />
-                <span className="hidden sm:inline">Skip Intro</span>
-              </button>
-            )}
-
-            {/* Skip Outro / Next Episode - in control bar when in outro range */}
+            {/* Skip Outro / Next Episode - in control bar when in outro range (Skip Intro uses floating overlay only) */}
             {showSkipOutro && (
               <button
                 onClick={(e) => {
