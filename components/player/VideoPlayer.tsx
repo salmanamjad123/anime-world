@@ -25,14 +25,11 @@ interface VideoPlayerProps {
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
-  /** End time of intro/OP in seconds (default 90). Show "Skip Intro" when currentTime is in [5, introEndSeconds). */
+  /** End time of intro/OP in seconds. Only show "Skip Intro" when provided. */
   introEndSeconds?: number;
-  /** Length of outro/ED in seconds (default 90). Show "Skip Outro" when currentTime is in [duration - outroLengthSeconds, duration). */
+  /** Length of outro/ED in seconds. Only show "Skip Outro" when provided. */
   outroLengthSeconds?: number;
 }
-
-const DEFAULT_INTRO_END = 90;
-const DEFAULT_OUTRO_LENGTH = 90;
 
 export function VideoPlayer({
   src,
@@ -43,8 +40,8 @@ export function VideoPlayer({
   onTimeUpdate,
   onEnded,
   autoPlay = false,
-  introEndSeconds = DEFAULT_INTRO_END,
-  outroLengthSeconds = DEFAULT_OUTRO_LENGTH,
+  introEndSeconds,
+  outroLengthSeconds,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -453,16 +450,21 @@ export function VideoPlayer({
     }
   };
 
-  // Intro/outro skip (AniWatch-style)
+  // Intro/outro skip - only show when data is available from API
+  const hasIntro = introEndSeconds != null && introEndSeconds > 0;
+  const hasOutro = outroLengthSeconds != null && outroLengthSeconds > 0;
   const showSkipIntro =
-    duration > introEndSeconds && currentTime >= 5 && currentTime < introEndSeconds;
+    hasIntro && duration > introEndSeconds && currentTime >= 5 && currentTime < introEndSeconds;
   const showSkipOutro =
-    duration > outroLengthSeconds * 2 && currentTime >= Math.max(0, duration - outroLengthSeconds);
+    hasOutro &&
+    duration > outroLengthSeconds * 2 &&
+    currentTime >= Math.max(0, duration - outroLengthSeconds);
 
   const skipIntro = () => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = introEndSeconds;
-      setCurrentTime(introEndSeconds);
+    const end = introEndSeconds;
+    if (videoRef.current && end != null) {
+      videoRef.current.currentTime = end;
+      setCurrentTime(end);
     }
   };
 
@@ -760,17 +762,21 @@ export function VideoPlayer({
             className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-lg pointer-events-none bg-gray-600"
             aria-hidden
           />
-          {/* Intro (dark blue) | main (gray) | outro (dark blue) - behind */}
-          {duration > 0 && (
+          {/* Intro (dark blue) | main (gray) | outro (dark blue) - behind, only when data available */}
+          {duration > 0 && (hasIntro || hasOutro) && (
             <div
               className="absolute left-0 right-0 h-1 rounded-lg pointer-events-none"
               style={{
                 top: '50%',
                 transform: 'translateY(-50%)',
                 background: (() => {
-                  const introPct = Math.min(100, (introEndSeconds / duration) * 100);
-                  const outroStartPct = Math.max(0, ((duration - outroLengthSeconds) / duration) * 100);
-                  return `linear-gradient(to right, rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%, rgb(75, 85, 99) ${introPct}%, rgb(75, 85, 99) ${outroStartPct}%, rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%)`;
+                  const introPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
+                  const outroStartPct = hasOutro ? Math.max(0, ((duration - outroLengthSeconds!) / duration) * 100) : 100;
+                  const parts: string[] = [];
+                  if (hasIntro) parts.push(`rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%`);
+                  parts.push(`rgb(75, 85, 99) ${introPct}%, rgb(75, 85, 99) ${outroStartPct}%`);
+                  if (hasOutro) parts.push(`rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%`);
+                  return `linear-gradient(to right, ${parts.join(', ')})`;
                 })(),
               }}
               aria-hidden
@@ -784,15 +790,19 @@ export function VideoPlayer({
               aria-hidden
             />
           )}
-          {/* Intro/outro dark blue on top so always visible even over played bar */}
-          {duration > 0 && (
+          {/* Intro/outro dark blue on top so always visible even over played bar - only when data available */}
+          {duration > 0 && (hasIntro || hasOutro) && (
             <div
               className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-lg pointer-events-none"
               style={{
                 background: (() => {
-                  const introPct = Math.min(100, (introEndSeconds / duration) * 100);
-                  const outroStartPct = Math.max(0, ((duration - outroLengthSeconds) / duration) * 100);
-                  return `linear-gradient(to right, rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%, transparent ${introPct}%, transparent ${outroStartPct}%, rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%)`;
+                  const introPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
+                  const outroStartPct = hasOutro ? Math.max(0, ((duration - outroLengthSeconds!) / duration) * 100) : 100;
+                  const parts: string[] = [];
+                  if (hasIntro) parts.push(`rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%`);
+                  parts.push(`transparent ${introPct}%, transparent ${outroStartPct}%`);
+                  if (hasOutro) parts.push(`rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%`);
+                  return `linear-gradient(to right, ${parts.join(', ')})`;
                 })(),
               }}
               aria-hidden
