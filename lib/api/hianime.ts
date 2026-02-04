@@ -8,9 +8,16 @@
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
 import { getCached, CACHE_TTL } from '@/lib/cache';
+import { retry } from '@/lib/utils/retry';
 
 // HiAnime API base URL (default to localhost, override via env)
 const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
+
+// Railway cold start + scraping can take 15-25s. Use 28s to stay under proxy timeout.
+const HIANIME_TIMEOUT = 28000;
+
+const isRetryableHiAnimeError = (e: any) =>
+  e?.code === 'ECONNABORTED' || e?.response?.status === 502 || e?.response?.status === 503;
 
 /**
  * HiAnime search result
@@ -85,20 +92,21 @@ export async function searchHiAnime(
   
   return getCached(
     cacheKey,
-    async () => {
-      console.log(`🔍 [HiAnime API] Searching: "${query}"`);
-      
-      const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
-      const response = await axiosInstance.get(url, {
-        params: { q: query, page },
-        timeout: 15000, // Increased to 15 seconds for better reliability
-      });
-
-      const results = response.data?.data?.animes || [];
-      console.log(`✅ [HiAnime API] Found ${results.length} results`);
-      
-      return results;
-    },
+    async () =>
+      retry(
+        async () => {
+          console.log(`🔍 [HiAnime API] Searching: "${query}"`);
+          const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
+          const response = await axiosInstance.get(url, {
+            params: { q: query, page },
+            timeout: HIANIME_TIMEOUT,
+          });
+          const results = response.data?.data?.animes || [];
+          console.log(`✅ [HiAnime API] Found ${results.length} results`);
+          return results;
+        },
+        { maxAttempts: 2, delayMs: 2000, shouldRetry: isRetryableHiAnimeError }
+      ),
     CACHE_TTL.ANIME_SEARCH
   ).catch((error: any) => {
     console.error('[HiAnime API Error] searchHiAnime:', error.message);
@@ -115,41 +123,42 @@ export async function getHiAnimeInfo(animeId: string): Promise<HiAnimeInfo> {
   
   return getCached(
     cacheKey,
-    async () => {
-      console.log(`📺 [HiAnime API] Getting info for: ${animeId}`);
-      
-      const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}`;
-      const response = await axiosInstance.get(url, {
-        timeout: 15000, // Increased to 15 seconds for better reliability
-      });
-
-      const raw = response.data?.data?.anime;
-      const first = Array.isArray(raw) ? raw[0] : raw;
-      const info = first?.info ?? first;
-      if (!info?.id && !info?.name) {
-        throw new Error('Invalid anime response');
-      }
-      const moreInfo = first?.moreInfo;
-      const seasons = first?.seasons ?? info?.seasons;
-      const genres = moreInfo?.genres ?? info?.genres;
-      const relatedAnimes = first?.relatedAnimes ?? first?.recommendedAnimes;
-      console.log(`✅ [HiAnime API] Got info for: ${info?.name ?? animeId}`);
-
-      return {
-        id: info.id ?? animeId,
-        name: info.name ?? '',
-        poster: info.poster ?? '',
-        description: info.description ?? '',
-        stats: info.stats ?? { rating: '', quality: '', episodes: { sub: 0, dub: 0 }, type: '', duration: '' },
-        seasons: Array.isArray(seasons) ? seasons : undefined,
-        genres: Array.isArray(genres) ? genres : undefined,
-        studios: moreInfo?.studios ?? undefined,
-        status: moreInfo?.status ?? info?.status ?? undefined,
-        aired: moreInfo?.aired ?? undefined,
-        malscore: info?.stats?.malscore ?? info?.malscore ?? moreInfo?.score ?? undefined,
-        relatedAnimes: Array.isArray(relatedAnimes) ? relatedAnimes : undefined,
-      };
-    },
+    async () =>
+      retry(
+        async () => {
+          console.log(`📺 [HiAnime API] Getting info for: ${animeId}`);
+          const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}`;
+          const response = await axiosInstance.get(url, {
+            timeout: HIANIME_TIMEOUT,
+          });
+          const raw = response.data?.data?.anime;
+          const first = Array.isArray(raw) ? raw[0] : raw;
+          const info = first?.info ?? first;
+          if (!info?.id && !info?.name) {
+            throw new Error('Invalid anime response');
+          }
+          const moreInfo = first?.moreInfo;
+          const seasons = first?.seasons ?? info?.seasons;
+          const genres = moreInfo?.genres ?? info?.genres;
+          const relatedAnimes = first?.relatedAnimes ?? first?.recommendedAnimes;
+          console.log(`✅ [HiAnime API] Got info for: ${info?.name ?? animeId}`);
+          return {
+            id: info.id ?? animeId,
+            name: info.name ?? '',
+            poster: info.poster ?? '',
+            description: info.description ?? '',
+            stats: info.stats ?? { rating: '', quality: '', episodes: { sub: 0, dub: 0 }, type: '', duration: '' },
+            seasons: Array.isArray(seasons) ? seasons : undefined,
+            genres: Array.isArray(genres) ? genres : undefined,
+            studios: moreInfo?.studios ?? undefined,
+            status: moreInfo?.status ?? info?.status ?? undefined,
+            aired: moreInfo?.aired ?? undefined,
+            malscore: info?.stats?.malscore ?? info?.malscore ?? moreInfo?.score ?? undefined,
+            relatedAnimes: Array.isArray(relatedAnimes) ? relatedAnimes : undefined,
+          };
+        },
+        { maxAttempts: 2, delayMs: 2000, shouldRetry: isRetryableHiAnimeError }
+      ),
     CACHE_TTL.ANIME_INFO
   ).catch((error: any) => {
     console.error('[HiAnime API Error] getHiAnimeInfo:', error.message);
@@ -165,20 +174,21 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
   
   return getCached(
     cacheKey,
-    async () => {
-      console.log(`📺 [HiAnime API] Getting episodes for: ${animeId}`);
-      
-      const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}/episodes`;
-      const response = await axiosInstance.get(url, {
-        timeout: 15000, // Increased to 15 seconds for better reliability
-      });
-
-      const episodes = response.data?.data?.episodes || [];
-      console.log(`✅ [HiAnime API] Found ${episodes.length} episodes`);
-      console.log(`🎬 [HiAnime API] Sample episode ID: ${episodes[0]?.episodeId}`);
-      
-      return episodes;
-    },
+    async () =>
+      retry(
+        async () => {
+          console.log(`📺 [HiAnime API] Getting episodes for: ${animeId}`);
+          const url = `${HIANIME_API_URL}/api/v2/hianime/anime/${animeId}/episodes`;
+          const response = await axiosInstance.get(url, {
+            timeout: HIANIME_TIMEOUT,
+          });
+          const episodes = response.data?.data?.episodes || [];
+          console.log(`✅ [HiAnime API] Found ${episodes.length} episodes`);
+          console.log(`🎬 [HiAnime API] Sample episode ID: ${episodes[0]?.episodeId}`);
+          return episodes;
+        },
+        { maxAttempts: 2, delayMs: 2000, shouldRetry: isRetryableHiAnimeError }
+      ),
     CACHE_TTL.EPISODE_LIST
   ).catch((error: any) => {
     console.error('[HiAnime API Error] getHiAnimeEpisodes:', error.message);
@@ -249,7 +259,7 @@ export async function getHiAnimeStreamSources(
         server,
         category: actualCategory,
       },
-      timeout: 30000, // Increased to 30 seconds for slow source extraction
+      timeout: HIANIME_TIMEOUT,
     });
 
     if (!response.data || !response.data.data || !response.data.data.sources) {
@@ -314,7 +324,7 @@ export async function getHiAnimeStreamSources(
           console.log(`🔄 [HiAnime API] Checking ${altServer} for subtitles...`);
           const altResponse = await axiosInstance.get(url, {
             params: { animeEpisodeId: episodeId, server: altServer, category },
-            timeout: 10000, // Increased to 10 seconds for better reliability
+            timeout: 15000,
           });
           
           if (altResponse.data?.data?.tracks) {
@@ -592,7 +602,7 @@ export async function getHiAnimeAZList(
       const url = `${HIANIME_API_URL}/api/v2/hianime/azlist/${apiOption}`;
       const response = await axiosInstance.get(url, {
         params: { page },
-        timeout: 15000,
+        timeout: HIANIME_TIMEOUT,
       });
 
       const data = response.data?.data ?? response.data;
@@ -613,11 +623,12 @@ export async function getHiAnimeAZList(
 
 /**
  * Check if HiAnime API is available
+ * Uses /health (lightweight) instead of /home (heavy scrape) for fast checks
  */
 export async function isHiAnimeAvailable(): Promise<boolean> {
   try {
-    const response = await axiosInstance.get(`${HIANIME_API_URL}/api/v2/hianime/home`, {
-      timeout: 15000, // 15s for Railway cold start / slow networks
+    const response = await axiosInstance.get(`${HIANIME_API_URL}/health`, {
+      timeout: 10000, // /health is fast, no scraping
     });
     return response.status === 200;
   } catch (error) {

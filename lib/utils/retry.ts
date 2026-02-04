@@ -71,8 +71,8 @@ export function isRetryableError(error: any): boolean {
     return true;
   }
 
-  // Timeout errors - retry
-  if (error.name === 'AbortError' || error.code === 'ETIMEDOUT') {
+  // Timeout errors - retry (axios uses ECONNABORTED)
+  if (error.name === 'AbortError' || error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
     return true;
   }
 

@@ -16,8 +16,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await fetch(`${HIANIME_URL}/api/v2/hianime/home`, {
-      signal: AbortSignal.timeout(25000),
+    // Use /health (lightweight) - /home scrapes and can timeout
+    const res = await fetch(`${HIANIME_URL}/health`, {
+      signal: AbortSignal.timeout(15000),
     });
     return NextResponse.json({
       ok: res.ok,

@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnimeSeasonsUnified } from '@/lib/api/anime-relations';
+import { getAnimeSeasons } from '@/lib/api/anime-relations';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
 import type { AnimeRelation } from '@/lib/api/anime-relations';
 
@@ -34,7 +34,7 @@ export async function GET(
     }
 
     if (isAniListId(id)) {
-      const result = await getAnimeSeasonsUnified(id);
+      const result = await getAnimeSeasons(id);
       return NextResponse.json(result, {
         headers: {
           'Cache-Control': SEASONS_CACHE_CONTROL,

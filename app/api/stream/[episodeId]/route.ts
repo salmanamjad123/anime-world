@@ -59,10 +59,10 @@ export async function GET(
       );
     }
 
-    // Check HiAnime API availability (15s timeout for Railway cold start)
+    // Check HiAnime API availability (/health is fast, no scraping)
     const hiAnimeAvailable = await Promise.race([
       isHiAnimeAvailable(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
     ]).catch(() => false) as boolean;
     
     if (!hiAnimeAvailable) {

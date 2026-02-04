@@ -219,11 +219,11 @@ async function getAnimeSeasonsUnifiedUncached(animeId: string): Promise<{
 
 /**
  * Get total episode count from franchise relations when main entry has 0.
- * Used as fallback for anime like One Piece where main AniList entry lacks episode data.
+ * Uses direct relations only (main + relatives) to avoid heavy AniList graph walks.
  */
 export async function getEpisodeCountFromRelations(animeId: string): Promise<number> {
   try {
-    const { main, seasons, movies } = await getAnimeSeasonsUnified(animeId);
+    const { main, seasons, movies } = await getAnimeSeasons(animeId);
     const counts = [
       main.episodes || 0,
       ...seasons.map((s) => s.episodes || 0),
