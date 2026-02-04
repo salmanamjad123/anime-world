@@ -5,6 +5,7 @@
 
 import type { MetadataRoute } from 'next';
 import { getTrendingAnime, getPopularAnime } from '@/lib/api/anilist';
+import { getTrendingManga, getPopularManga } from '@/lib/api/anilist-manga';
 import { SITE_URL } from '@/constants/site';
 import { AZ_LETTERS } from '@/constants/routes';
 import { GENRES } from '@/constants/genres';
@@ -20,6 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/search`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.95 },
     { url: `${baseUrl}/watchlist`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.7 },
     { url: `${baseUrl}/history`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.7 },
+    { url: `${baseUrl}/manga`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
   ];
 
   // Genre landing pages - high value for "action anime", "romance anime" etc
@@ -110,5 +112,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('[sitemap] Failed to fetch anime:', err);
   }
 
-  return [...staticPages, ...genrePages, ...azPages, ...searchPages, ...animePages];
+  // Manga detail pages
+  let mangaPages: MetadataRoute.Sitemap = [];
+  try {
+    const [trending, popular] = await Promise.all([
+      getTrendingManga(1, 50),
+      getPopularManga(1, 50),
+    ]);
+    const seen = new Set<string>();
+    const media = [
+      ...(trending?.data?.Page?.media ?? []),
+      ...(popular?.data?.Page?.media ?? []),
+    ];
+    for (const m of media) {
+      const id = String(m.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      mangaPages.push({
+        url: `${baseUrl}/manga/${id}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.85,
+      });
+    }
+  } catch (err) {
+    console.error('[sitemap] Failed to fetch manga:', err);
+  }
+
+  return [...staticPages, ...genrePages, ...azPages, ...searchPages, ...animePages, ...mangaPages];
 }

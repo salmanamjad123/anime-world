@@ -9,48 +9,79 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Search, Heart, History, Moon, Sun, Loader2, Filter, Menu } from 'lucide-react';
+import { Search, Loader2, Filter, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/constants/routes';
-import { useThemeStore } from '@/store/useThemeStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { Anime } from '@/types';
+import type { Anime, Manga } from '@/types';
 import { Sidebar } from './Sidebar';
+
+type SearchResultItem = (Anime | Manga) & { id: string };
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, toggleTheme } = useThemeStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchResults, setSearchResults] = useState<Anime[]>([]);
-  const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [isFallback, setIsFallback] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
 
+  const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
   const debouncedQuery = useDebounce(searchQuery.trim(), 300);
+  const showFilter = activeTab === 'anime';
 
-  // const navItems = [
-  //   { label: 'Home', href: ROUTES.HOME },
-  //   { label: 'Watchlist', href: ROUTES.WATCHLIST, icon: Heart },
-  //   { label: 'History', href: ROUTES.HISTORY, icon: History },
-  // ];
-
-  // Fetch search: AniList only (canonical IDs for reviews, watchlist, etc.)
   useEffect(() => {
     if (!debouncedQuery || debouncedQuery.length < 1) {
       setSearchResults([]);
-      setIsSimilarAnime(false);
+      setIsFallback(false);
       return;
     }
     let cancelled = false;
     setIsSearching(true);
-    setIsSimilarAnime(false);
+    setIsFallback(false);
+
+    if (activeTab === 'manga') {
+      fetch(`/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled) return;
+          const media = data?.data?.Page?.media ?? data?.Page?.media ?? [];
+          if (media.length === 0) {
+            return fetch('/api/manga?type=popular&page=1&perPage=20')
+              .then((r) => (r.ok ? r.json() : null))
+              .then((fallback) => {
+                if (cancelled) return;
+                const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
+                setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
+                setIsFallback(true);
+              });
+          }
+          setSearchResults(media);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            fetch('/api/manga?type=popular&page=1&perPage=20')
+              .then((r) => (r.ok ? r.json() : null))
+              .then((fallback) => {
+                if (cancelled) return;
+                const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
+                setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
+                setIsFallback(true);
+              });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false);
+        });
+      return () => { cancelled = true; };
+    }
 
     const setTrendingFallback = () => {
       if (cancelled) return;
@@ -60,7 +91,7 @@ export function Header() {
           if (cancelled) return;
           const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
           setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
-          setIsSimilarAnime(true);
+          setIsFallback(true);
         });
     };
 
@@ -108,17 +139,17 @@ export function Header() {
               const enriched: Anime[] = allRelations.map(relationToAnime);
               const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
               setSearchResults([...enriched, ...rest]);
-              setIsSimilarAnime(false);
+              setIsFallback(false);
               setIsSearching(false);
               return;
             }
           } catch {
-            /* fall through to default */
+            /* fall through */
           }
         }
 
         setSearchResults(Array.isArray(media) ? media : []);
-        setIsSimilarAnime(false);
+        setIsFallback(false);
         setIsSearching(false);
       })
       .catch(() => {
@@ -128,7 +159,7 @@ export function Header() {
         if (!cancelled) setIsSearching(false);
       });
     return () => { cancelled = true; };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, activeTab]);
 
   // Close dropdown when clicking outside (exclude search toggle button)
   useEffect(() => {
@@ -146,12 +177,16 @@ export function Header() {
 
   const showDropdown = searchOpen && (searchQuery.length >= 1 || searchResults.length > 0);
 
-  const handleResultClick = (animeId: string) => {
+  const handleResultClick = (id: string) => {
     setSearchQuery('');
     setSearchOpen(false);
     setMobileSearchOpen(false);
     setSearchResults([]);
-    router.push(ROUTES.ANIME_DETAIL(animeId));
+    if (activeTab === 'manga') {
+      router.push(ROUTES.MANGA_DETAIL(id));
+    } else {
+      router.push(ROUTES.ANIME_DETAIL(id));
+    }
   };
 
   const toggleMobileSearch = () => {
@@ -174,8 +209,8 @@ export function Header() {
         {/* Header row */}
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between gap-4">
-            {/* Toggle + Logo - grouped together */}
-            <div className="flex items-center gap-1">
+            {/* Toggle + Logo + Tabs */}
+            <div className="flex items-center gap-1 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
@@ -184,12 +219,48 @@ export function Header() {
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center">
-                <div className="text-2xl font-bold">
-                  <span className="text-blue-500">Anime</span>
-                  <span className="text-white">Village</span>
+              <Link
+                href={activeTab === 'manga' ? ROUTES.MANGA : ROUTES.HOME}
+                className="flex-shrink-0 flex items-center"
+              >
+                <div className="text-xl sm:text-2xl font-bold">
+                  {activeTab === 'manga' ? (
+                    <>
+                      <span className="text-amber-500">Manga</span>
+                      <span className="text-white">Village</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-blue-500">Anime</span>
+                      <span className="text-white">Village</span>
+                    </>
+                  )}
                 </div>
               </Link>
+              <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 ml-1 sm:ml-2">
+                <Link
+                  href={ROUTES.HOME}
+                  className={cn(
+                    'px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+                    activeTab === 'anime'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  Anime
+                </Link>
+                <Link
+                  href={ROUTES.MANGA}
+                  className={cn(
+                    'px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+                    activeTab === 'manga'
+                      ? 'bg-amber-600 text-white'
+                      : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  Manga
+                </Link>
+              </div>
             </div>
 
             {/* Mobile: Search icon only - tap to open/close */}
@@ -204,24 +275,29 @@ export function Header() {
               <Search className="w-5 h-5" />
             </button>
 
-            {/* Desktop: Filter + Search bar */}
+            {/* Desktop: Filter (anime only) + Search bar */}
             <div ref={searchRef} className="relative flex-1 max-w-xl mx-4 hidden md:flex items-center gap-2 min-w-0">
-            <Link
-              href={ROUTES.SEARCH}
-              className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-              aria-label="Filters"
-            >
-              <Filter className="w-4 h-4" />
-            </Link>
+            {showFilter && (
+              <Link
+                href={ROUTES.SEARCH}
+                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                aria-label="Filters"
+              >
+                <Filter className="w-4 h-4" />
+              </Link>
+            )}
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search any anime..."
+                placeholder={activeTab === 'manga' ? 'Search manga...' : 'Search any anime...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchOpen(true)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className={cn(
+                  'w-full pl-10 pr-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent text-sm',
+                  activeTab === 'manga' ? 'focus:ring-amber-500' : 'focus:ring-blue-500'
+                )}
               />
               {isSearching && (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
@@ -235,24 +311,24 @@ export function Header() {
                   <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-400 text-sm">
-                    {searchQuery.length < 1 ? 'Type to search' : 'No anime found'}
+                    {searchQuery.length < 1 ? 'Type to search' : activeTab === 'manga' ? 'No manga found' : 'No anime found'}
                   </div>
                 ) : (
                   <ul className="py-2">
                     {debouncedQuery && searchResults.length > 0 && (
                       <li className="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
-                        {isSimilarAnime ? 'Similar / Popular anime' : 'Search results'}
+                        {isFallback ? (activeTab === 'manga' ? 'Popular manga' : 'Similar / Popular anime') : 'Search results'}
                       </li>
                     )}
                     {searchResults.map((item) => {
                       const title = getPreferredTitle(item.title);
-                      const imageUrl = item.coverImage.medium;
+                      const imageUrl = item.coverImage?.medium ?? item.coverImage?.large ?? '';
                       const subtitle = item.genres?.[0];
                       return (
                         <li key={item.id}>
                           <button
                             type="button"
-                            onClick={() => handleResultClick(item.id)}
+                            onClick={() => handleResultClick(String(item.id))}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
@@ -326,19 +402,21 @@ export function Header() {
             className="md:hidden absolute top-full left-0 right-0 z-50 w-full px-4 py-4 border-t border-gray-800 bg-gray-900 shadow-xl"
           >
             <div className="flex gap-2 w-full">
-              <Link
-                href={ROUTES.SEARCH}
-                onClick={closeMobileSearch}
-                className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                aria-label="Filters"
-              >
-                <Filter className="w-5 h-5" />
-              </Link>
+              {showFilter && (
+                <Link
+                  href={ROUTES.SEARCH}
+                  onClick={closeMobileSearch}
+                  className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                  aria-label="Filters"
+                >
+                  <Filter className="w-5 h-5" />
+                </Link>
+              )}
               <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search anime..."
+                  placeholder={activeTab === 'manga' ? 'Search manga...' : 'Search anime...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setSearchOpen(true)}
@@ -357,24 +435,24 @@ export function Header() {
                   <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-400 text-sm">
-                    {searchQuery.length < 1 ? 'Type to search' : 'No anime found'}
+                    {searchQuery.length < 1 ? 'Type to search' : activeTab === 'manga' ? 'No manga found' : 'No anime found'}
                   </div>
                 ) : (
                   <ul className="py-2">
                     {debouncedQuery && searchResults.length > 0 && (
                       <li className="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
-                        {isSimilarAnime ? 'Similar / Popular anime' : 'Search results'}
+                        {isFallback ? (activeTab === 'manga' ? 'Popular manga' : 'Similar / Popular anime') : 'Search results'}
                       </li>
                     )}
                     {searchResults.map((item) => {
                       const title = getPreferredTitle(item.title);
-                      const imageUrl = item.coverImage.medium;
+                      const imageUrl = item.coverImage?.medium ?? item.coverImage?.large ?? '';
                       const subtitle = item.genres?.[0];
                       return (
                         <li key={item.id}>
                           <button
                             type="button"
-                            onClick={() => handleResultClick(item.id)}
+                            onClick={() => handleResultClick(String(item.id))}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
@@ -405,7 +483,7 @@ export function Header() {
       </div>
     </header>
 
-    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
     </>
   );
 }
