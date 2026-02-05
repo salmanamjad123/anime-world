@@ -268,7 +268,9 @@ export default function WatchPage() {
                   onEnded={handleEpisodeEnd}
                   autoPlay
                   introEndSeconds={
-                    streamData?.intro && streamData.intro.end > 0
+                    streamData?.intro &&
+                    streamData.intro.end > 0 &&
+                    streamData.intro.end - streamData.intro.start <= 130
                       ? streamData.intro.end
                       : undefined
                   }

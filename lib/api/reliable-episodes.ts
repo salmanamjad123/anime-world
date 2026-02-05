@@ -19,6 +19,7 @@ import {
   getEpisodesFromFirestore,
   saveEpisodesToFirestoreBackground,
 } from './episode-cache';
+import { deleteCacheKey } from '@/lib/cache';
 
 /** Thrown when no episodes available (HiAnime down + Firebase miss) */
 export class EpisodesUnavailableError extends Error {
@@ -161,7 +162,18 @@ export async function getReliableEpisodes(
     
     if (match) {
       console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
-      const episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
+      let episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
+
+      // Smart cache: if AniList has more episodes than cache, new episodes likely available - invalidate and refetch
+      if (
+        episodeCount > 0 &&
+        episodes.episodes.length > 0 &&
+        episodes.episodes.length < episodeCount
+      ) {
+        console.log(`🔄 [Episode Cache] AniList has ${episodeCount} episodes, cache has ${episodes.episodes.length} - refetching for new episodes`);
+        deleteCacheKey(`hianime:episodes:${match.id}`);
+        episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
+      }
 
       if (episodes.episodes.length > 0) {
         console.log(`🎉 [HiAnime API] SUCCESS! ${episodes.episodes.length} episodes`);

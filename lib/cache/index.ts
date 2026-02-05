@@ -3,7 +3,7 @@
  * Uses Redis when REDIS_URL is set (shared across Vercel instances), else in-memory.
  */
 
-import { getCached as getCachedMemory, CACHE_TTL } from './memory-cache';
+import memoryCache, { getCached as getCachedMemory, CACHE_TTL } from './memory-cache';
 
 export { CACHE_TTL };
 
@@ -74,6 +74,18 @@ export async function getCached<T>(
 
 export { invalidateCache } from './memory-cache';
 export { default as memoryCache } from './memory-cache';
+
+/**
+ * Delete a cache key from both memory and Redis (when used).
+ * Use when cached data may be stale (e.g. new episodes available).
+ */
+export function deleteCacheKey(key: string): void {
+  memoryCache.delete(key);
+  const redis = getRedisClient();
+  if (redis) {
+    redis.del(key).catch(() => {});
+  }
+}
 
 /**
  * Check if Redis is configured and reachable.
