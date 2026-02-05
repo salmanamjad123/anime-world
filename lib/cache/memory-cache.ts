@@ -163,6 +163,33 @@ export async function getCached<T>(
 }
 
 /**
+ * Cache only when shouldCache(data) is true.
+ * Empty/failed results can use a short emptyTtl so we retry soon.
+ */
+export async function getCachedWhen<T>(
+  key: string,
+  fetchFn: () => Promise<T>,
+  ttl: number,
+  shouldCache: (data: T) => boolean,
+  emptyTtl?: number
+): Promise<T> {
+  const cached = memoryCache.get<T>(key);
+  if (cached !== null) {
+    return cached;
+  }
+
+  const data = await fetchFn();
+
+  if (shouldCache(data)) {
+    memoryCache.set(key, data, ttl);
+  } else if (emptyTtl && emptyTtl > 0) {
+    memoryCache.set(key, data, emptyTtl);
+  }
+
+  return data;
+}
+
+/**
  * Helper: Invalidate cache by pattern
  */
 export function invalidateCache(pattern: string): void {

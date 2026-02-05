@@ -3,7 +3,11 @@
  * Uses Redis when REDIS_URL is set (shared across Vercel instances), else in-memory.
  */
 
-import memoryCache, { getCached as getCachedMemory, CACHE_TTL } from './memory-cache';
+import memoryCache, {
+  getCached as getCachedMemory,
+  getCachedWhen as getCachedWhenMemory,
+  CACHE_TTL,
+} from './memory-cache';
 
 export { CACHE_TTL };
 
@@ -63,6 +67,45 @@ export async function getCached<T>(
     try {
       const ttlSeconds = Math.floor(ttl / 1000);
       await redis.setex(key, ttlSeconds, JSON.stringify(data));
+    } catch (err) {
+      console.warn('[Redis] Cache write failed:', (err as Error).message);
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Cache only when shouldCache(data) is true.
+ * Empty/failed results can use a short emptyTtl so we retry soon.
+ */
+export async function getCachedWhen<T>(
+  key: string,
+  fetchFn: () => Promise<T>,
+  ttl: number,
+  shouldCache: (data: T) => boolean,
+  emptyTtl?: number
+): Promise<T> {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const cached = await redis.get(key);
+      if (cached) {
+        return JSON.parse(cached) as T;
+      }
+    } catch (err) {
+      console.warn('[Redis] Cache read failed, falling back to memory:', (err as Error).message);
+    }
+  }
+
+  const data = await getCachedWhenMemory(key, fetchFn, ttl, shouldCache, emptyTtl);
+
+  if (redis) {
+    try {
+      const useTtl = shouldCache(data) ? ttl : emptyTtl;
+      if (useTtl && useTtl > 0) {
+        await redis.setex(key, Math.floor(useTtl / 1000), JSON.stringify(data));
+      }
     } catch (err) {
       console.warn('[Redis] Cache write failed:', (err as Error).message);
     }
