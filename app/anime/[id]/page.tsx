@@ -12,10 +12,13 @@ import { Button } from '@/components/ui/Button';
 import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { useEpisodes, useEpisodesForSeasons, useAnimeInfo } from '@/hooks/useEpisodes';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
-import { useHistoryStore } from '@/store/useHistoryStore';
+import { useUserStore } from '@/store/useUserStore';
+import { useAuthModalStore } from '@/store/useAuthModalStore';
+import { setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlistDb } from '@/lib/firebase/firestore';
+import { AddToListDropdown } from '@/components/anime/AddToListDropdown';
 import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { Heart, Play, Star, Calendar, Tv, ChevronDown } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Tv, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 
@@ -73,12 +76,14 @@ export default function AnimeDetailPage() {
     }
   }, [animeId]);
   
-  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
-  const { getProgress } = useHistoryStore();
+  const { addToList, removeFromList, getListStatus } = useWatchlistStore();
+  const { user } = useUserStore();
+  const { openAuthModal } = useAuthModalStore();
+
+  const listStatus = getListStatus(animeId);
   
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
-  const watchProgress = getProgress(animeId);
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
@@ -112,25 +117,32 @@ export default function AnimeDetailPage() {
 
   const title = getPreferredTitle(anime.title);
   const description = anime.description ? stripHtml(anime.description) : 'No description available.';
-  const inWatchlist = isInWatchlist(animeId);
 
-  const handleWatchlistToggle = () => {
-    if (inWatchlist) {
-      removeFromWatchlist(animeId);
-    } else {
-      addToWatchlist(animeId, title, anime.coverImage.large);
+  const handleListSelect = async (status: 'watching' | 'on-hold' | 'plan-to-watch' | 'dropped' | 'completed') => {
+    addToList(animeId, title, anime.coverImage.large, status);
+    if (user?.uid) {
+      try {
+        await setListItemDb(user.uid, animeId, title, anime.coverImage.large, status);
+      } catch (err) {
+        console.error('[list] Failed to sync to cloud:', err);
+      }
+    }
+  };
+
+  const handleListRemove = async () => {
+    removeFromList(animeId);
+    if (user?.uid) {
+      try {
+        await removeFromWatchlistDb(user.uid, animeId);
+      } catch (err) {
+        console.error('[list] Failed to remove from cloud:', err);
+      }
     }
   };
 
   const handlePlayFirst = () => {
     if (episodes.length > 0) {
       router.push(ROUTES.WATCH(animeId, episodes[0].id));
-    }
-  };
-
-  const handleContinueWatching = () => {
-    if (watchProgress) {
-      router.push(ROUTES.WATCH(animeId, watchProgress.episodeId));
     }
   };
 
@@ -220,22 +232,29 @@ export default function AnimeDetailPage() {
               )}
 
               {/* Action Buttons: stack on mobile, row on sm+ */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                {watchProgress ? (
-                  <Button variant="primary" size="lg" onClick={handleContinueWatching} className="w-full sm:w-auto">
-                    <Play className="w-5 h-5 mr-2" />
-                    Continue Episode {watchProgress.episodeNumber}
-                  </Button>
-                ) : (
-                  <Button variant="primary" size="lg" onClick={handlePlayFirst} className="w-full sm:w-auto">
-                    <Play className="w-5 h-5 mr-2" />
-                    Play Now
-                  </Button>
-                )}
-                <Button variant="secondary" size="lg" onClick={handleWatchlistToggle} className="w-full sm:w-auto">
-                  <Heart className={`w-5 h-5 mr-2 ${inWatchlist ? 'fill-current' : ''}`} />
-                  {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
+                <Button variant="primary" size="lg" onClick={handlePlayFirst} className="w-full sm:w-auto">
+                  <Play className="w-5 h-5 mr-2" />
+                  Play Now
                 </Button>
+                {user ? (
+                  <AddToListDropdown
+                    currentStatus={listStatus}
+                    onSelect={handleListSelect}
+                    onRemove={handleListRemove}
+                    size="lg"
+                    className="w-full sm:w-auto"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openAuthModal}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-lg font-medium rounded-lg bg-gray-800 border border-gray-600 hover:border-gray-500 text-white hover:bg-gray-700 transition-colors w-full sm:w-auto"
+                  >
+                    <Plus className="w-5 h-5 shrink-0" />
+                    Add to List
+                  </button>
+                )}
               </div>
             </div>
           </div>

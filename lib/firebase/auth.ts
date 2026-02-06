@@ -9,6 +9,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -31,21 +32,25 @@ export async function signUp(email: string, password: string, displayName?: stri
     await updateProfile(firebaseUser, { displayName });
   }
 
-  // Create user document in Firestore
-  const user: User = {
+  // Create user document in Firestore (omit undefined - Firestore rejects it)
+  await setDoc(doc(db, 'users', firebaseUser.uid), {
+    uid: firebaseUser.uid,
+    email: firebaseUser.email!,
+    ...(displayName || firebaseUser.displayName
+      ? { displayName: displayName || firebaseUser.displayName }
+      : {}),
+    ...(firebaseUser.photoURL ? { photoURL: firebaseUser.photoURL } : {}),
+    emailVerified: false,
+    createdAt: serverTimestamp(),
+  });
+
+  return {
     uid: firebaseUser.uid,
     email: firebaseUser.email!,
     displayName: displayName || firebaseUser.displayName || undefined,
     photoURL: firebaseUser.photoURL || undefined,
     createdAt: new Date(),
   };
-
-  await setDoc(doc(db, 'users', firebaseUser.uid), {
-    ...user,
-    createdAt: serverTimestamp(),
-  });
-
-  return user;
 }
 
 /**
@@ -73,6 +78,16 @@ export async function signIn(email: string, password: string): Promise<User> {
     photoURL: firebaseUser.photoURL || undefined,
     createdAt: new Date(),
   };
+}
+
+/**
+ * Send password reset email
+ */
+export async function resetPassword(email: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    throw new Error('Firebase is not configured');
+  }
+  await sendPasswordResetEmail(auth, email);
 }
 
 /**
@@ -128,6 +143,7 @@ export async function getUserDocument(uid: string): Promise<User | null> {
       photoURL: data.photoURL,
       createdAt: data.createdAt?.toDate() || new Date(),
       lastLogin: data.lastLogin?.toDate(),
+      emailVerified: data.emailVerified ?? false,
     };
   }
 

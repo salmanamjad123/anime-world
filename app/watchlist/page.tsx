@@ -12,21 +12,19 @@ import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { Heart, Trash2 } from 'lucide-react';
 
 export default function WatchlistPage() {
-  const { watchlist, removeFromWatchlist, clearWatchlist } = useWatchlistStore();
+  const { getItemsByStatus, removeFromList, clearByStatus } = useWatchlistStore();
+  const planToWatch = getItemsByStatus('plan-to-watch');
 
-  // Note: For now, we'll use the cached data from watchlist
-  // In production, you'd fetch full anime data for each ID
-
-  if (watchlist.length === 0) {
+  if (planToWatch.length === 0) {
     return (
       <div className="min-h-screen bg-gray-900">
         <Header />
         <div className="container mx-auto px-4 py-16">
           <div className="text-center max-w-md mx-auto">
             <Heart className="w-24 h-24 text-gray-600 mx-auto mb-6" />
-            <h1 className="text-3xl font-bold text-white mb-4">Your Watchlist is Empty</h1>
+            <h1 className="text-3xl font-bold text-white mb-4">Plan to Watch is Empty</h1>
             <p className="text-gray-400 mb-6">
-              Start adding anime to your watchlist to keep track of series you want to watch.
+              Add anime to your list from the anime page using &quot;Add to List&quot; → &quot;Plan to watch&quot;.
             </p>
             <Button variant="primary" onClick={() => window.location.href = '/'}>
               Browse Anime
@@ -45,16 +43,16 @@ export default function WatchlistPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">My Watchlist</h1>
-            <p className="text-gray-400">{watchlist.length} anime saved</p>
+            <h1 className="text-4xl font-bold text-white mb-2">Plan to Watch</h1>
+            <p className="text-gray-400">{planToWatch.length} anime</p>
           </div>
 
-          {watchlist.length > 0 && (
+          {planToWatch.length > 0 && (
             <Button
               variant="danger"
               onClick={() => {
-                if (confirm('Are you sure you want to clear your entire watchlist?')) {
-                  clearWatchlist();
+                if (confirm('Are you sure you want to clear your Plan to watch list?')) {
+                  clearByStatus('plan-to-watch');
                 }
               }}
             >
@@ -66,13 +64,13 @@ export default function WatchlistPage() {
 
         {/* Watchlist Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {watchlist.map((item) => (
+          {planToWatch.map((item) => (
             <div key={item.animeId} className="relative group">
               {/* Remove Button */}
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  removeFromWatchlist(item.animeId);
+                  removeFromList(item.animeId);
                 }}
                 className="absolute top-2 right-2 z-10 bg-red-600 hover:bg-red-700 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Remove from watchlist"

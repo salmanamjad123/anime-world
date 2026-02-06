@@ -15,8 +15,8 @@ import { useHistoryStore } from '@/store/useHistoryStore';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setLoading, clearUser } = useUserStore();
-  const { syncWithFirebase: syncWatchlist } = useWatchlistStore();
-  const { syncWithFirebase: syncHistory } = useHistoryStore();
+  const { syncWithFirebase: syncWatchlist, clearList } = useWatchlistStore();
+  const { syncWithFirebase: syncHistory, clearHistory } = useHistoryStore();
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [setUser, setLoading, clearUser, syncWatchlist, syncHistory]);
+  }, [setUser, setLoading, clearUser, syncWatchlist, syncHistory, clearList, clearHistory]);
 
   return <>{children}</>;
 }

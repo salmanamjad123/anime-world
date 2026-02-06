@@ -15,16 +15,19 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './config';
-import type { WatchlistItem, HistoryItem, EpisodeProgress } from '@/types';
+import type { WatchlistItem, HistoryItem, EpisodeProgress, ListStatus } from '@/types';
+
+const DEFAULT_LIST_STATUS: ListStatus = 'plan-to-watch';
 
 /**
- * Add anime to watchlist
+ * Add/update anime in list with status
  */
-export async function addToWatchlist(
+export async function setListItem(
   userId: string,
   animeId: string,
   title: string,
-  image: string
+  image: string,
+  status: ListStatus = DEFAULT_LIST_STATUS
 ): Promise<void> {
   if (!isFirebaseConfigured()) {
     throw new Error('Firebase is not configured');
@@ -35,8 +38,20 @@ export async function addToWatchlist(
     animeId,
     title,
     image,
+    status,
     addedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
+}
+
+/** @deprecated Use setListItem */
+export async function addToWatchlist(
+  userId: string,
+  animeId: string,
+  title: string,
+  image: string
+): Promise<void> {
+  await setListItem(userId, animeId, title, image, DEFAULT_LIST_STATUS);
 }
 
 /**
@@ -69,6 +84,7 @@ export async function getWatchlist(userId: string): Promise<WatchlistItem[]> {
       animeId: data.animeId,
       title: data.title,
       image: data.image,
+      status: (data.status as ListStatus) || DEFAULT_LIST_STATUS,
       addedAt: data.addedAt?.toDate() || new Date(),
     };
   });
@@ -129,6 +145,16 @@ export async function getWatchHistory(userId: string): Promise<HistoryItem[]> {
 }
 
 /**
+ * Remove a single anime from watch history
+ */
+export async function removeFromWatchHistory(userId: string, animeId: string): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+
+  const historyRef = doc(db, 'history', userId, 'watching', animeId);
+  await deleteDoc(historyRef);
+}
+
+/**
  * Clear watch history
  */
 export async function clearWatchHistory(userId: string): Promise<void> {
@@ -139,6 +165,6 @@ export async function clearWatchHistory(userId: string): Promise<void> {
   const historyRef = collection(db, 'history', userId, 'watching');
   const snapshot = await getDocs(historyRef);
 
-  const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
+  const deletePromises = snapshot.docs.map((d) => deleteDoc(d.ref));
   await Promise.all(deletePromises);
 }

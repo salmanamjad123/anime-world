@@ -13,6 +13,7 @@ export const ROUTES = {
   WATCH: (animeId: string, episodeId: string) => `/watch/${animeId}/${encodeURIComponent(episodeId)}`,
   WATCHLIST: '/watchlist',
   HISTORY: '/history',
+  PROFILE: '/profile',
   SETTINGS: '/settings',
 } as const;
 

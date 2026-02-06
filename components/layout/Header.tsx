@@ -9,10 +9,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Search, Heart, History, Moon, Sun, Loader2, Filter, Menu } from 'lucide-react';
+import { Search, Heart, History, Moon, Sun, Loader2, Filter, Menu, LogIn, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/constants/routes';
 import { useThemeStore } from '@/store/useThemeStore';
+import { useUserStore } from '@/store/useUserStore';
+import { useAuthModalStore } from '@/store/useAuthModalStore';
+import { signOut } from '@/lib/firebase/auth';
+import { AuthModal } from '@/components/auth/AuthModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -30,8 +34,13 @@ export function Header() {
   const [searchResults, setSearchResults] = useState<Anime[]>([]);
   const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
   const [isSearching, setIsSearching] = useState(false);
+  const { isOpen: authModalOpen, openAuthModal, closeAuthModal } = useAuthModalStore();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const { user } = useUserStore();
 
   const debouncedQuery = useDebounce(searchQuery.trim(), 300);
 
@@ -139,6 +148,9 @@ export function Header() {
         setSearchOpen(false);
         setMobileSearchOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setUserMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -175,16 +187,16 @@ export function Header() {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between gap-4">
             {/* Toggle + Logo - grouped together */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
                 aria-label="Open menu"
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <Link href={ROUTES.HOME} className="flex-shrink-0 flex items-center">
+              <Link href={ROUTES.HOME} className="shrink-0 flex items-center">
                 <div className="text-2xl font-bold">
                   <span className="text-blue-500">Anime</span>
                   <span className="text-white">Village</span>
@@ -192,12 +204,14 @@ export function Header() {
               </Link>
             </div>
 
+            {/* Search + Auth - grouped together at end, minimal gap */}
+            <div className="flex items-center gap-2 flex-1 justify-end min-w-0 ml-2">
             {/* Mobile: Search icon only - tap to open/close */}
             <button
               ref={searchToggleRef}
               type="button"
               onClick={toggleMobileSearch}
-              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-blue-500 hover:bg-gray-800 transition-colors"
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-blue-500 hover:bg-gray-800 transition-colors shrink-0"
               aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
               aria-expanded={mobileSearchOpen}
             >
@@ -205,7 +219,7 @@ export function Header() {
             </button>
 
             {/* Desktop: Filter + Search bar */}
-            <div ref={searchRef} className="relative flex-1 max-w-xl mx-4 hidden md:flex items-center gap-2 min-w-0">
+            <div ref={searchRef} className="relative flex-1 max-w-xl hidden md:flex items-center gap-2 min-w-0">
             <Link
               href={ROUTES.SEARCH}
               className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
@@ -280,42 +294,95 @@ export function Header() {
             )}
             </div>
 
-          {/* Navigation */}
-          {/* <nav className="hidden md:flex items-center space-x-6 flex-shrink-0">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-2 text-sm font-medium transition-colors hover:text-blue-400',
-                    isActive ? 'text-blue-500' : 'text-gray-300'
+            {/* Auth: Login button or User menu */}
+            <div ref={userMenuRef} className="relative shrink-0">
+              {user ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen((o) => !o)}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
+                  >
+                    {user.photoURL ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={user.photoURL}
+                        alt={user.displayName || user.email}
+                        width={28}
+                        height={28}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                        <User className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    <span className="hidden sm:inline max-w-[100px] truncate text-sm">
+                      {user.displayName || user.email?.split('@')[0]}
+                    </span>
+                  </button>
+                  {userMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 py-2 w-64 rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl z-50">
+                      <div className="px-4 pb-2">
+                        <p className="text-sm font-semibold text-white truncate">
+                          {user.displayName || user.email}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                      </div>
+                      <div className="mt-1 space-y-1 px-2 pb-2">
+                        <Link
+                          href={ROUTES.PROFILE}
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
+                        >
+                          <User className="w-4 h-4" />
+                          <span>Profile</span>
+                        </Link>
+                        <Link
+                          href={ROUTES.HISTORY}
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
+                        >
+                          <History className="w-4 h-4" />
+                          <span>Continue Watching</span>
+                        </Link>
+                        <Link
+                          href={ROUTES.WATCHLIST}
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
+                        >
+                          <Heart className="w-4 h-4" />
+                          <span>Watch List</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            signOut();
+                            setUserMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-sm transition-colors mt-1"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Logout</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
-                >
-                  {Icon && <Icon className="w-4 h-4" />}
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav> */}
-
-          {/* Actions */}
-          {/* <div className="flex items-center gap-2 flex-shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5" />
+                </>
               ) : (
-                <Moon className="w-5 h-5" />
+                <button
+                  type="button"
+                  onClick={openAuthModal}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span className="hidden sm:inline">Login</span>
+                </button>
               )}
-            </Button>
-          </div> */}
+            </div>
+            </div>
           </div>
         </div>
 
@@ -406,6 +473,7 @@ export function Header() {
     </header>
 
     <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <AuthModal isOpen={authModalOpen} onClose={closeAuthModal} />
     </>
   );
 }
