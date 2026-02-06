@@ -1,11 +1,18 @@
 /**
  * History Store
  * Manage watch history with localStorage persistence
+ * Continue Watching limited to max 5 anime (oldest removed when exceeded)
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { HistoryItem, EpisodeProgress } from '@/types';
+
+const CONTINUE_WATCHING_MAX = 5;
+
+function isContinueWatching(item: HistoryItem): boolean {
+  return !item.completed && item.percentage < 90;
+}
 
 interface HistoryStore {
   history: HistoryItem[];
@@ -64,7 +71,22 @@ export const useHistoryStore = create<HistoryStore>()(
 
         // Remove existing entry for this anime and add the new one at the beginning
         const filtered = history.filter((item) => item.animeId !== animeId);
-        set({ history: [newItem, ...filtered] });
+        const updated = [newItem, ...filtered];
+
+        // Limit Continue Watching to max 5 - remove oldest in-progress items
+        const inProgress = updated.filter(isContinueWatching);
+        if (inProgress.length > CONTINUE_WATCHING_MAX) {
+          const sorted = [...inProgress].sort(
+            (a, b) => new Date(b.lastWatched).getTime() - new Date(a.lastWatched).getTime()
+          );
+          const toRemove = sorted.slice(CONTINUE_WATCHING_MAX).map((i) => i.animeId);
+          const toRemoveSet = new Set(toRemove);
+          set({
+            history: updated.filter((item) => !toRemoveSet.has(item.animeId)),
+          });
+        } else {
+          set({ history: updated });
+        }
       },
 
       getProgress: (animeId) => {
@@ -82,7 +104,18 @@ export const useHistoryStore = create<HistoryStore>()(
       },
 
       syncWithFirebase: (items) => {
-        set({ history: items });
+        const inProgress = items.filter(isContinueWatching);
+        if (inProgress.length <= CONTINUE_WATCHING_MAX) {
+          set({ history: items });
+          return;
+        }
+        const sorted = [...inProgress].sort(
+          (a, b) => new Date(b.lastWatched).getTime() - new Date(a.lastWatched).getTime()
+        );
+        const toRemove = new Set(sorted.slice(CONTINUE_WATCHING_MAX).map((i) => i.animeId));
+        set({
+          history: items.filter((item) => !toRemove.has(item.animeId)),
+        });
       },
     }),
     {

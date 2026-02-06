@@ -6,8 +6,8 @@ import type { Metadata } from 'next';
 import { SITE_NAME } from '@/constants/site';
 
 export const metadata: Metadata = {
-  title: 'Watch History',
-  description: `Your anime watch history on ${SITE_NAME}. Continue watching where you left off.`,
+  title: 'Continue Watching',
+  description: `Resume where you left off on ${SITE_NAME}.`,
   robots: { index: false, follow: true },
 };
 

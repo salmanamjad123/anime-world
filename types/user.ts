@@ -17,16 +17,23 @@ export interface User {
   photoURL?: string;
   createdAt: Date;
   lastLogin?: Date;
+  emailVerified?: boolean;
 }
 
 /**
- * Watchlist item
+ * List status options (MyAnimeList-style)
+ */
+export type ListStatus = 'watching' | 'on-hold' | 'plan-to-watch' | 'dropped' | 'completed';
+
+/**
+ * Watchlist / list item with status
  */
 export interface WatchlistItem {
   animeId: string;
   title: string;
   image: string;
   addedAt: Date;
+  status?: ListStatus; // defaults to 'plan-to-watch' for backward compat
   anime?: Anime;
 }
 

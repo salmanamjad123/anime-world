@@ -6,7 +6,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
@@ -15,7 +15,9 @@ import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnim
 import { useEpisodes } from '@/hooks/useEpisodes';
 import { useStreamingSourcesWithFallback } from '@/hooks/useStream';
 import { useHistoryStore } from '@/store/useHistoryStore';
+import { useUserStore } from '@/store/useUserStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { updateWatchProgress } from '@/lib/firebase/firestore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
@@ -69,8 +71,10 @@ export default function WatchPage() {
     selectedServer
   );
 
-  const { updateProgress } = useHistoryStore();
+  const { updateProgress, getProgress } = useHistoryStore();
+  const { user } = useUserStore();
   const { autoNext } = usePlayerStore();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
@@ -147,8 +151,37 @@ export default function WatchPage() {
         anime.coverImage.large,
         currentEpisode.title
       );
+
+      // Debounced Firebase save (logged-in users only)
+      if (user?.uid) {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+          saveTimeoutRef.current = null;
+          const item = getProgress(animeId);
+          if (item) {
+            updateWatchProgress(user.uid, item, item.animeTitle, item.animeImage, item.episodeTitle).catch(
+              (err) => console.error('[Watch] Failed to save progress:', err)
+            );
+          }
+        }, 3000);
+      }
     }
   };
+
+  // Save to Firebase on unmount (e.g. navigate away)
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (user?.uid) {
+        const item = getProgress(animeId);
+        if (item) {
+          updateWatchProgress(user.uid, item, item.animeTitle, item.animeImage, item.episodeTitle).catch(
+            () => {}
+          );
+        }
+      }
+    };
+  }, [user?.uid, animeId]);
 
   // Handle episode end (auto-next)
   const handleEpisodeEnd = () => {

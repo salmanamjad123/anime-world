@@ -139,6 +139,13 @@ export const POPULAR_ANIME_KEYWORDS = [
   'anime english dub',
 ] as const;
 
+/** Brand keywords - helps rank for "anime village" (with space) */
+export const BRAND_KEYWORDS = [
+  'anime village',
+  'anime village streaming',
+  'anime village watch',
+] as const;
+
 /** Core streaming keywords */
 export const CORE_KEYWORDS = [
   'anime',
@@ -184,7 +191,8 @@ export const GENRE_KEYWORDS = [
 
 /** Combined for meta keywords (max ~20-30 for best practice, but we use more for long-tail) */
 export const ALL_SEO_KEYWORDS = [
+  ...BRAND_KEYWORDS,
   ...CORE_KEYWORDS,
-  ...COMPETITOR_KEYWORDS.slice(0, 8),
+  ...COMPETITOR_KEYWORDS.slice(0, 6),
   ...POPULAR_ANIME_KEYWORDS.slice(0, 40),
 ] as const;

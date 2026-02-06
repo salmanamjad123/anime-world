@@ -62,10 +62,10 @@ const FAQ_JSON_LD = {
     },
     {
       "@type": "Question",
-      name: "Is Anime Village like Aniwatch or Anilab?",
+      name: "What is Anime Village?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Anime Village is a free anime streaming site similar to Aniwatch, Anilab, and HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10000+ anime with sub and dub.",
+        text: "Anime Village is a free anime streaming site. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10,000+ anime with sub and dub.",
       },
     },
     {
@@ -82,7 +82,7 @@ const FAQ_JSON_LD = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} - Watch Anime Free | Aniwatch, Anilab, HiAnime Alternative`,
+    default: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -107,7 +107,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} - Watch Anime Free | Aniwatch, Anilab, HiAnime Alternative`,
+    title: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
     description: SITE_DESCRIPTION,
   },
   robots: {

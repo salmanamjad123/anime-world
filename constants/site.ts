@@ -8,4 +8,4 @@ export const SITE_URL =
 
 export const SITE_NAME = 'Anime Village';
 export const SITE_DESCRIPTION =
-  'Watch anime online free - Like Aniwatch, Anilab, HiAnime. Stream 10000+ anime with sub and dub. One Piece, Naruto, JJK, Demon Slayer, Dragon Ball & more. Best free anime streaming site.';
+  'Stream thousands of anime series free with English sub and dub. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer, Dragon Ball and more. Best free anime streaming site.';
