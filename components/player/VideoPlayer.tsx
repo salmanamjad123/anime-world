@@ -840,7 +840,7 @@ export function VideoPlayer({
               className="text-white hover:text-blue-400 transition-colors"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? <Pause className="w-4 h-4 sm:w-6 sm:h-6" /> : <Play className="w-4 h-4 sm:w-6 sm:h-6" />}
+              {isPlaying ? <Pause className="w-5 h-5 sm:w-6 sm:h-6" /> : <Play className="w-5 h-5 sm:w-6 sm:h-6" />}
             </button>
 
             {/* Volume - mute button only on mobile; slider shown on sm+ */}
@@ -850,7 +850,7 @@ export function VideoPlayer({
                 className="text-white hover:text-blue-400 transition-colors shrink-0"
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
-                {isMuted ? <VolumeX className="w-4 h-4 sm:w-6 sm:h-6" /> : <Volume2 className="w-4 h-4 sm:w-6 sm:h-6" />}
+                {isMuted ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
               </button>
               <input
                 type="range"
@@ -882,7 +882,7 @@ export function VideoPlayer({
                 aria-label="Next episode"
                 title="Next episode"
               >
-                <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <SkipForward className="w-5 h-5 sm:w-5 sm:h-5 shrink-0" />
                 <span className="hidden sm:inline">Next Episode</span>
               </button>
             )}
@@ -894,7 +894,7 @@ export function VideoPlayer({
               aria-label="Rewind 10 seconds"
               title="Rewind 10 seconds"
             >
-              <RotateCcw className="w-4 h-4 sm:w-6 sm:h-6" />
+              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-xs font-medium hidden sm:inline">10</span>
             </button>
 
@@ -905,17 +905,18 @@ export function VideoPlayer({
               aria-label="Forward 10 seconds"
               title="Forward 10 seconds"
             >
-              <RotateCw className="w-4 h-4 sm:w-6 sm:h-6" />
+              <RotateCw className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-xs font-medium hidden sm:inline">10</span>
             </button>
 
             {/* Settings Button + Menu (ref for click-outside) */}
-            <div ref={settingsMenuRef} className="relative">
+            <div ref={settingsMenuRef} className="relative flex items-center">
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="text-white hover:text-blue-400 transition-colors"
+                className="text-white hover:text-blue-400 transition-colors flex items-center justify-center px-1.5 shrink-0"
+                aria-label="Settings"
               >
-                <Settings className="w-4 h-4 sm:w-6 sm:h-6" />
+                <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
 
               {/* Settings Menu - fixed max-height for mobile, scroll inside, never clipped */}
@@ -1028,7 +1029,7 @@ export function VideoPlayer({
               onClick={toggleFullscreen}
               className="text-white hover:text-blue-400 transition-colors"
             >
-              <Maximize className="w-4 h-4 sm:w-6 sm:h-6" />
+              <Maximize className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
         </div>
