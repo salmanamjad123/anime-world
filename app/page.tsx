@@ -21,7 +21,7 @@ export default function Home() {
       <main className="container mx-auto px-4 py-8">
         <section className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2">
-            Watch Anime Online Free
+            Anime Village – Watch Anime Online Free
           </h1>
           {/* <p className="text-gray-400 text-sm sm:text-base max-w-2xl">
             Like Aniwatch, Anilab, HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10000+ anime with sub and dub.

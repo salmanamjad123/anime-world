@@ -79,7 +79,7 @@ export function Footer() {
               Anime Village
             </Link>
             {' — '}
-            Watch anime online free. Like Aniwatch, Anilab, HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer, Dragon Ball and 10000+ anime with sub and dub.
+            Stream thousands of anime free with sub and dub. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer, Dragon Ball and more.
           </p>
           <p className="mt-1 text-xs text-gray-600">2026 Anime Village. All rights reserved.</p>
         </div>

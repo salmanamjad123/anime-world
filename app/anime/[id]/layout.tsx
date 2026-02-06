@@ -66,7 +66,7 @@ export async function generateMetadata({
   const title = getPreferredTitle(anime.title);
   const description = anime.description
     ? stripHtml(anime.description).slice(0, 160)
-    : `Watch ${title} online free - like Aniwatch, Anilab, HiAnime. Stream ${title} episodes with sub and dub on ${SITE_NAME}.`;
+    : `Watch ${title} online free. Stream ${title} episodes with sub and dub on ${SITE_NAME}.`;
   const canonicalUrl = `${SITE_URL}/anime/${id}`;
   const image =
     anime.bannerImage ||

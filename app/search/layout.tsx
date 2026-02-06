@@ -10,15 +10,13 @@ import {
 } from '@/constants/seo';
 
 export const metadata: Metadata = {
-  title: 'Search Anime - Aniwatch, Anilab, HiAnime Style | Filter by Genre',
-  description: `Search 10000+ anime free. Like Aniwatch, Anilab, HiAnime. Filter by genre, type, season. One Piece, Naruto, JJK, Demon Slayer & more.`,
+  title: 'Search Anime | Browse 10,000+ Anime by Genre',
+  description: `Search and browse 10,000+ anime free. Filter by genre, type, season. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and more.`,
   keywords: [
     'search anime',
     'anime filter',
     'browse anime',
-    'aniwatch',
-    'anilab',
-    'hianime',
+    'anime village',
     ...POPULAR_ANIME_KEYWORDS.slice(0, 15),
     ...CORE_KEYWORDS.slice(0, 8),
   ],

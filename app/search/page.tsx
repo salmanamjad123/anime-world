@@ -54,7 +54,7 @@ export async function generateMetadata({
 
   return {
     title: 'Search Anime - Filter by Genre, Type, Season',
-    description: `Search 10000+ anime free. Like Aniwatch, Anilab, HiAnime. Filter by genre, type, season.`,
+    description: `Search and browse 10,000+ anime free. Filter by genre, type, season.`,
     alternates: { canonical: url },
   };
 }
