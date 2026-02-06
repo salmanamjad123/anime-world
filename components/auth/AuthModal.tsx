@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, LogIn, UserPlus, Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { signIn, signUp, resetPassword } from '@/lib/firebase/auth';
+import { signIn, signUp } from '@/lib/firebase/auth';
 import { useUserStore } from '@/store/useUserStore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { cn } from '@/lib/utils';
@@ -203,7 +203,13 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
     }
     setIsLoading(true);
     try {
-      await resetPassword(email.trim());
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send reset email');
       setSuccess('Check your email for a password reset link.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send reset email.';

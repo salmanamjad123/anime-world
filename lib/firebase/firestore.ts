@@ -90,6 +90,32 @@ export async function getWatchlist(userId: string): Promise<WatchlistItem[]> {
   });
 }
 
+const CONTINUE_WATCHING_MAX = 5;
+
+function isContinueWatching(item: HistoryItem): boolean {
+  return !item.completed && (item.percentage ?? 0) < 90;
+}
+
+/**
+ * Trim Continue Watching to max 5 anime in Firestore (oldest removed)
+ */
+export async function trimContinueWatchingToMax(
+  userId: string,
+  maxCount: number = CONTINUE_WATCHING_MAX
+): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+
+  const history = await getWatchHistory(userId);
+  const inProgress = history.filter(isContinueWatching);
+  if (inProgress.length <= maxCount) return;
+
+  const sorted = [...inProgress].sort(
+    (a, b) => new Date(b.lastWatched).getTime() - new Date(a.lastWatched).getTime()
+  );
+  const toRemove = sorted.slice(maxCount);
+  await Promise.all(toRemove.map((item) => removeFromWatchHistory(userId, item.animeId)));
+}
+
 /**
  * Update watch progress
  */
@@ -112,6 +138,8 @@ export async function updateWatchProgress(
     episodeTitle,
     lastWatched: serverTimestamp(),
   });
+
+  await trimContinueWatchingToMax(userId);
 }
 
 /**

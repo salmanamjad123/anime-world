@@ -17,7 +17,7 @@ import { ROUTES } from '@/constants/routes';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, Play } from 'lucide-react';
-import { updateUserDisplayName, resetPassword } from '@/lib/firebase/auth';
+import { updateUserDisplayName } from '@/lib/firebase/auth';
 import { clearWatchHistory, removeFromWatchHistory, setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlistDb } from '@/lib/firebase/firestore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import type { ListStatus } from '@/types';
@@ -403,7 +403,13 @@ function ProfilePageContent() {
     const handleChangePassword = async () => {
       setPasswordLoading(true);
       try {
-        await resetPassword(user.email);
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to send');
         setSaveSuccess(true);
       } catch (err) {
         console.error('Failed to send password reset:', err);

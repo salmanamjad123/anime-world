@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import { useUserStore } from '@/store/useUserStore';
 import { onAuthChange, getUserDocument } from '@/lib/firebase/auth';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { getWatchlist, getWatchHistory } from '@/lib/firebase/firestore';
+import { getWatchlist, getWatchHistory, trimContinueWatchingToMax } from '@/lib/firebase/firestore';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 
@@ -51,6 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ]);
           syncWatchlist(watchlist);
           syncHistory(history);
+          // Trim Continue Watching to max 5 in Firestore (cleans up if user had more)
+          trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
         } catch (error) {
           console.error('Failed to sync user data:', error);
         }
