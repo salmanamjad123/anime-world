@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { ROUTES } from '@/constants/routes';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check } from 'lucide-react';
+import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, Play } from 'lucide-react';
 import { updateUserDisplayName, resetPassword } from '@/lib/firebase/auth';
 import { clearWatchHistory, removeFromWatchHistory, setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlistDb } from '@/lib/firebase/firestore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
@@ -284,8 +284,10 @@ function ProfilePageContent() {
     return (
       <>
         {user && continueWatching.length > 0 && (
-          <div className="mb-4 flex justify-end">
-            <Button variant="danger" size="sm" onClick={handleClearAll}>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-gray-400">{continueWatching.length} in progress</span>
+            <Button variant="ghost" size="sm" onClick={handleClearAll} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30">
+              <Trash2 className="w-4 h-4 mr-1.5" />
               Clear All
             </Button>
           </div>
@@ -294,34 +296,44 @@ function ProfilePageContent() {
           {continueWatching.map((item) => (
             <div
               key={item.animeId}
-              className="flex gap-3 bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all group"
+              className="group relative bg-gray-800/50 rounded-xl overflow-hidden border border-gray-700/50 hover:border-blue-500/50 transition-all"
             >
               <Link
                 href={ROUTES.WATCH(item.animeId, item.episodeId)}
-                className="flex flex-1 gap-3 min-w-0"
+                className="flex gap-4 p-4"
               >
-                <div className="relative w-24 sm:w-28 md:w-32 shrink-0">
+                <div className="relative w-20 h-28 sm:w-24 sm:h-32 shrink-0 rounded-lg overflow-hidden bg-gray-700">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={item.animeImage} alt={item.animeTitle} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                      <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                    </span>
+                  </div>
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700">
                     <div
-                      className="h-full bg-blue-500"
+                      className="h-full bg-blue-500 rounded-r transition-all"
                       style={{ width: `${Math.min(item.percentage, 100)}%` }}
                     />
                   </div>
                 </div>
-                <div className="flex-1 p-3 min-w-0">
-                  <h3 className="text-sm font-semibold text-white truncate">{item.animeTitle}</h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Episode {item.episodeNumber} · {item.percentage}% watched
+                <div className="flex-1 min-w-0 py-1 pr-10">
+                  <h3 className="font-semibold text-sm text-white line-clamp-2 group-hover:text-blue-400 transition-colors break-words">
+                    {item.animeTitle}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Episode {item.episodeNumber}
+                    {item.episodeTitle && ` · ${item.episodeTitle}`}
                   </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{item.percentage}% watched</p>
                 </div>
               </Link>
               {user && (
                 <button
                   type="button"
-                  onClick={() => handleRemove(item.animeId)}
-                  className="shrink-0 p-2 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                  onClick={(e) => { e.preventDefault(); handleRemove(item.animeId); }}
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gray-900/80 hover:bg-red-500/80 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                  aria-label="Remove from history"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -537,8 +549,8 @@ function ProfilePageContent() {
         </div>
 
         {/* Top-level tabs: Profile | Continue Watching | Watch List */}
-        <div className="mb-6 bg-gray-800/50 rounded-lg p-1">
-          <nav className="flex gap-1">
+        <div className="mb-6 bg-gray-800/50 rounded-lg p-0.5 sm:p-1">
+          <nav className="flex gap-0.5 sm:gap-1 overflow-x-auto">
             {TOP_TABS.map(({ key, label, icon: Icon }) => {
               const active = activeSection === key;
               return (
@@ -549,13 +561,13 @@ function ProfilePageContent() {
                     e.preventDefault();
                     setSection(key);
                   }}
-                  className={`relative flex items-center gap-2 px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-1.5 sm:gap-2 px-2.5 py-2 sm:px-4 sm:py-3 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
                     active
                       ? 'text-blue-400 bg-gray-800'
                       : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-blue-400' : ''}`} />
+                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${active ? 'text-blue-400' : ''}`} />
                   {label}
                   {active && (
                     <span className="absolute left-2 right-2 bottom-0 h-0.5 bg-blue-500 rounded-full" />
@@ -573,7 +585,7 @@ function ProfilePageContent() {
               <Heart className="w-5 h-5 text-gray-400" />
               Watch List
             </h2>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {SUB_TABS.map(({ key, label }) => {
                 const count =
                   key === 'all' ? allItems.length : itemsByTab[key as ListStatus]?.length ?? 0;
@@ -583,7 +595,7 @@ function ProfilePageContent() {
                     key={key}
                     type="button"
                     onClick={() => setSubTab(key)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                       active
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
