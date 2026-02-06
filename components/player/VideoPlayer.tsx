@@ -688,8 +688,8 @@ export function VideoPlayer({
           }}
           onTouchMove={() => resetHideTimer()}
         >
-          <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center pointer-events-none">
-            <Play className="w-10 h-10 text-white ml-1" />
+          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center pointer-events-none">
+            <Play className="w-7 h-7 sm:w-10 sm:h-10 text-white ml-0.5 sm:ml-1" />
           </div>
         </div>
       )}
@@ -714,17 +714,17 @@ export function VideoPlayer({
                 resetHideTimer();
               }
             }}
-            className="pointer-events-auto w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors"
+            className="pointer-events-auto w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors"
             aria-label="Pause"
           >
-            <Pause className="w-10 h-10 text-white" />
+            <Pause className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
           </button>
         </div>
       )}
 
       {/* Skip Intro / Skip Outro overlays (AniWatch-style) - right side of video */}
       {(showSkipIntro || showSkipOutro) && (showControls || !isPlaying) && (
-        <div className="absolute right-4 bottom-20 z-[3] flex flex-col gap-2">
+        <div className="absolute right-2 sm:right-4 bottom-16 sm:bottom-20 z-[3] flex flex-col gap-1.5 sm:gap-2">
           {showSkipIntro && (
             <button
               type="button"
@@ -732,7 +732,7 @@ export function VideoPlayer({
                 e.stopPropagation();
                 skipIntro();
               }}
-              className="px-4 py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-sm shadow-lg transition-colors flex items-center gap-2"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-xs sm:text-sm shadow-lg transition-colors flex items-center gap-2"
               aria-label="Skip intro"
             >
               Skip Intro
@@ -745,7 +745,7 @@ export function VideoPlayer({
                 e.stopPropagation();
                 skipOutro();
               }}
-              className="px-4 py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-sm shadow-lg transition-colors flex items-center gap-2"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 rounded bg-white/90 hover:bg-white text-gray-900 font-semibold text-xs sm:text-sm shadow-lg transition-colors flex items-center gap-2"
               aria-label="Skip outro / Next episode"
             >
               Next Episode
@@ -757,7 +757,7 @@ export function VideoPlayer({
       {/* Controls - z-10 so above tap overlay; overflow-visible when settings open so menu is not clipped */}
       <div
         className={cn(
-          'absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 transition-opacity duration-300',
+          'absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 sm:p-4 transition-opacity duration-300',
           showControls || !isPlaying || currentTime === 0 || isLoading ? 'opacity-100' : 'opacity-0 pointer-events-none',
           showSettings && 'overflow-visible'
         )}
@@ -833,14 +833,14 @@ export function VideoPlayer({
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
               className="text-white hover:text-blue-400 transition-colors"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+              {isPlaying ? <Pause className="w-4 h-4 sm:w-6 sm:h-6" /> : <Play className="w-4 h-4 sm:w-6 sm:h-6" />}
             </button>
 
             {/* Volume - mute button only on mobile; slider shown on sm+ */}
@@ -850,7 +850,7 @@ export function VideoPlayer({
                 className="text-white hover:text-blue-400 transition-colors shrink-0"
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
-                {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+                {isMuted ? <VolumeX className="w-4 h-4 sm:w-6 sm:h-6" /> : <Volume2 className="w-4 h-4 sm:w-6 sm:h-6" />}
               </button>
               <input
                 type="range"
@@ -865,12 +865,12 @@ export function VideoPlayer({
             </div>
 
             {/* Time */}
-            <div className="text-white text-sm">
+            <div className="text-white text-xs sm:text-sm">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Skip Outro / Next Episode - in control bar when in outro range (Skip Intro uses floating overlay only) */}
             {showSkipOutro && (
               <button
@@ -882,7 +882,7 @@ export function VideoPlayer({
                 aria-label="Next episode"
                 title="Next episode"
               >
-                <SkipForward className="w-5 h-5 shrink-0" />
+                <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                 <span className="hidden sm:inline">Next Episode</span>
               </button>
             )}
@@ -894,7 +894,7 @@ export function VideoPlayer({
               aria-label="Rewind 10 seconds"
               title="Rewind 10 seconds"
             >
-              <RotateCcw className="w-6 h-6" />
+              <RotateCcw className="w-4 h-4 sm:w-6 sm:h-6" />
               <span className="text-xs font-medium hidden sm:inline">10</span>
             </button>
 
@@ -905,7 +905,7 @@ export function VideoPlayer({
               aria-label="Forward 10 seconds"
               title="Forward 10 seconds"
             >
-              <RotateCw className="w-6 h-6" />
+              <RotateCw className="w-4 h-4 sm:w-6 sm:h-6" />
               <span className="text-xs font-medium hidden sm:inline">10</span>
             </button>
 
@@ -915,7 +915,7 @@ export function VideoPlayer({
                 onClick={() => setShowSettings(!showSettings)}
                 className="text-white hover:text-blue-400 transition-colors"
               >
-                <Settings className="w-6 h-6" />
+                <Settings className="w-4 h-4 sm:w-6 sm:h-6" />
               </button>
 
               {/* Settings Menu - fixed max-height for mobile, scroll inside, never clipped */}
@@ -1028,7 +1028,7 @@ export function VideoPlayer({
               onClick={toggleFullscreen}
               className="text-white hover:text-blue-400 transition-colors"
             >
-              <Maximize className="w-6 h-6" />
+              <Maximize className="w-4 h-4 sm:w-6 sm:h-6" />
             </button>
           </div>
         </div>
