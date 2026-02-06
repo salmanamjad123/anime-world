@@ -25,6 +25,8 @@ interface VideoPlayerProps {
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
+  /** Start time of intro/OP in seconds. Default 0 if not provided. */
+  introStartSeconds?: number;
   /** End time of intro/OP in seconds. Only show "Skip Intro" when provided. */
   introEndSeconds?: number;
   /** Length of outro/ED in seconds. Only show "Skip Outro" when provided. */
@@ -40,6 +42,7 @@ export function VideoPlayer({
   onTimeUpdate,
   onEnded,
   autoPlay = false,
+  introStartSeconds,
   introEndSeconds,
   outroLengthSeconds,
 }: VideoPlayerProps) {
@@ -451,10 +454,14 @@ export function VideoPlayer({
   };
 
   // Intro/outro skip - only show when data is available from API
-  const hasIntro = introEndSeconds != null && introEndSeconds > 0;
+  const introStart = introStartSeconds ?? 0;
+  const hasIntro = introEndSeconds != null && introEndSeconds > introStart;
   const hasOutro = outroLengthSeconds != null && outroLengthSeconds > 0;
   const showSkipIntro =
-    hasIntro && duration > introEndSeconds && currentTime >= 5 && currentTime < introEndSeconds;
+    hasIntro &&
+    duration > introEndSeconds &&
+    currentTime >= introStart + 5 &&
+    currentTime < introEndSeconds;
   const showSkipOutro =
     hasOutro &&
     duration > outroLengthSeconds * 2 &&
@@ -770,11 +777,13 @@ export function VideoPlayer({
                 top: '50%',
                 transform: 'translateY(-50%)',
                 background: (() => {
-                  const introPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
+                  const introStartPct = hasIntro ? (introStart / duration) * 100 : 0;
+                  const introEndPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
                   const outroStartPct = hasOutro ? Math.max(0, ((duration - outroLengthSeconds!) / duration) * 100) : 100;
                   const parts: string[] = [];
-                  if (hasIntro) parts.push(`rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%`);
-                  parts.push(`rgb(75, 85, 99) ${introPct}%, rgb(75, 85, 99) ${outroStartPct}%`);
+                  if (hasIntro && introStartPct > 0) parts.push(`rgb(75, 85, 99) 0%, rgb(75, 85, 99) ${introStartPct}%`);
+                  if (hasIntro) parts.push(`rgb(30, 64, 175) ${introStartPct}%, rgb(30, 64, 175) ${introEndPct}%`);
+                  parts.push(`rgb(75, 85, 99) ${introEndPct}%, rgb(75, 85, 99) ${outroStartPct}%`);
                   if (hasOutro) parts.push(`rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%`);
                   return `linear-gradient(to right, ${parts.join(', ')})`;
                 })(),
@@ -796,11 +805,13 @@ export function VideoPlayer({
               className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-lg pointer-events-none"
               style={{
                 background: (() => {
-                  const introPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
+                  const introStartPct = hasIntro ? (introStart / duration) * 100 : 0;
+                  const introEndPct = hasIntro ? Math.min(100, (introEndSeconds! / duration) * 100) : 0;
                   const outroStartPct = hasOutro ? Math.max(0, ((duration - outroLengthSeconds!) / duration) * 100) : 100;
                   const parts: string[] = [];
-                  if (hasIntro) parts.push(`rgb(30, 64, 175) 0%, rgb(30, 64, 175) ${introPct}%`);
-                  parts.push(`transparent ${introPct}%, transparent ${outroStartPct}%`);
+                  if (hasIntro && introStartPct > 0) parts.push(`transparent 0%, transparent ${introStartPct}%`);
+                  if (hasIntro) parts.push(`rgb(30, 64, 175) ${introStartPct}%, rgb(30, 64, 175) ${introEndPct}%`);
+                  parts.push(`transparent ${introEndPct}%, transparent ${outroStartPct}%`);
                   if (hasOutro) parts.push(`rgb(30, 64, 175) ${outroStartPct}%, rgb(30, 64, 175) 100%`);
                   return `linear-gradient(to right, ${parts.join(', ')})`;
                 })(),
