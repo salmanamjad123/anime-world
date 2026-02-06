@@ -12,7 +12,7 @@ import {
   sendPasswordResetEmail,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './config';
 import type { User } from '@/types';
 
@@ -32,17 +32,7 @@ export async function signUp(email: string, password: string, displayName?: stri
     await updateProfile(firebaseUser, { displayName });
   }
 
-  // Create user document in Firestore (omit undefined - Firestore rejects it)
-  await setDoc(doc(db, 'users', firebaseUser.uid), {
-    uid: firebaseUser.uid,
-    email: firebaseUser.email!,
-    ...(displayName || firebaseUser.displayName
-      ? { displayName: displayName || firebaseUser.displayName }
-      : {}),
-    ...(firebaseUser.photoURL ? { photoURL: firebaseUser.photoURL } : {}),
-    emailVerified: false,
-    createdAt: serverTimestamp(),
-  });
+  // Do NOT create user document here – created only after email verification in verify-code API
 
   return {
     uid: firebaseUser.uid,
@@ -55,6 +45,7 @@ export async function signUp(email: string, password: string, displayName?: stri
 
 /**
  * Sign in with email and password
+ * Rejects if account is not verified (no user document in Firestore)
  */
 export async function signIn(email: string, password: string): Promise<User> {
   if (!isFirebaseConfigured()) {
@@ -64,20 +55,37 @@ export async function signIn(email: string, password: string): Promise<User> {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
 
-  // Update last login
-  await setDoc(
-    doc(db, 'users', firebaseUser.uid),
-    { lastLogin: serverTimestamp() },
-    { merge: true }
-  );
+  // Only update last login if user doc exists (verified account)
+  const userDocRef = doc(db, 'users', firebaseUser.uid);
+  const userDocSnap = await getDoc(userDocRef);
+  if (!userDocSnap.exists()) {
+    await firebaseSignOut(auth);
+    throw new Error('Please verify your email first. Check your inbox for the verification code.');
+  }
 
+  await updateDoc(userDocRef, { lastLogin: serverTimestamp() });
+
+  const data = userDocSnap.data()!;
   return {
     uid: firebaseUser.uid,
     email: firebaseUser.email!,
-    displayName: firebaseUser.displayName || undefined,
-    photoURL: firebaseUser.photoURL || undefined,
-    createdAt: new Date(),
+    displayName: data.displayName ?? firebaseUser.displayName ?? undefined,
+    photoURL: data.photoURL ?? firebaseUser.photoURL ?? undefined,
+    createdAt: data.createdAt?.toDate?.() ?? new Date(),
   };
+}
+
+/**
+ * Update user display name
+ */
+export async function updateUserDisplayName(displayName: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    throw new Error('Firebase is not configured');
+  }
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) throw new Error('Not authenticated');
+  await updateProfile(firebaseUser, { displayName });
+  await updateDoc(doc(db, 'users', firebaseUser.uid), { displayName });
 }
 
 /**

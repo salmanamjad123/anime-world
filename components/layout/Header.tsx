@@ -34,7 +34,7 @@ export function Header() {
   const [searchResults, setSearchResults] = useState<Anime[]>([]);
   const [isSimilarAnime, setIsSimilarAnime] = useState(false); // true when showing trending fallback
   const [isSearching, setIsSearching] = useState(false);
-  const { isOpen: authModalOpen, openAuthModal, closeAuthModal } = useAuthModalStore();
+  const { isOpen: authModalOpen, defaultView: authModalDefaultView, openAuthModal, closeAuthModal } = useAuthModalStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
@@ -341,7 +341,7 @@ export function Header() {
                           <span>Profile</span>
                         </Link>
                         <Link
-                          href={ROUTES.HISTORY}
+                          href={ROUTES.PROFILE_SECTION('watching')}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
                         >
@@ -349,7 +349,7 @@ export function Header() {
                           <span>Continue Watching</span>
                         </Link>
                         <Link
-                          href={ROUTES.WATCHLIST}
+                          href={ROUTES.PROFILE_SECTION('watchlist')}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
                         >
@@ -374,7 +374,7 @@ export function Header() {
               ) : (
                 <button
                   type="button"
-                  onClick={openAuthModal}
+                  onClick={() => openAuthModal()}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
                 >
                   <LogIn className="w-4 h-4" />
@@ -473,7 +473,11 @@ export function Header() {
     </header>
 
     <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-    <AuthModal isOpen={authModalOpen} onClose={closeAuthModal} />
+    <AuthModal
+      isOpen={authModalOpen}
+      onClose={closeAuthModal}
+      defaultView={authModalDefaultView ?? 'login'}
+    />
     </>
   );
 }

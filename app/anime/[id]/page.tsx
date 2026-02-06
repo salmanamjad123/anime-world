@@ -248,8 +248,8 @@ export default function AnimeDetailPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={openAuthModal}
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-lg font-medium rounded-lg bg-gray-800 border border-gray-600 hover:border-gray-500 text-white hover:bg-gray-700 transition-colors w-full sm:w-auto"
+                    onClick={() => openAuthModal()}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-lg font-medium rounded-lg bg-gray-600 border border-gray-500 hover:bg-gray-500 hover:border-gray-400 text-white transition-colors w-full sm:w-auto"
                   >
                     <Plus className="w-5 h-5 shrink-0" />
                     Add to List

@@ -1,10 +1,10 @@
 /**
  * POST /api/auth/verify-code
- * Verifies the 6-digit code and marks user email as verified in Firestore
+ * Verifies the 6-digit code and creates user document in Firestore (account is created only after verification)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminFirestore } from '@/lib/firebase/admin';
+import { getAdminFirestore, getAdminAuth } from '@/lib/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,18 +69,44 @@ export async function POST(request: NextRequest) {
     // Delete used code
     await docRef.delete();
 
-    // Update user document if exists (users/{uid} has emailVerified)
-    const usersSnapshot = await db
-      .collection('users')
-      .where('email', '==', normalizedEmail)
-      .limit(1)
-      .get();
+    // Create user document in Firestore only after verification
+    const adminAuth = getAdminAuth();
+    if (!adminAuth) {
+      return NextResponse.json(
+        { error: 'Auth service not configured' },
+        { status: 503 }
+      );
+    }
 
-    if (!usersSnapshot.empty) {
-      const userDoc = usersSnapshot.docs[0];
-      await userDoc.ref.update({
+    let firebaseUser;
+    try {
+      firebaseUser = await adminAuth.getUserByEmail(normalizedEmail);
+    } catch {
+      return NextResponse.json(
+        { error: 'User not found. Please register first.' },
+        { status: 400 }
+      );
+    }
+
+    const userRef = db.collection('users').doc(firebaseUser.uid);
+    const userSnap = await userRef.get();
+
+    if (userSnap.exists) {
+      // Already verified (doc exists) - just update emailVerified
+      await userRef.update({
         emailVerified: true,
         emailVerifiedAt: new Date(),
+      });
+    } else {
+      // First verification - create user document
+      await userRef.set({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email!,
+        ...(firebaseUser.displayName ? { displayName: firebaseUser.displayName } : {}),
+        ...(firebaseUser.photoURL ? { photoURL: firebaseUser.photoURL } : {}),
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        createdAt: new Date(),
       });
     }
 

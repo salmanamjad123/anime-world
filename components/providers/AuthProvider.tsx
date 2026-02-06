@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useUserStore } from '@/store/useUserStore';
-import { onAuthChange } from '@/lib/firebase/auth';
+import { onAuthChange, getUserDocument } from '@/lib/firebase/auth';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { getWatchlist, getWatchHistory } from '@/lib/firebase/firestore';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
@@ -26,13 +26,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       if (firebaseUser) {
-        // User is signed in
+        // User doc only exists after email verification – treat unverified as not logged in
+        const userDoc = await getUserDocument(firebaseUser.uid);
+        if (!userDoc) {
+          clearUser();
+          return;
+        }
+
         const user = {
           uid: firebaseUser.uid,
           email: firebaseUser.email!,
-          displayName: firebaseUser.displayName || undefined,
-          photoURL: firebaseUser.photoURL || undefined,
-          createdAt: new Date(),
+          displayName: userDoc.displayName ?? firebaseUser.displayName ?? undefined,
+          photoURL: userDoc.photoURL ?? firebaseUser.photoURL ?? undefined,
+          createdAt: userDoc.createdAt ?? new Date(),
+          emailVerified: userDoc.emailVerified ?? false,
         };
         setUser(user);
 
@@ -42,14 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             getWatchlist(firebaseUser.uid),
             getWatchHistory(firebaseUser.uid),
           ]);
-          
           syncWatchlist(watchlist);
           syncHistory(history);
         } catch (error) {
           console.error('Failed to sync user data:', error);
         }
       } else {
-        // User is signed out
         clearUser();
       }
     });

@@ -5,10 +5,12 @@
 
 'use client';
 
+import { useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useUserStore } from '@/store/useUserStore';
+import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { clearWatchHistory, removeFromWatchHistory } from '@/lib/firebase/firestore';
 import { ROUTES } from '@/constants/routes';
 import { Play, Trash2 } from 'lucide-react';
@@ -16,10 +18,32 @@ import { useRouter } from 'next/navigation';
 
 export default function ContinueWatchingPage() {
   const router = useRouter();
-  const { user } = useUserStore();
+  const { user, isLoading } = useUserStore();
+  const { openAuthModal } = useAuthModalStore();
   const { history, clearHistory, removeFromHistory } = useHistoryStore();
 
   const continueWatching = history.filter((item) => !item.completed && item.percentage < 90);
+
+  useEffect(() => {
+    if (!user && !isLoading) router.replace(ROUTES.HOME);
+    else if (user && !isLoading && !user.emailVerified) {
+      router.replace(ROUTES.HOME);
+      openAuthModal('verify');
+    }
+  }, [user, isLoading, router, openAuthModal]);
+
+  if ((!user || !user.emailVerified) && !isLoading) return null;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+        </div>
+      </div>
+    );
+  }
 
   if (continueWatching.length === 0) {
     return (

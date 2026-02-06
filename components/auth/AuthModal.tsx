@@ -5,12 +5,13 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, LogIn, UserPlus, Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { signIn, signUp, resetPassword } from '@/lib/firebase/auth';
+import { useUserStore } from '@/store/useUserStore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { cn } from '@/lib/utils';
 
@@ -23,8 +24,26 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalProps) {
+  const { user } = useUserStore();
   const [view, setView] = useState<AuthView>(defaultView);
   const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    if (isOpen && defaultView) {
+      setView(defaultView);
+      if (defaultView === 'verify' && user?.email) {
+        setEmail(user.email);
+        // Auto-send verification code when opening for unverified user
+        fetch('/api/auth/send-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email }),
+        })
+          .then((res) => res.ok && setSuccess('Verification code sent to your email.'))
+          .catch(() => {});
+      }
+    }
+  }, [isOpen, defaultView, user?.email]);
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -69,7 +88,25 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
       handleClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
-      setError(msg.replace('Firebase: ', '').replace('auth/', ''));
+      const cleanMsg = msg.replace('Firebase: ', '').replace('auth/', '');
+      if (msg.includes('verify your email first')) {
+        // Unverified user: switch to verify view and send new code
+        setView('verify');
+        const res = await fetch('/api/auth/send-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() }),
+        });
+        if (res.ok) {
+          setError('');
+          setSuccess('We sent a new verification code to your email.');
+        } else {
+          const data = await res.json();
+          setError(data.error || 'Failed to send code. Please try again.');
+        }
+      } else {
+        setError(cleanMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -86,9 +123,13 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
       setError('Password must be at least 6 characters.');
       return;
     }
+    if (!displayName.trim()) {
+      setError('Please enter a display name.');
+      return;
+    }
     setIsLoading(true);
     try {
-      await signUp(email.trim(), password, displayName.trim() || undefined);
+      await signUp(email.trim(), password, displayName.trim());
       // Send verification code
       const res = await fetch('/api/auth/send-verification', {
         method: 'POST',
@@ -124,6 +165,8 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Verification failed');
       handleClose();
+      // Reload so AuthProvider re-runs and picks up the new Firestore user doc
+      window.location.reload();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Invalid code. Please try again.');
     } finally {
@@ -337,7 +380,7 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
                     </div>
                     <div>
                       <label htmlFor="reg-name" className="block text-sm font-medium text-gray-300 mb-2">
-                        Display name <span className="text-gray-500">(optional)</span>
+                        Display name
                       </label>
                       <div className="relative">
                         <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -349,6 +392,7 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
                           onChange={(e) => setDisplayName(e.target.value)}
                           className="pl-10"
                           autoComplete="name"
+                          required
                         />
                       </div>
                     </div>

@@ -14,6 +14,9 @@ export const ROUTES = {
   WATCHLIST: '/watchlist',
   HISTORY: '/history',
   PROFILE: '/profile',
+  PROFILE_TAB: (tab: string) => `/profile?tab=${tab}`,
+  PROFILE_SECTION: (section: string, tab?: string) =>
+    tab ? `/profile?section=${section}&tab=${tab}` : `/profile?section=${section}`,
   SETTINGS: '/settings',
 } as const;
 

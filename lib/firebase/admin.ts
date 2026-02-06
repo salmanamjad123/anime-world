@@ -47,6 +47,11 @@ export function getAdminFirestore(): Firestore | null {
   return firestore;
 }
 
+export function getAdminAuth() {
+  const adm = getAdmin();
+  return adm?.auth() ?? null;
+}
+
 export function isFirebaseAdminConfigured(): boolean {
   return !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 }

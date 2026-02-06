@@ -5,14 +5,18 @@
 
 import { create } from 'zustand';
 
+export type AuthModalView = 'login' | 'register' | 'forgot' | 'verify';
+
 interface AuthModalStore {
   isOpen: boolean;
-  openAuthModal: () => void;
+  defaultView: AuthModalView | undefined;
+  openAuthModal: (view?: AuthModalView) => void;
   closeAuthModal: () => void;
 }
 
 export const useAuthModalStore = create<AuthModalStore>((set) => ({
   isOpen: false,
-  openAuthModal: () => set({ isOpen: true }),
-  closeAuthModal: () => set({ isOpen: false }),
+  defaultView: undefined,
+  openAuthModal: (view) => set({ isOpen: true, defaultView: view }),
+  closeAuthModal: () => set({ isOpen: false, defaultView: undefined }),
 }));

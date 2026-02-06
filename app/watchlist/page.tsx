@@ -5,15 +5,44 @@
 
 'use client';
 
+import { useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { AnimeCard } from '@/components/anime/AnimeCard';
 import { Button } from '@/components/ui/Button';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
+import { useUserStore } from '@/store/useUserStore';
+import { useAuthModalStore } from '@/store/useAuthModalStore';
+import { useRouter } from 'next/navigation';
+import { ROUTES } from '@/constants/routes';
 import { Heart, Trash2 } from 'lucide-react';
 
 export default function WatchlistPage() {
+  const router = useRouter();
+  const { user, isLoading } = useUserStore();
+  const { openAuthModal } = useAuthModalStore();
   const { getItemsByStatus, removeFromList, clearByStatus } = useWatchlistStore();
   const planToWatch = getItemsByStatus('plan-to-watch');
+
+  useEffect(() => {
+    if (!user && !isLoading) router.replace(ROUTES.HOME);
+    else if (user && !isLoading && !user.emailVerified) {
+      router.replace(ROUTES.HOME);
+      openAuthModal('verify');
+    }
+  }, [user, isLoading, router, openAuthModal]);
+
+  if ((!user || !user.emailVerified) && !isLoading) return null;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+        </div>
+      </div>
+    );
+  }
 
   if (planToWatch.length === 0) {
     return (
