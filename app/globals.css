@@ -58,11 +58,17 @@ body {
   background-size: 1000px 100%;
 }
 
-/* Subtitle position: move up from bottom to avoid overlap with controls */
+/* Subtitle styling: no black background, text shadow for readability */
 .video-subtitles::cue {
-  transform: translateY(-32px);
+  background: transparent !important;
+  transform: translateY(-10px);
+  text-shadow:
+    1px 1px 2px black,
+    -1px -1px 2px black,
+    0 0 4px black;
 }
-/* WebKit: move subtitle container up */
-.video-player-main video::-webkit-media-text-track-container {
-  bottom: 2.5rem;
+/* WebKit/Chrome: move subtitle container up from bottom */
+.video-player-main video::-webkit-media-text-track-container,
+video.video-subtitles::-webkit-media-text-track-container {
+  bottom: 0.75rem;
 }

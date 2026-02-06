@@ -610,7 +610,7 @@ export function VideoPlayer({
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full aspect-video bg-black rounded-lg group',
+        'relative w-full aspect-video bg-black rounded-lg group video-player-main',
         showSettings ? 'overflow-visible' : 'overflow-hidden'
       )}
     >
