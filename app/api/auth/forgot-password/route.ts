@@ -8,8 +8,6 @@ import { Resend } from 'resend';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { SITE_NAME } from '@/constants/site';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 function isResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY?.trim();
 }
@@ -67,6 +65,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const resend = new Resend(process.env.RESEND_API_KEY!);
     const { error } = await resend.emails.send({
       from: `${SITE_NAME} <noreply@animevillage.org>`,
       to: normalizedEmail,
