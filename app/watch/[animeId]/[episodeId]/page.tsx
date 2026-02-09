@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
@@ -87,6 +87,12 @@ export default function WatchPage() {
   const showStreamDown = (isFallbackEpisode && resolvedEpisodeId === null) || streamError || (!videoSource && !isStreamLoading && !resolvingFallback);
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
+
+  // Resume from URL ?t= only when coming from Continue Watching
+  const searchParams = useSearchParams();
+  const tParam = searchParams.get('t');
+  const initialTime = tParam ? Math.max(0, parseInt(tParam, 10) || 0) : 0;
+
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
@@ -296,6 +302,7 @@ export default function WatchPage() {
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEpisodeEnd}
                   autoPlay
+                  initialTime={initialTime}
                   introStartSeconds={
                     streamData?.intro && streamData.intro.end > streamData.intro.start
                       ? streamData.intro.start

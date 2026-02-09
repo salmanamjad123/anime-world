@@ -65,8 +65,13 @@ export default function ContinueWatchingPage() {
     );
   }
 
-  const handleContinue = (item: { animeId: string; episodeId: string }) => {
-    router.push(ROUTES.WATCH(item.animeId, item.episodeId));
+  const handleContinue = (item: { animeId: string; episodeId: string; timestamp?: number; percentage?: number }) => {
+    const url =
+      ROUTES.WATCH(item.animeId, item.episodeId) +
+      (item.timestamp && item.timestamp > 0 && (item.percentage ?? 100) < 90
+        ? `?t=${Math.round(item.timestamp)}`
+        : '');
+    router.push(url);
   };
 
   return (

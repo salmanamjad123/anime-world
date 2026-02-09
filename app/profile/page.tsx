@@ -299,7 +299,10 @@ function ProfilePageContent() {
               className="group relative bg-gray-800/50 rounded-xl overflow-hidden border border-gray-700/50 hover:border-blue-500/50 transition-all"
             >
               <Link
-                href={ROUTES.WATCH(item.animeId, item.episodeId)}
+                href={
+                  ROUTES.WATCH(item.animeId, item.episodeId) +
+                  (item.timestamp > 0 && item.percentage < 90 ? `?t=${Math.round(item.timestamp)}` : '')
+                }
                 className="flex gap-4 p-4"
               >
                 <div className="relative w-20 h-28 sm:w-24 sm:h-32 shrink-0 rounded-lg overflow-hidden bg-gray-700">
