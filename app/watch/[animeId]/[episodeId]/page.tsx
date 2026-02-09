@@ -22,6 +22,8 @@ import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
+import { CommentsSection } from '@/components/comments/CommentsSection';
+import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 
 export default function WatchPage() {
   const params = useParams();
@@ -423,7 +425,7 @@ export default function WatchPage() {
             )}
           </div>
 
-          {/* Sidebar - Episode List */}
+          {/* Sidebar - Episode List (mobile: appears before comments) */}
           <div className="lg:col-span-1 min-w-0">
             <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 lg:sticky lg:top-20 min-h-[200px]">
               <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Episodes</h3>
@@ -466,6 +468,26 @@ export default function WatchPage() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Comments + Related anime sidebar - side by side on desktop, aligned with video grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 mt-6 lg:items-stretch">
+          <div className="lg:col-span-3 min-w-0 lg:h-full">
+            <CommentsSection
+              animeId={animeId}
+              episodeId={episodeId}
+              episodes={episodes}
+            />
+          </div>
+          <div className="lg:col-span-1 lg:h-full">
+            <div className="lg:sticky lg:top-20 lg:h-full bg-gray-800/50 rounded-lg p-4">
+              <RelatedAnimeSidebar
+                anime={trendingAnime.slice(0, 8)}
+                isLoading={isTrendingLoading}
+                title="Spotlight"
+              />
             </div>
           </div>
         </div>
