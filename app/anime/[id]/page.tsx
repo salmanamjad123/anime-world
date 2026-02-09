@@ -222,9 +222,17 @@ export default function AnimeDetailPage() {
                 </div>
               )}
 
-              {/* Action Buttons: stack on mobile, row on sm+ */}
+              {/* Action Buttons: stack on mobile, row on sm+ - show loading until episodes ready */}
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
-                <Button variant="primary" size="lg" onClick={handlePlayFirst} className="w-full sm:w-auto">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={handlePlayFirst}
+                  disabled={isEpisodesLoading}
+                  isLoading={isEpisodesLoading}
+                  loadingVariant="skeleton"
+                  className="w-full sm:w-auto"
+                >
                   <Play className="w-5 h-5 mr-2" />
                   Play Now
                 </Button>
@@ -235,15 +243,24 @@ export default function AnimeDetailPage() {
                     onRemove={handleListRemove}
                     size="lg"
                     className="w-full sm:w-auto"
+                    disabled={isEpisodesLoading}
+                    loading={isEpisodesLoading}
                   />
                 ) : (
                   <button
                     type="button"
+                    disabled={isEpisodesLoading}
                     onClick={() => openAuthModal()}
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-lg font-medium rounded-lg bg-gray-600 border border-gray-500 hover:bg-gray-500 hover:border-gray-400 text-white transition-colors w-full sm:w-auto"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 text-lg font-medium rounded-lg bg-gray-600 border border-gray-500 hover:bg-gray-500 hover:border-gray-400 text-white transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px]"
                   >
-                    <Plus className="w-5 h-5 shrink-0" />
-                    Add to List
+                    {isEpisodesLoading ? (
+                      <span className="inline-block h-5 w-28 bg-white/30 rounded animate-pulse" aria-hidden />
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5 shrink-0" />
+                        Add to List
+                      </>
+                    )}
                   </button>
                 )}
               </div>

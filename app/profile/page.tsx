@@ -77,9 +77,9 @@ function WatchListCard({
   }, []);
 
   return (
-    <div ref={ref} className="relative group bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all">
-      <Link href={ROUTES.ANIME_DETAIL(item.animeId)} className="block">
-        <div className="relative aspect-[2/3]">
+    <div ref={ref} className="relative group bg-gray-800 rounded-lg overflow-visible hover:ring-2 hover:ring-blue-500 transition-all">
+      <Link href={ROUTES.ANIME_DETAIL(item.animeId)} className="block overflow-hidden rounded-lg">
+        <div className="relative aspect-[2/3] overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
           <button
@@ -101,7 +101,7 @@ function WatchListCard({
         </div>
       </Link>
       {open && (
-        <div className="absolute top-10 right-2 z-50 w-44 py-1 rounded-lg bg-gray-800 border border-gray-700 shadow-xl">
+        <div className="absolute top-10 left-2 right-2 sm:left-auto sm:right-2 sm:w-44 z-50 py-1 rounded-lg bg-gray-800 border border-gray-700 shadow-xl min-w-[10rem]">
           {LIST_OPTIONS.map((opt) => {
             const isSelected = currentStatus === opt.value;
             return (
@@ -215,7 +215,7 @@ function ProfilePageContent() {
   );
 
   const renderGrid = (items: { animeId: string; title: string; image: string; addedAt: Date; status?: ListStatus }[]) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 overflow-visible">
       {items.map((item) => (
         <WatchListCard
           key={item.animeId}

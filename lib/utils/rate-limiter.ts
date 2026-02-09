@@ -60,6 +60,20 @@ export const rateLimiter = new RateLimiter(
   parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000')
 );
 
+// Auth routes: stricter limits per IP
+const AUTH_FORGOT_PASSWORD_LIMIT = 3;
+const AUTH_FORGOT_PASSWORD_WINDOW = 60 * 60 * 1000; // 1 hour
+const AUTH_SEND_VERIFICATION_LIMIT = 5;
+const AUTH_SEND_VERIFICATION_WINDOW = 60 * 60 * 1000; // 1 hour
+const AUTH_VERIFY_CODE_LIMIT = 10;
+const AUTH_VERIFY_CODE_WINDOW = 15 * 60 * 1000; // 15 min
+
+export const authRateLimiters = {
+  forgotPassword: new RateLimiter(AUTH_FORGOT_PASSWORD_LIMIT, AUTH_FORGOT_PASSWORD_WINDOW),
+  sendVerification: new RateLimiter(AUTH_SEND_VERIFICATION_LIMIT, AUTH_SEND_VERIFICATION_WINDOW),
+  verifyCode: new RateLimiter(AUTH_VERIFY_CODE_LIMIT, AUTH_VERIFY_CODE_WINDOW),
+};
+
 // Helper to get client identifier from request
 export function getClientIdentifier(request: Request): string {
   // Try to get IP from various headers
