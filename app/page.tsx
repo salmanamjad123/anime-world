@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
+import { ScheduleSection } from '@/components/schedule/ScheduleSection';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
 
@@ -69,8 +70,11 @@ export default function Home() {
           title="Recommended for you"
           anime={trendingAnime.slice(0, 12)}
           isLoading={isTrendingLoading}
-          className="mb-4"
+          className="mb-12"
         />
+
+        {/* Estimated Schedule - last section before footer */}
+        <ScheduleSection />
       </main>
     </div>
   );
