@@ -18,7 +18,6 @@ async function ensureCacheDir() {
     await fs.access(CACHE_DIR);
   } catch {
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    console.log(`✅ Created subtitle cache directory: ${CACHE_DIR}`);
   }
 }
 
@@ -59,10 +58,8 @@ export async function getCachedSubtitle(cacheKey: string): Promise<string | null
   try {
     const filePath = path.join(CACHE_DIR, cacheKey);
     const content = await fs.readFile(filePath, 'utf-8');
-    console.log(`✅ [Cache HIT] Serving cached subtitle: ${cacheKey}`);
     return content;
-  } catch (error) {
-    console.log(`⚠️ [Cache MISS] ${cacheKey}`);
+  } catch {
     return null;
   }
 }
@@ -78,7 +75,6 @@ export async function cacheSubtitle(
     await ensureCacheDir();
     const filePath = path.join(CACHE_DIR, cacheKey);
     await fs.writeFile(filePath, content, 'utf-8');
-    console.log(`✅ [Cache SAVE] Cached subtitle: ${cacheKey}`);
   } catch (error: any) {
     console.error('[Cache Error]:', error.message);
   }
@@ -111,10 +107,6 @@ export async function clearOldCache(daysOld: number = 30): Promise<number> {
         await fs.unlink(filePath);
         deletedCount++;
       }
-    }
-
-    if (deletedCount > 0) {
-      console.log(`🗑️ Cleaned up ${deletedCount} old subtitle cache files`);
     }
 
     return deletedCount;
@@ -194,6 +186,5 @@ export async function bulkCacheSubtitles(
     }
   }
 
-  console.log(`✅ Bulk cached ${successCount}/${subtitles.length} subtitles`);
   return successCount;
 }

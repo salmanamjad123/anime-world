@@ -98,9 +98,7 @@ export async function getStreamingSources(
 ): Promise<StreamSourcesResponse> {
   try {
     const url = `https://api.consumet.org/anime/${provider}/watch/${episodeId}`;
-    
-    console.log(`🎬 [${provider.toUpperCase()}] Fetching REAL stream from:`, url);
-    
+
     const response = await axiosInstance.get(url, { 
       timeout: 10000,
       headers: {
@@ -112,9 +110,6 @@ export async function getStreamingSources(
       throw new Error('No sources in response');
     }
 
-    console.log(`✅ [${provider.toUpperCase()}] Found ${response.data.sources.length} streaming sources`);
-    console.log(`🎥 [${provider.toUpperCase()}] Quality:`, response.data.sources[0]?.quality);
-    
     return {
       headers: response.data.headers || {},
       sources: response.data.sources.map((source: any) => ({
@@ -176,20 +171,13 @@ export async function getStreamingSourcesWithFallback(
   episodeId: string,
   preferredProvider?: string
 ): Promise<StreamSourcesResponse | null> {
-  
-  console.log('═══════════════════════════════════════════════');
-  console.log('🎯 [Stream Fetch] Episode ID:', episodeId);
-  console.log('═══════════════════════════════════════════════');
-  
   // Auto-detect provider from episode ID format
   let detectedProvider: string | null = null;
   
   if (episodeId.includes('?ep=')) {
     detectedProvider = 'hianime'; // HiAnime uses ?ep= format
-    console.log('🔍 [Stream Fetch] Detected HiAnime format (?ep=)');
   } else if (episodeId.includes('-episode-')) {
     detectedProvider = 'gogoanime'; // Gogoanime uses -episode- format
-    console.log('🔍 [Stream Fetch] Detected Gogoanime format (-episode-)');
   }
   
   // Try providers in order
@@ -201,22 +189,12 @@ export async function getStreamingSourcesWithFallback(
     'animepahe',
     'zoro'
   ].filter((p, i, arr) => p && arr.indexOf(p) === i) as string[]; // Remove duplicates and nulls
-  
-  console.log('🔄 [Stream Fetch] Will try providers:', providersToTry.join(', '));
-  console.log('═══════════════════════════════════════════════');
-  
+
   for (const provider of providersToTry) {
     try {
-      console.log(`🎬 [${provider.toUpperCase()}] Attempting to fetch stream...`);
-      
       const sources = await getStreamingSources(episodeId, provider);
-      
+
       if (sources?.sources && sources.sources.length > 0) {
-        console.log('═══════════════════════════════════════════════');
-        console.log(`✅ [${provider.toUpperCase()}] SUCCESS!`);
-        console.log(`✅ [${provider.toUpperCase()}] Found ${sources.sources.length} sources`);
-        console.log(`🎬 [${provider.toUpperCase()}] Ready to play REAL anime!`);
-        console.log('═══════════════════════════════════════════════');
         return sources;
       }
     } catch (error: any) {

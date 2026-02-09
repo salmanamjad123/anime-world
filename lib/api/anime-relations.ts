@@ -340,8 +340,8 @@ export async function searchGogoAnime(title: string): Promise<string | null> {
       // Return the first matching result's ID
       return response.data.results[0].id;
     }
-  } catch (error) {
-    console.log('[Gogoanime Search] Failed for:', title);
+  } catch {
+    // Gogoanime search failed
   }
 
   return null;

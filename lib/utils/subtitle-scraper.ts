@@ -31,8 +31,6 @@ export async function searchAnimeTosho(
   episodeNumber: number
 ): Promise<Subtitle[]> {
   try {
-    console.log(`🔍 [AnimeTosho] Searching: "${animeTitle}" Episode ${episodeNumber}`);
-    
     // Clean anime title for better search results
     const cleanTitle = animeTitle
       .replace(/\([^)]*\)/g, '') // Remove parentheses content
@@ -106,12 +104,6 @@ export async function searchAnimeTosho(
       }
     }
 
-    if (subtitles.length > 0) {
-      console.log(`✅ [AnimeTosho] Found ${subtitles.length} subtitle(s)`);
-    } else {
-      console.log(`⚠️ [AnimeTosho] No subtitles found`);
-    }
-
     return subtitles;
   } catch (error: any) {
     console.error('[AnimeTosho Error]:', error.message);
@@ -129,8 +121,6 @@ export async function searchOpenSubtitles(
   season: number = 1
 ): Promise<Subtitle[]> {
   try {
-    console.log(`🔍 [OpenSubtitles] Searching: "${animeTitle}" S${season}E${episodeNumber}`);
-    
     // This would require OpenSubtitles API key
     // For now, we'll skip this to avoid rate limits
     // Users can add their own API key if needed
@@ -162,8 +152,6 @@ export function convertSrtToVtt(srtContent: string): string {
  */
 export async function downloadAndConvertSubtitle(url: string): Promise<string> {
   try {
-    console.log(`📥 [Subtitle] Downloading: ${url}`);
-    
     const response = await axios.get(url, {
       timeout: 15000,
       responseType: 'text',
@@ -176,17 +164,14 @@ export async function downloadAndConvertSubtitle(url: string): Promise<string> {
 
     // Check if it's SRT format and convert to VTT
     if (url.endsWith('.srt') || content.includes(' --> ') && content.includes(',')) {
-      console.log(`🔄 [Subtitle] Converting SRT to VTT`);
       content = convertSrtToVtt(content);
     }
 
     // If it's ASS format, extract dialogue
     if (url.endsWith('.ass')) {
-      console.log(`🔄 [Subtitle] Converting ASS to VTT`);
       content = convertAssToVtt(content);
     }
 
-    console.log(`✅ [Subtitle] Downloaded and converted`);
     return content;
   } catch (error: any) {
     console.error('[Download Error]:', error.message);

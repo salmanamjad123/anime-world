@@ -39,7 +39,6 @@ class MemoryCache {
       return null;
     }
 
-    console.log(`💾 [Cache HIT] ${key}`);
     return entry.data as T;
   }
 
@@ -53,8 +52,6 @@ class MemoryCache {
       timestamp: Date.now(),
       ttl,
     });
-
-    console.log(`💾 [Cache SET] ${key} (TTL: ${ttl / 1000}s)`);
   }
 
   /**
@@ -62,7 +59,6 @@ class MemoryCache {
    */
   delete(key: string): void {
     this.cache.delete(key);
-    console.log(`💾 [Cache DELETE] ${key}`);
   }
 
   /**
@@ -70,7 +66,6 @@ class MemoryCache {
    */
   clear(): void {
     this.cache.clear();
-    console.log('💾 [Cache CLEAR] All entries cleared');
   }
 
   /**
@@ -98,10 +93,6 @@ class MemoryCache {
           this.cache.delete(key);
           expiredCount++;
         }
-      }
-
-      if (expiredCount > 0) {
-        console.log(`🧹 [Cache Cleanup] Removed ${expiredCount} expired entries`);
       }
     }, 300000); // 5 minutes
   }
@@ -146,7 +137,6 @@ export async function getCached<T>(
   }
 
   // Cache miss - fetch data
-  console.log(`💾 [Cache MISS] ${key} - Fetching...`);
   const data = await fetchFn();
 
   // Store in cache
@@ -163,10 +153,6 @@ export function invalidateCache(pattern: string): void {
   const keysToDelete = stats.keys.filter((key) => key.includes(pattern));
 
   keysToDelete.forEach((key) => memoryCache.delete(key));
-
-  if (keysToDelete.length > 0) {
-    console.log(`💾 [Cache Invalidate] Removed ${keysToDelete.length} entries matching "${pattern}"`);
-  }
 }
 
 export default memoryCache;

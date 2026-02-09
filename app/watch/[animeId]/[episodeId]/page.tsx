@@ -111,7 +111,6 @@ export default function WatchPage() {
       );
       
       if (!hasEnglish && anime && currentEpisode && episodeId) {
-        console.log('🔍 [Watch] No English subtitle from HiAnime, fetching from external sources...');
         try {
           const response = await fetch(
             `/api/subtitles/${episodeId}?title=${encodeURIComponent(title)}&episode=${currentEpisode.number}&animeId=${animeId}&lang=en`
@@ -120,11 +119,8 @@ export default function WatchPage() {
           if (response.ok) {
             const data = await response.json();
             if (data.subtitles && data.subtitles.length > 0) {
-              console.log(`✅ [Watch] Found ${data.subtitles.length} external English subtitle(s)`);
               // Merge with existing subtitles
               combined = [...combined, ...data.subtitles];
-            } else {
-              console.log('⚠️ [Watch] No external English subtitles found');
             }
           }
         } catch (error) {

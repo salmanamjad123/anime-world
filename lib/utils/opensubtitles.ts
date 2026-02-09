@@ -83,8 +83,6 @@ export async function searchOpenSubtitles(
   }
 
   try {
-    console.log(`🔍 [OpenSubtitles] Searching: "${animeTitle}" S${seasonNumber}E${episodeNumber}`);
-
     // Clean anime title for better search results
     const cleanTitle = animeTitle
       .replace(/\([^)]*\)/g, '') // Remove parentheses
@@ -113,7 +111,6 @@ export async function searchOpenSubtitles(
     );
 
     const results = response.data.data || [];
-    console.log(`✅ [OpenSubtitles] Found ${results.length} result(s)`);
 
     if (results.length === 0) {
       return [];
@@ -165,8 +162,6 @@ export async function searchOpenSubtitles(
  */
 async function getDownloadLink(fileId: number, subtitleId: string): Promise<string | null> {
   try {
-    console.log(`📥 [OpenSubtitles] Getting download link for file ${fileId}`);
-
     const response = await axios.post(
       `${OPENSUBTITLES_API_URL}/download`,
       {
@@ -183,9 +178,7 @@ async function getDownloadLink(fileId: number, subtitleId: string): Promise<stri
     );
 
     const downloadUrl = response.data?.link;
-    
     if (downloadUrl) {
-      console.log(`✅ [OpenSubtitles] Got download link`);
       return downloadUrl;
     }
 
@@ -201,8 +194,6 @@ async function getDownloadLink(fileId: number, subtitleId: string): Promise<stri
  */
 export async function downloadOpenSubtitle(url: string): Promise<string> {
   try {
-    console.log(`📥 [OpenSubtitles] Downloading subtitle...`);
-
     const response = await axios.get(url, {
       responseType: 'text',
       timeout: 15000,
@@ -215,11 +206,9 @@ export async function downloadOpenSubtitle(url: string): Promise<string> {
 
     // Convert SRT to VTT if needed
     if (!content.startsWith('WEBVTT')) {
-      console.log(`🔄 [OpenSubtitles] Converting SRT to VTT`);
       content = convertSrtToVtt(content);
     }
 
-    console.log(`✅ [OpenSubtitles] Subtitle downloaded and converted`);
     return content;
 
   } catch (error: any) {

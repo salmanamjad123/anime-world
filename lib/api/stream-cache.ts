@@ -99,7 +99,6 @@ export async function getStreamFromFirestore(
     const data = doc.data() as StreamCacheDocument;
     if (!data?.sources?.length) return null;
 
-    console.log(`💾 [Firestore HIT] ${STREAM_CACHE_COLLECTION}/${docId}`);
     return fromCachedDocument(data);
   } catch (err) {
     console.warn('[Stream Cache] Firestore read failed:', (err as Error).message);
@@ -124,7 +123,6 @@ export async function saveStreamToFirestore(
     const docId = toStreamCacheDocId(episodeId, server, category);
     const docRef = db.collection(STREAM_CACHE_COLLECTION).doc(docId);
     await docRef.set(doc);
-    console.log(`💾 [Firestore SET] ${STREAM_CACHE_COLLECTION}/${docId}`);
   } catch (err) {
     console.warn(
       '[Stream Cache] Firestore write failed:',
@@ -148,7 +146,6 @@ export async function deleteStreamFromFirestore(
     const docId = toStreamCacheDocId(episodeId, server, category);
     const docRef = db.collection(STREAM_CACHE_COLLECTION).doc(docId);
     await docRef.delete();
-    console.log(`💾 [Firestore DELETE] ${STREAM_CACHE_COLLECTION}/${docId}`);
   } catch (err) {
     console.warn(
       '[Stream Cache] Firestore delete failed:',

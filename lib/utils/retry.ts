@@ -41,12 +41,6 @@ export async function retry<T>(
 
       // Calculate delay with exponential backoff
       const delay = delayMs * Math.pow(backoffMultiplier, attempt - 1);
-      
-      console.log(
-        `[Retry] Attempt ${attempt}/${maxAttempts} failed. Retrying in ${delay}ms...`,
-        error instanceof Error ? error.message : error
-      );
-
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
