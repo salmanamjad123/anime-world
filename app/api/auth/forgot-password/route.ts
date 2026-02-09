@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { SITE_NAME } from '@/constants/site';
+import { authRateLimiters, getClientIdentifier } from '@/lib/utils/rate-limiter';
 
 function isResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY?.trim();
@@ -14,6 +15,20 @@ function isResendConfigured(): boolean {
 
 export async function POST(request: NextRequest) {
   try {
+    const clientId = `${getClientIdentifier(request)}:auth:forgot-password`;
+    const { allowed, resetTime } = authRateLimiters.forgotPassword.check(clientId);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const body = await request.json();
     const { email } = body;
 

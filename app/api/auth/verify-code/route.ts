@@ -5,9 +5,24 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth } from '@/lib/firebase/admin';
+import { authRateLimiters, getClientIdentifier } from '@/lib/utils/rate-limiter';
 
 export async function POST(request: NextRequest) {
   try {
+    const clientId = `${getClientIdentifier(request)}:auth:verify-code`;
+    const { allowed, resetTime } = authRateLimiters.verifyCode.check(clientId);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const body = await request.json();
     const { email, code } = body;
 

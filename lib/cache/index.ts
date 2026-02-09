@@ -50,7 +50,6 @@ export async function getCached<T>(
     try {
       const cached = await redis.get(key);
       if (cached) {
-        console.log(`💾 [Redis HIT] ${key}`);
         return JSON.parse(cached) as T;
       }
     } catch (err) {

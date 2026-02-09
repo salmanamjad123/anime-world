@@ -45,8 +45,6 @@ export async function GET(
     const language = url.searchParams.get('lang') || 'en';
     const direct = url.searchParams.get('direct') === 'true'; // Return VTT content directly
 
-    console.log(`📝 [Subtitles API] Request: ${animeTitle} E${episodeNumber} (${language})`);
-
     // STEP 1: Check cache first
     const cacheKey = generateCacheKey(animeId, episodeNumber, language);
     const cachedContent = await getCachedSubtitle(cacheKey);
@@ -116,17 +114,11 @@ export async function GET(
                 }
               }
             }
-            
-            if (tracks.length > 0) {
-              console.log(`✅ [HiAnime] Found ${tracks.length} subtitle(s) on ${server}`);
-            }
           }
-        } catch (error) {
-          console.log(`⚠️ [HiAnime] ${server} failed or timed out`);
+        } catch {
+          // Server failed or timed out
         }
       }
-      
-      console.log(`📝 [HiAnime] Total unique subtitles collected: ${subtitlesFromHiAnime.length}`);
     }
 
     // If HiAnime found subtitles, download and cache them
@@ -168,8 +160,6 @@ export async function GET(
 
     // STEP 3: Try OpenSubtitles (Best for English subtitles!)
     if (animeTitle && language === 'en') {
-      console.log(`🔍 [OpenSubtitles] Searching for English subtitles: "${animeTitle}"`);
-      
       const openSubtitles = await searchOpenSubtitles(
         animeTitle,
         episodeNumber,
@@ -215,8 +205,6 @@ export async function GET(
 
     // STEP 4: Try AnimeTosho and other sources (fallback)
     if (animeTitle) {
-      console.log(`🔍 [Fallback] Searching AnimeTosho for "${animeTitle}"`);
-      
       const externalSubtitles = await fetchSubtitlesMultiSource(
         animeTitle,
         episodeNumber
@@ -260,8 +248,6 @@ export async function GET(
     }
 
     // STEP 5: No subtitles found - generate default message
-    console.log(`⚠️ [Subtitles] No external subtitles found`);
-    
     const defaultContent = generateDefaultSubtitle(
       'No external subtitles available. Subtitles may be embedded in the video.'
     );

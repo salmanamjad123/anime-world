@@ -29,6 +29,7 @@ interface AddToListDropdownProps {
   onSelect: (status: ListStatus) => void;
   onRemove?: () => void;
   disabled?: boolean;
+  loading?: boolean;
   className?: string;
   /** Match Button size for height alignment (e.g. when next to Play Now) */
   size?: 'sm' | 'md' | 'lg';
@@ -39,6 +40,7 @@ export function AddToListDropdown({
   onSelect,
   onRemove,
   disabled,
+  loading,
   className,
   size = 'md',
 }: AddToListDropdownProps) {
@@ -64,7 +66,7 @@ export function AddToListDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        disabled={disabled}
+        disabled={disabled || loading}
         className={cn(
           'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
           'bg-gray-600 border border-gray-500 hover:bg-gray-500 hover:border-gray-400',
@@ -73,11 +75,17 @@ export function AddToListDropdown({
           SIZE_CLASSES[size]
         )}
       >
-        <Plus className={cn('shrink-0', size === 'lg' ? 'w-5 h-5' : 'w-4 h-4')} />
-        {buttonLabel}
-        <ChevronDown
-          className={cn('shrink-0 transition-transform', size === 'lg' ? 'w-5 h-5' : 'w-4 h-4', open && 'rotate-180')}
-        />
+        {loading ? (
+          <span className={cn('inline-block bg-white/30 rounded animate-pulse', size === 'lg' ? 'h-5 w-28' : 'h-4 w-24')} aria-hidden />
+        ) : (
+          <>
+            <Plus className={cn('shrink-0', size === 'lg' ? 'w-5 h-5' : 'w-4 h-4')} />
+            {buttonLabel}
+            <ChevronDown
+              className={cn('shrink-0 transition-transform', size === 'lg' ? 'w-5 h-5' : 'w-4 h-4', open && 'rotate-180')}
+            />
+          </>
+        )}
       </button>
 
       {open && (

@@ -92,7 +92,6 @@ export async function searchAnimeMultiProvider(
     }
     const match = await findHiAnimeMatch(animeTitle, isDub);
     if (match) {
-      console.log(`✅ [HiAnime API] Found: ${match.id}`);
       return { provider: 'hianime', id: match.id, title: match.name };
     }
     return null;
@@ -114,12 +113,6 @@ export async function getReliableEpisodes(
   episodeCount: number,
   isDub: boolean = false
 ): Promise<EpisodeListResponse & { _provider?: string }> {
-  
-  console.log('═══════════════════════════════════════════════');
-  console.log('🎬 [Episode Fetch] Starting multi-tier search');
-  console.log('📺 [Episode Fetch] Anime:', animeTitle);
-  console.log('═══════════════════════════════════════════════');
-
   // TIER 1: Try HiAnime API directly (Primary source)
   // Skip health check - it blocks 15s on Railway cold start. Try HiAnime directly; fallback on failure.
   try {
@@ -127,7 +120,6 @@ export async function getReliableEpisodes(
 
     const requiredSearch = HIANIME_REQUIRED_SEARCH[animeId];
     if (requiredSearch) {
-      console.log(`🎯 [TIER 1] HiAnime required for anime ${animeId} - searching "${requiredSearch}"`);
       const results = await searchHiAnime(requiredSearch, 1);
       const filtered = results.filter(
         (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
@@ -156,12 +148,10 @@ export async function getReliableEpisodes(
     }
 
     if (!match) {
-      console.log('🎯 [TIER 1] Trying HiAnime API...');
       match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
     }
-    
+
     if (match) {
-      console.log(`✅ [HiAnime API] Found anime: ${match.id}`);
       let episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
 
       // Smart cache: if AniList has more episodes than cache, new episodes likely available - invalidate and refetch
@@ -170,15 +160,11 @@ export async function getReliableEpisodes(
         episodes.episodes.length > 0 &&
         episodes.episodes.length < episodeCount
       ) {
-        console.log(`🔄 [Episode Cache] AniList has ${episodeCount} episodes, cache has ${episodes.episodes.length} - refetching for new episodes`);
         deleteCacheKey(`hianime:episodes:${match.id}`);
         episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
       }
 
       if (episodes.episodes.length > 0) {
-        console.log(`🎉 [HiAnime API] SUCCESS! ${episodes.episodes.length} episodes`);
-        console.log(`🎬 [HiAnime API] First episode:`, episodes.episodes[0].id);
-        console.log('═══════════════════════════════════════════════');
         // Save to Firebase in background (fire-and-forget, no extra latency)
         saveEpisodesToFirestoreBackground(
           animeId,
@@ -197,15 +183,10 @@ export async function getReliableEpisodes(
   const category = isDub ? 'dub' : 'sub';
   const cached = await getEpisodesFromFirestore(animeId, category);
   if (cached?.episodes?.length) {
-    console.log(`💾 [Episode Cache] Serving ${cached.episodes.length} episodes from Firestore`);
-    console.log('═══════════════════════════════════════════════');
     return cached;
   }
 
   // No cache: server down, don't show wrong fallbacks
-  console.log('═══════════════════════════════════════════════');
-  console.log('❌ [Episodes] HiAnime down + Firebase miss - server unavailable');
-  console.log('═══════════════════════════════════════════════');
   throw new EpisodesUnavailableError();
 }
 
@@ -241,8 +222,8 @@ export async function getEpisodesFromJikan(
         })),
       };
     }
-  } catch (error) {
-    console.log('[Jikan API] Failed');
+  } catch {
+    // Jikan API failed
   }
 
   // Fallback to generated episodes

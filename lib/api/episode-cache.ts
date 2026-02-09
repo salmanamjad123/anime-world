@@ -38,7 +38,6 @@ export async function getEpisodesFromFirestore(
     const data = doc.data() as EpisodeCacheDocument;
     if (!data?.episodes?.length) return null;
 
-    console.log(`💾 [Episode Cache HIT] ${EPISODE_CACHE_COLLECTION}/${docId}`);
     return {
       animeId: data.animeId,
       totalEpisodes: data.totalEpisodes,
@@ -87,5 +86,4 @@ async function saveEpisodesToFirestoreInternal(
   const docId = toEpisodeCacheDocId(doc.animeId, doc.category);
   const docRef = db.collection(EPISODE_CACHE_COLLECTION).doc(docId);
   await docRef.set(doc);
-  console.log(`💾 [Episode Cache SET] ${EPISODE_CACHE_COLLECTION}/${docId}`);
 }

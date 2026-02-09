@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { sendVerificationCode, isEmailConfigured } from '@/lib/email';
+import { authRateLimiters, getClientIdentifier } from '@/lib/utils/rate-limiter';
 
 const CODE_LENGTH = 6;
 const CODE_EXPIRY_MINUTES = 10;
@@ -16,6 +17,20 @@ function generateCode(): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const clientId = `${getClientIdentifier(request)}:auth:send-verification`;
+    const { allowed, resetTime } = authRateLimiters.sendVerification.check(clientId);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     const body = await request.json();
     const { email } = body;
 

@@ -7,10 +7,12 @@ import { useQuery, useQueries } from '@tanstack/react-query';
 import type { EpisodeListResponse } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
 
+type EpisodesOptions = { refetchOnMount?: boolean | 'always' };
+
 /**
  * Get episodes for an anime
  */
-export function useEpisodes(animeId: string | null, isDub: boolean = false) {
+export function useEpisodes(animeId: string | null, isDub: boolean = false, options?: EpisodesOptions) {
   return useQuery<EpisodeListResponse>({
     queryKey: ['episodes', animeId, isDub ? 'dub' : 'sub'],
     queryFn: async () => {
@@ -22,6 +24,7 @@ export function useEpisodes(animeId: string | null, isDub: boolean = false) {
     },
     enabled: !!animeId,
     staleTime: CACHE_DURATIONS.EPISODE_LIST * 1000,
+    ...(options?.refetchOnMount !== undefined && { refetchOnMount: options.refetchOnMount }),
   });
 }
 

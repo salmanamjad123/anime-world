@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
@@ -45,7 +45,7 @@ export default function WatchPage() {
   const { data: animeData } = useAnimeById(animeId);
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
-  const { data: episodesData } = useEpisodes(animeId, selectedLanguage === 'dub');
+  const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(animeId, selectedLanguage === 'dub', { refetchOnMount: 'always' });
   const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
   const fallbackEpisodeNum = useMemo(
     () => (isFallbackEpisode ? parseInt(episodeId.match(/-episode-(\d+)$/)?.[1] ?? '0', 10) : null),
@@ -87,6 +87,23 @@ export default function WatchPage() {
   const showStreamDown = (isFallbackEpisode && resolvedEpisodeId === null) || streamError || (!videoSource && !isStreamLoading && !resolvingFallback);
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
+
+  // Resume: URL ?t= first (Continue Watching), then localStorage fallback on refresh
+  const searchParams = useSearchParams();
+  const tParam = searchParams.get('t');
+  const initialTime = useMemo(() => {
+    const fromUrl = tParam ? Math.max(0, parseInt(tParam, 10) || 0) : 0;
+    if (fromUrl > 0) return fromUrl;
+
+    const progress = getProgress(animeId);
+    if (!progress || progress.timestamp <= 0 || progress.percentage >= 90) return 0;
+
+    const sameEpisode =
+      progress.episodeId === episodeId ||
+      (currentEpisode && progress.episodeNumber === currentEpisode.number);
+    return sameEpisode ? progress.timestamp : 0;
+  }, [tParam, animeId, episodeId, currentEpisode, getProgress]);
+
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
@@ -111,7 +128,6 @@ export default function WatchPage() {
       );
       
       if (!hasEnglish && anime && currentEpisode && episodeId) {
-        console.log('🔍 [Watch] No English subtitle from HiAnime, fetching from external sources...');
         try {
           const response = await fetch(
             `/api/subtitles/${episodeId}?title=${encodeURIComponent(title)}&episode=${currentEpisode.number}&animeId=${animeId}&lang=en`
@@ -120,11 +136,8 @@ export default function WatchPage() {
           if (response.ok) {
             const data = await response.json();
             if (data.subtitles && data.subtitles.length > 0) {
-              console.log(`✅ [Watch] Found ${data.subtitles.length} external English subtitle(s)`);
               // Merge with existing subtitles
               combined = [...combined, ...data.subtitles];
-            } else {
-              console.log('⚠️ [Watch] No external English subtitles found');
             }
           }
         } catch (error) {
@@ -252,12 +265,14 @@ export default function WatchPage() {
               )}
             </div>
 
-            {/* Video Player */}
-            {isStreamLoading || resolvingFallback ? (
+            {/* Video Player - wait for stream + episodes so initialTime is stable (no mid-playback seek) */}
+            {isStreamLoading || resolvingFallback || isEpisodesLoading ? (
               <div className="w-full aspect-video bg-gray-800 rounded-lg flex items-center justify-center min-h-[200px]">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
-                  <p className="text-gray-400">{resolvingFallback ? 'Resolving episode...' : 'Loading video...'}</p>
+                  <p className="text-gray-400">
+                    {resolvingFallback ? 'Resolving episode...' : isEpisodesLoading ? 'Loading...' : 'Loading video...'}
+                  </p>
                 </div>
               </div>
             ) : showStreamDown ? (
@@ -300,6 +315,7 @@ export default function WatchPage() {
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEpisodeEnd}
                   autoPlay
+                  initialTime={initialTime}
                   introStartSeconds={
                     streamData?.intro && streamData.intro.end > streamData.intro.start
                       ? streamData.intro.start
@@ -409,12 +425,24 @@ export default function WatchPage() {
 
           {/* Sidebar - Episode List */}
           <div className="lg:col-span-1 min-w-0">
-            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 lg:sticky lg:top-20">
+            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 lg:sticky lg:top-20 min-h-[200px]">
               <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Episodes</h3>
               
-              <div className="max-h-[50vh] sm:max-h-[calc(100vh-200px)] overflow-y-auto">
+              <div className="max-h-[50vh] sm:max-h-[calc(100vh-200px)] overflow-y-auto min-h-[180px]">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-2">
-                  {episodes.map((episode) => {
+                  {isEpisodesLoading ? (
+                    Array.from({ length: 10 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="p-2 sm:p-2.5 lg:p-3 rounded-lg bg-gray-700/50 animate-pulse"
+                        aria-hidden
+                      >
+                        <div className="h-4 w-12 bg-gray-600 rounded" />
+                        <div className="h-3 w-20 bg-gray-600 rounded mt-1.5" />
+                      </div>
+                    ))
+                  ) : (
+                  episodes.map((episode) => {
                     const isCurrent = episode.id === episodeId;
                     return (
                       <button
@@ -434,7 +462,8 @@ export default function WatchPage() {
                         )}
                       </button>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             </div>

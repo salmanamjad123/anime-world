@@ -31,6 +31,8 @@ interface VideoPlayerProps {
   introEndSeconds?: number;
   /** Length of outro/ED in seconds. Only show "Skip Outro" when provided. */
   outroLengthSeconds?: number;
+  /** Start playback at this position in seconds (for Continue Watching). */
+  initialTime?: number;
 }
 
 export function VideoPlayer({
@@ -45,6 +47,7 @@ export function VideoPlayer({
   introStartSeconds,
   introEndSeconds,
   outroLengthSeconds,
+  initialTime,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -208,9 +211,9 @@ export function VideoPlayer({
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setIsLoading(false);
-          if (autoPlay) {
-            video.play().catch(console.error);
+          if (!(initialTime && initialTime > 0)) {
+            setIsLoading(false);
+            if (autoPlay) video.play().catch(console.error);
           }
         });
 
@@ -236,20 +239,61 @@ export function VideoPlayer({
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS support (Safari) - always direct, no proxy needed
         video.src = currentSrc;
-        setIsLoading(false);
-        if (autoPlay) {
-          video.play().catch(console.error);
+        if (!(initialTime && initialTime > 0)) {
+          setIsLoading(false);
+          if (autoPlay) video.play().catch(console.error);
         }
       }
     } else {
       // Direct video file
       video.src = currentSrc;
-      setIsLoading(false);
-      if (autoPlay) {
-        video.play().catch(console.error);
+      if (!(initialTime && initialTime > 0)) {
+        setIsLoading(false);
+        if (autoPlay) video.play().catch(console.error);
       }
     }
-  }, [src, autoPlay, currentQuality, autoQuality]);
+  }, [src, autoPlay, currentQuality, autoQuality, initialTime]);
+
+  // Seek to initialTime when video can play (Continue Watching from ?t=)
+  // Keeps loading until seek completes so progress bar doesn't jump
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || initialTime == null || initialTime <= 0) return;
+
+    const seekToInitial = () => {
+      if (!video.duration || isNaN(video.duration) || video.duration <= 1) return;
+      const seekTime = Math.min(initialTime, Math.max(0, video.duration - 1));
+      video.currentTime = seekTime;
+      setCurrentTime(seekTime);
+      setDuration(video.duration);
+
+      let doneCalled = false;
+      const done = () => {
+        if (doneCalled) return;
+        doneCalled = true;
+        setIsLoading(false);
+        if (autoPlay) video.play().catch(console.error);
+      };
+
+      const onSeeked = () => {
+        clearTimeout(fallback);
+        video.removeEventListener('seeked', onSeeked);
+        done();
+      };
+
+      video.addEventListener('seeked', onSeeked, { once: true });
+      const fallback = setTimeout(done, 2000);
+    };
+
+    const onReady = () => requestAnimationFrame(seekToInitial);
+
+    if (video.readyState >= 3) {
+      onReady();
+    } else {
+      video.addEventListener('canplay', onReady, { once: true });
+      return () => video.removeEventListener('canplay', onReady);
+    }
+  }, [initialTime, autoPlay]);
 
   // Add subtitle tracks to video element
   useEffect(() => {

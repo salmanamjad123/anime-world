@@ -37,11 +37,6 @@ export async function GET(
       );
     }
 
-    console.log('═══════════════════════════════════════════════');
-    console.log('🎬 [Stream API] Episode requested:', episodeId);
-    console.log('📺 [Stream API] Using HiAnime API only');
-    console.log('═══════════════════════════════════════════════');
-
     // Get language preference and server
     const category = (url.searchParams.get('category') || 'sub') as 'sub' | 'dub' | 'raw';
     const server = url.searchParams.get('server') || 'hd-1';
@@ -109,24 +104,10 @@ export async function GET(
           );
 
           if (sources?.sources && sources.sources.length > 0) {
-            if (tryServer !== server) {
-              console.log(`✅ [Stream API] Fallback succeeded: ${server} failed, ${tryServer} worked`);
-            }
-            console.log('═══════════════════════════════════════════════');
-            console.log('✅ [Stream API] SUCCESS!');
-            console.log('🎥 Found', sources.sources.length, 'source(s)');
-            console.log('📝 Found', sources.subtitles?.length || 0, 'subtitle(s)');
-            if (sources.embedUrl) {
-              console.log('📺 Embed URL available (iframe mode)');
-            }
-            console.log('═══════════════════════════════════════════════');
             return NextResponse.json(sources);
           }
         } catch (err) {
           lastError = err;
-          if (tryServer !== serversToTry[serversToTry.length - 1]) {
-            console.log(`⚠️ [Stream API] ${tryServer} failed, trying next server...`);
-          }
         }
       }
 
