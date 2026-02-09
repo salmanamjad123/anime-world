@@ -76,6 +76,21 @@ export async function signIn(email: string, password: string): Promise<User> {
 }
 
 /**
+ * Update user photo URL (e.g. after Cloudinary upload)
+ */
+export async function updateUserPhotoURL(photoURL: string | null): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    throw new Error('Firebase is not configured');
+  }
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) throw new Error('Not authenticated');
+  if (photoURL) {
+    await updateProfile(firebaseUser, { photoURL });
+  }
+  await updateDoc(doc(db, 'users', firebaseUser.uid), { photoURL: photoURL ?? null });
+}
+
+/**
  * Update user display name
  */
 export async function updateUserDisplayName(displayName: string): Promise<void> {

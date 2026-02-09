@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface CommentInputProps {
   onSubmit: (text: string) => Promise<void>;
@@ -81,24 +81,12 @@ export function CommentInput({
       )}
     >
       <div className={cn('shrink-0', compact ? 'pt-0.5' : '')}>
-        {user.photoURL ? (
-          <Image
-            src={user.photoURL}
-            alt=""
-            width={compact ? 32 : 40}
-            height={compact ? 32 : 40}
-            className="rounded-full object-cover"
-          />
-        ) : (
-          <div
-            className={cn(
-              'rounded-full bg-gray-600 flex items-center justify-center text-gray-400 font-medium',
-              compact ? 'h-8 w-8 text-sm' : 'h-10 w-10'
-            )}
-          >
-            {(user.displayName || user.email || '?')[0].toUpperCase()}
-          </div>
-        )}
+        <UserAvatar
+          photoURL={user.photoURL}
+          name={user.displayName || user.email}
+          size={compact ? 'sm' : 'md'}
+          className={compact ? 'w-8 h-8' : undefined}
+        />
       </div>
       <div className="flex-1 min-w-0">
         {!compact && (

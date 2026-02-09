@@ -15,9 +15,11 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ROUTES } from '@/constants/routes';
 import { Button } from '@/components/ui/Button';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Input } from '@/components/ui/Input';
-import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, Play } from 'lucide-react';
+import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, Play, Loader2 } from 'lucide-react';
 import { updateUserDisplayName } from '@/lib/firebase/auth';
+import { auth } from '@/lib/firebase/config';
 import { clearWatchHistory, removeFromWatchHistory, setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlistDb } from '@/lib/firebase/firestore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import type { ListStatus } from '@/types';
@@ -353,6 +355,8 @@ function ProfilePageContent() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDisplayName(user?.displayName ?? '');
@@ -400,6 +404,42 @@ function ProfilePageContent() {
         console.error('Failed to resend verification:', err);
       } finally {
         setVerifyLoading(false);
+      }
+    };
+
+    const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !user) return;
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.type)) {
+        alert('Please use JPEG, PNG, or WebP.');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File too large. Max 5MB.');
+        return;
+      }
+      setPhotoLoading(true);
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error('Not authenticated');
+        const formData = new FormData();
+        formData.append('photo', file);
+        const res = await fetch('/api/profile/upload-photo', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        useUserStore.getState().setUser({ ...user, photoURL: data.url });
+        setSaveSuccess(true);
+      } catch (err) {
+        console.error('Photo upload failed:', err);
+        alert(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setPhotoLoading(false);
+        e.target.value = '';
       }
     };
 
@@ -506,24 +546,31 @@ function ProfilePageContent() {
 
         <div className="lg:w-48 shrink-0 flex flex-col items-center order-first lg:order-none">
           <div className="relative">
-            {user.photoURL ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.photoURL}
-                alt={user.displayName || user.email}
-                className="w-32 h-32 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-32 h-32 rounded-full bg-gray-700 flex items-center justify-center text-3xl font-semibold text-white">
-                {(user.displayName || user.email).charAt(0).toUpperCase()}
-              </div>
-            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleUploadPhoto}
+            />
+            <UserAvatar
+              photoURL={user.photoURL}
+              name={user.displayName || user.email}
+              size="xl"
+              className="w-32 h-32"
+            />
             <button
               type="button"
-              className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-gray-700 border-2 border-gray-900 flex items-center justify-center text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoLoading}
+              className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-gray-700 border-2 border-gray-900 flex items-center justify-center text-gray-300 hover:bg-gray-600 hover:text-white transition-colors disabled:opacity-50"
               aria-label="Edit profile picture"
             >
-              <Pencil className="w-4 h-4" />
+              {photoLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Pencil className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>

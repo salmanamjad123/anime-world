@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
     "axios": "^1.7.9",
+    "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.6.0",

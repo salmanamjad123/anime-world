@@ -17,6 +17,7 @@ import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { signOut } from '@/lib/firebase/auth';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -305,20 +306,12 @@ export function Header() {
                     aria-expanded={userMenuOpen}
                     aria-haspopup="true"
                   >
-                    {user.photoURL ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={user.photoURL}
-                        alt={user.displayName || user.email}
-                        width={28}
-                        height={28}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                        <User className="w-4 h-4 text-white" />
-                      </div>
-                    )}
+                    <UserAvatar
+                      photoURL={user.photoURL}
+                      name={user.displayName || user.email}
+                      size="sm"
+                      className="w-8 h-8"
+                    />
                     <span className="hidden sm:inline max-w-[100px] truncate text-sm">
                       {user.displayName || user.email?.split('@')[0]}
                     </span>

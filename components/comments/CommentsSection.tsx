@@ -70,7 +70,6 @@ export function CommentsSection({
       episodeId: selectedEpisodeId,
       userId: user.uid,
       displayName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
-      photoURL: user.photoURL,
       text,
       parentId: parentId ?? null,
     });
@@ -97,41 +96,37 @@ export function CommentsSection({
   const hasMore = comments.length > visibleCount;
 
   return (
-    <section className="bg-gray-800/50 rounded-lg p-4 md:p-6">
-      <h3 className="text-lg md:text-xl font-bold text-white mb-4 flex items-center gap-2">
+    <section className="bg-gray-800/50 rounded-lg p-3 sm:p-4 md:p-6 lg:h-full lg:flex lg:flex-col">
+      <h3 className="text-base sm:text-lg md:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2 shrink-0">
         <span className="text-blue-500">Comments</span>
       </h3>
 
-      {/* Episode selector + count (top), then Sort by - mobile: stacked inline rows */}
-      <div className="flex flex-col gap-3 mb-4">
-        {/* Episodes row - top of comments, inline on mobile */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
-          <select
-            value={selectedEpisodeId}
-            onChange={(e) => handleEpisodeSelect(e.target.value)}
-            className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors shrink-0"
-          >
-            {episodes.map((ep) => (
-              <option key={ep.id} value={ep.id}>
-                Episode {ep.number}
-              </option>
-            ))}
-          </select>
-          <span className="flex items-center gap-1.5 text-gray-400 text-sm shrink-0">
-            <MessageCircle className="w-4 h-4" />
-            {totalCount} {totalCount === 1 ? 'Comment' : 'Comments'}
-          </span>
-        </div>
-        {/* Sort row - inline on mobile */}
-        <div className="flex items-center gap-2 flex-nowrap">
-          <span className="text-gray-400 text-sm flex items-center gap-1 shrink-0">
-            <ArrowUpDown className="w-4 h-4" />
+      {/* Episode selector + count + Sort by - all in one line */}
+      <div className="flex items-center gap-1.5 sm:gap-3 flex-nowrap mb-3 sm:mb-4 shrink-0">
+        <select
+          value={selectedEpisodeId}
+          onChange={(e) => handleEpisodeSelect(e.target.value)}
+          className="bg-gray-700 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-md sm:rounded-lg text-xs sm:text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors shrink-0"
+        >
+          {episodes.map((ep) => (
+            <option key={ep.id} value={ep.id}>
+              Episode {ep.number}
+            </option>
+          ))}
+        </select>
+        <span className="flex items-center gap-1 sm:gap-1.5 text-gray-400 text-xs sm:text-sm shrink-0">
+          <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          {totalCount} {totalCount === 1 ? 'Comment' : 'Comments'}
+        </span>
+        <div className="flex items-center gap-1 sm:gap-2 flex-nowrap ml-auto shrink-0">
+          <span className="text-gray-400 text-xs sm:text-sm flex items-center gap-1">
+            <ArrowUpDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             Sort by
           </span>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as CommentSortBy)}
-            className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors shrink-0"
+            className="bg-gray-700 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-md sm:rounded-lg text-xs sm:text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors shrink-0"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -150,8 +145,8 @@ export function CommentsSection({
         />
       </div>
 
-      {/* Comment list */}
-      <div className="divide-y divide-gray-700/50">
+      {/* Comment list - flex-1 stretches to fill remaining height on desktop */}
+      <div className="divide-y divide-gray-700/50 lg:flex-1 lg:min-h-0">
         {isLoading ? (
           <div className="py-8 text-center text-gray-500">Loading comments...</div>
         ) : comments.length === 0 ? (

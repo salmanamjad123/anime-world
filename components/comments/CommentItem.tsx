@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ThumbsUp, ThumbsDown, Reply, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUserStore } from '@/store/useUserStore';
 import { useReplies } from '@/hooks/useComments';
+import { useUserPhoto } from '@/hooks/useUserPhoto';
 import { CommentInput } from './CommentInput';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import type { Comment } from '@/types/comment';
 
 interface CommentItemProps {
@@ -43,6 +44,8 @@ export function CommentItem({
   isReply,
 }: CommentItemProps) {
   const { user } = useUserStore();
+  const fetchedPhoto = useUserPhoto(comment.userId);
+  const photoURL = user?.uid === comment.userId ? user.photoURL : fetchedPhoto;
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -82,19 +85,12 @@ export function CommentItem({
     <div className={cn('py-3', isReply && 'pl-8 sm:pl-12 border-l-2 border-gray-700/50 ml-4')}>
       <div className="flex gap-3">
         <div className="shrink-0">
-          {comment.photoURL ? (
-            <Image
-              src={comment.photoURL}
-              alt=""
-              width={36}
-              height={36}
-              className="rounded-full object-cover"
-            />
-          ) : (
-            <div className="h-9 w-9 rounded-full bg-gray-600 flex items-center justify-center text-gray-400 text-sm font-medium">
-              {(comment.displayName || '?')[0].toUpperCase()}
-            </div>
-          )}
+          <UserAvatar
+            photoURL={photoURL}
+            name={comment.displayName}
+            size="sm"
+            className="w-9 h-9"
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
