@@ -76,10 +76,10 @@ body {
     -1px -1px 2px black,
     0 0 4px black;
 }
-/* WebKit/Chrome: move subtitle container up from bottom */
+/* WebKit/Chrome: move subtitle container up from bottom (desktop) */
 .video-player-main video::-webkit-media-text-track-container,
 video.video-subtitles::-webkit-media-text-track-container {
-  bottom: 1.25rem;
+  bottom: 4.5rem;
 }
 
 /* Mobile: portrait and landscape fullscreen */
@@ -89,6 +89,6 @@ video.video-subtitles::-webkit-media-text-track-container {
   }
   .video-player-main video::-webkit-media-text-track-container,
   video.video-subtitles::-webkit-media-text-track-container {
-    bottom: 0.75rem;
+    bottom: 1.25rem;
   }
 }

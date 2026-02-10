@@ -68,7 +68,7 @@ export function AddToListDropdown({
         onClick={() => setOpen(!open)}
         disabled={disabled || loading}
         className={cn(
-          'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
+          'inline-flex items-center justify-center rounded-lg font-medium transition-colors w-full',
           'bg-gray-600 border border-gray-500 hover:bg-gray-500 hover:border-gray-400',
           'text-white hover:bg-gray-700',
           'disabled:opacity-50 disabled:cursor-not-allowed',
