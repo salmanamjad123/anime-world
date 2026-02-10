@@ -57,7 +57,15 @@ export function SearchPageContent({ initialFilters }: { initialFilters: AnimeFil
 
   const { data, isLoading } = useSearchAnime(filters, 1, 30);
 
-  const results = data?.data?.Page?.media || [];
+  // Filter out hentai results for safer search listings
+  const allResults = data?.data?.Page?.media || [];
+  const results = allResults.filter((item) => {
+    const hasHentaiGenre = item.genres?.includes('Hentai');
+    const hasHentaiTag = item.tags?.some((tag) =>
+      tag.name.toLowerCase().includes('hentai')
+    );
+    return !hasHentaiGenre && !hasHentaiTag;
+  });
   const totalResults = data?.data?.Page?.pageInfo?.total ?? 0;
   const hasActiveFilters =
     (filters.genres && filters.genres.length > 0) ||

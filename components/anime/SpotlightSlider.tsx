@@ -195,7 +195,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
   if (!anime || anime.length === 0) return null;
 
   return (
-    <section className="relative w-full h-[340px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
+    <section className="relative w-full h-[320px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
       {/* Slides container - swipeable on touch and mouse drag */}
       <div
         className="relative w-full h-full overflow-hidden touch-pan-y select-none cursor-grab active:cursor-grabbing"
@@ -215,32 +215,44 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
           {extendedAnime.map((item, slideIndex) => {
             const title = getPreferredTitle(item.title);
             const description = item.description ? stripHtml(item.description) : '';
-            const imageUrl = item.bannerImage || item.coverImage?.extraLarge || item.coverImage?.large;
+            const coverUrl = item.coverImage?.extraLarge || item.coverImage?.large;
+            const bannerUrl = item.bannerImage || coverUrl;
             const dateStr = formatSpotlightDate(item.startDate);
             const formatLabel =
               item.format === 'TV_SHORT' ? 'TV Short' : item.format?.replace('_', ' ') || 'TV';
 
             return (
               <div key={`spotlight-${slideIndex}-${item.id}`} className="relative min-w-full h-full">
-                {/* Background image for this slide */}
-                {imageUrl && (
+                {/* Background: cover image on mobile (shows full art), banner on larger screens */}
+                {(coverUrl || bannerUrl) && (
                   <>
+                    {/* Mobile: cover image so artwork isn't cut off */}
                     <Image
-                      src={imageUrl}
+                      src={coverUrl || bannerUrl}
                       alt={title}
                       fill
-                      className="object-cover object-center"
+                      className="object-cover object-center sm:hidden"
                       quality={90}
                       priority={slideIndex === 1 || (total <= 1 && slideIndex === 0)}
                       sizes="100vw"
                     />
-                    {/* Dark fade from left so text stays readable */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/90 to-gray-900/20" />
+                    {/* Desktop: banner image */}
+                    <Image
+                      src={bannerUrl}
+                      alt={title}
+                      fill
+                      className="object-cover object-center hidden sm:block"
+                      quality={90}
+                      priority={slideIndex === 1 || (total <= 1 && slideIndex === 0)}
+                      sizes="100vw"
+                    />
+                    {/* Dark fade from left so text stays readable - lighter on mobile, stronger on larger screens */}
+                    <div className="absolute inset-0 bg-linear-to-r from-gray-900/80 via-gray-900/70 to-gray-900/20 sm:from-gray-950 sm:via-gray-950/90 sm:to-gray-900/20" />
                   </>
                 )}
 
-                {/* Content sits on top, aligned to left - mobile: compact, desktop: spacious */}
-                <div className="relative z-10 h-full flex flex-col justify-center p-4 sm:p-6 md:p-8 lg:p-10 max-w-3xl">
+                {/* Content sits on top - anchored near bottom on mobile, centered on larger screens */}
+                <div className="relative z-10 h-full flex flex-col justify-end md:justify-center p-4 pb-10 sm:p-6 sm:pb-10 md:p-8 lg:p-10 max-w-3xl">
                   <span className="text-blue-400 font-semibold text-xs sm:text-sm mb-1 sm:mb-2">
                     #{total > 1 ? ((slideIndex - 1 + total) % total) + 1 : slideIndex + 1} Spotlight
                   </span>
@@ -248,7 +260,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                     {title}
                   </h2>
 
-                  {/* Metadata row - tighter on mobile */}
+                  {/* Metadata row - TV, duration, date, HD, CC */}
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-300 mb-2 sm:mb-4">
                     <span className="flex items-center gap-1">
                       <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 shrink-0" />
@@ -261,7 +273,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                       </span>
                     )}
                     {dateStr && (
-                      <span className="hidden sm:flex items-center gap-1 shrink-0">
+                      <span className="flex items-center gap-1 shrink-0">
                         <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                         <span className="truncate">{dateStr}</span>
                       </span>
@@ -270,21 +282,31 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                       HD
                     </span>
                     {item.episodes != null && (
-                      <span className="hidden sm:inline px-1.5 py-0.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-400 text-[10px] sm:text-xs font-medium shrink-0">
+                      <span className="px-1.5 py-0.5 sm:px-2 rounded-full bg-blue-500/20 text-blue-400 text-[10px] sm:text-xs font-medium shrink-0">
                         CC {item.episodes}
                       </span>
                     )}
                   </div>
 
-                  {/* Synopsis - fewer lines on mobile */}
+                  {/* Synopsis - visually clamp to ~3 lines with ellipsis on desktop; hidden on very small screens */}
                   {description && (
-                    <p className="text-gray-300 text-xs sm:text-sm md:text-base line-clamp-2 sm:line-clamp-3 mb-3 sm:mb-6 max-w-xl">
+                 <div className="hidden sm:block">
+                     <p
+                      className="hidden md:block text-gray-300 text-xs sm:text-sm md:text-base mb-3 sm:mb-6 max-w-xl"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
                       {description}
                     </p>
+                 </div>
                   )}
 
-                  {/* Actions - stacked on mobile for easier tap, row on desktop */}
-                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  {/* Actions - single row buttons, wrapping if needed */}
+                  <div className="flex flex-row flex-wrap gap-2 sm:gap-3">
                     <Link
                       href={ROUTES.ANIME_DETAIL(item.id)}
                       className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-colors"
@@ -306,11 +328,11 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
           })}
         </div>
 
-        {/* Slider arrows + dots: bottom bar on mobile, separate on desktop */}
+        {/* Slider arrows + dots: arrows hidden on mobile, dots always visible */}
         {total > 1 && (
           <>
-            {/* Arrows - bottom right on mobile, right side on desktop */}
-            <div className="absolute bottom-3 right-4 sm:bottom-auto sm:right-3 sm:top-1/2 sm:-translate-y-1/2 flex flex-row sm:flex-col gap-2 z-20">
+            {/* Arrows - show only on sm+ on right side */}
+            <div className="hidden sm:flex sm:flex-col gap-2 absolute bottom-3 right-4 sm:bottom-auto sm:right-3 sm:top-1/2 sm:-translate-y-1/2 z-20">
               <button
                 type="button"
                 onClick={goPrev}
@@ -329,7 +351,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
               </button>
             </div>
 
-            {/* Dots - bottom left on mobile, same on desktop */}
+            {/* Dots - always visible, reposition slightly on larger screens */}
             <div className="absolute bottom-3 sm:bottom-4 left-4 sm:left-6 lg:left-10 flex gap-1.5 sm:gap-2 z-20">
             {anime.slice(0, Math.min(total, 8)).map((_, i) => (
               <button
