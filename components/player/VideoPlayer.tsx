@@ -54,6 +54,15 @@ export function VideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideCursorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const seekIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sideTapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /** While set, resetHideTimer() won't show the bar (avoids bar flash during double-tap seek) */
+  const suppressShowControlsUntilRef = useRef<number>(0);
+  const lastTapRef = useRef<{ time: number; side: 'left' | 'right' | null }>({
+    time: 0,
+    side: null,
+  });
   const prevSubtitlesKeyRef = useRef<string | null>(null);
   const isPlayingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -69,9 +78,15 @@ export function VideoPlayer({
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('off');
   const [autoQuality, setAutoQuality] = useState(true);
-  
+  /** Brief icon when double-tap seek ±10s (forward | backward) */
+  const [seekIndicator, setSeekIndicator] = useState<'forward' | 'backward' | null>(null);
+  /** Hide cursor over player when video is playing and mouse idle (like Netflix) */
+  const [cursorHidden, setCursorHidden] = useState(false);
+
   const { volume, playbackSpeed, setVolume, subtitlePosition, setSubtitlePosition } = usePlayerStore();
   const isMobile = useIsMobile();
+
+  const CURSOR_HIDE_DELAY_MS = 4000; // hide cursor after this ms of no movement/click (playing)
 
   // Keep ref in sync for timeout callback
   useEffect(() => {
@@ -542,8 +557,9 @@ export function VideoPlayer({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Show controls and reset auto-hide timer (mouse + touch)
+  // Show controls and reset auto-hide timer (mouse + touch). No-op during double-tap window so bar doesn't flash.
   const resetHideTimer = () => {
+    if (Date.now() < suppressShowControlsUntilRef.current) return;
     setShowControls(true);
     if (hideControlsTimeoutRef.current) clearTimeout(hideControlsTimeoutRef.current);
     hideControlsTimeoutRef.current = setTimeout(() => {
@@ -551,37 +567,132 @@ export function VideoPlayer({
     }, 3000);
   };
 
-  // Zone-based tap/click: center = play/pause; sides = show/hide controls (same on mobile, desktop, fullscreen)
+  // Zone-based tap/click:
+  // - Center: play/pause (single tap only)
+  // - Left/right: single tap = show/hide controls (after short delay); double-tap = seek ±10s only (no toolbar, no play icon)
   const handleContainerTap = (clientX: number) => {
     const el = containerRef.current;
-    if (!el) return;
+    const video = videoRef.current;
+    if (!el || !video) return;
+
+    // Show cursor on any click/tap (not just mousemove)
+    setCursorHidden(false);
+    if (hideCursorTimeoutRef.current) clearTimeout(hideCursorTimeoutRef.current);
+    if (isPlayingRef.current) {
+      hideCursorTimeoutRef.current = setTimeout(() => setCursorHidden(true), CURSOR_HIDE_DELAY_MS);
+    }
+
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
     const w = rect.width;
     const leftZone = w * 0.35;
     const rightZone = w * 0.65;
+    const now = Date.now();
 
-    if (x >= leftZone && x <= rightZone) {
-      togglePlay();
-      resetHideTimer();
+    let side: 'left' | 'right' | 'center';
+    if (x < leftZone) {
+      side = 'left';
+    } else if (x > rightZone) {
+      side = 'right';
     } else {
+      side = 'center';
+    }
+
+    // Center tap: only show/hide controls (same as sides); play/pause is only via the icon button
+    if (side === 'center') {
+      if (sideTapTimeoutRef.current) {
+        clearTimeout(sideTapTimeoutRef.current);
+        sideTapTimeoutRef.current = null;
+      }
+      lastTapRef.current = { time: 0, side: null };
       setShowControls((prev) => {
         const next = !prev;
         if (next) resetHideTimer();
         return next;
       });
+      return;
     }
+
+    // Left or right
+    const last = lastTapRef.current;
+    const isDoubleTap = last.side === side && now - last.time < 300;
+
+    if (isDoubleTap) {
+      // Double-tap: seek only – do NOT show toolbar or center play icon (Netflix-like)
+      if (sideTapTimeoutRef.current) {
+        clearTimeout(sideTapTimeoutRef.current);
+        sideTapTimeoutRef.current = null;
+      }
+      const wasPlaying = !video.paused;
+      const skipSeconds = 10;
+      if (side === 'left') {
+        video.currentTime = Math.max(0, video.currentTime - skipSeconds);
+        setSeekIndicator('backward');
+      } else {
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + skipSeconds);
+        setSeekIndicator('forward');
+      }
+      setCurrentTime(video.currentTime);
+      // On mobile, seek can cause buffering and some browsers pause; resume if it was playing
+      if (wasPlaying) {
+        video.play().catch(() => {});
+      }
+      lastTapRef.current = { time: 0, side: null };
+      setShowControls(false);
+      suppressShowControlsUntilRef.current = now + 500; // keep bar hidden for 500ms so no flash
+      if (seekIndicatorTimeoutRef.current) clearTimeout(seekIndicatorTimeoutRef.current);
+      seekIndicatorTimeoutRef.current = setTimeout(() => {
+        setSeekIndicator(null);
+        seekIndicatorTimeoutRef.current = null;
+      }, 800);
+      return;
+    }
+
+    // First tap on this side: wait to see if second tap comes; then either seek (double) or toggle controls (single)
+    lastTapRef.current = { time: now, side };
+    if (sideTapTimeoutRef.current) clearTimeout(sideTapTimeoutRef.current);
+    sideTapTimeoutRef.current = setTimeout(() => {
+      sideTapTimeoutRef.current = null;
+      suppressShowControlsUntilRef.current = 0; // allow bar to show for single-tap
+      setShowControls((prev) => {
+        const next = !prev;
+        if (next) resetHideTimer();
+        return next;
+      });
+    }, 320);
   };
 
-  // Auto-hide controls: only reset when mouse moves inside the video player (not outside)
+  // Show cursor again when video is paused
+  useEffect(() => {
+    if (!isPlaying) setCursorHidden(false);
+  }, [isPlaying]);
+
+  // Auto-hide controls + hide cursor when idle (cursor disappears while watching, like Netflix)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const handleMouseMove = () => resetHideTimer();
+    const handleMouseMove = () => {
+      resetHideTimer();
+      setCursorHidden(false);
+      if (hideCursorTimeoutRef.current) clearTimeout(hideCursorTimeoutRef.current);
+      if (isPlayingRef.current) {
+        hideCursorTimeoutRef.current = setTimeout(() => setCursorHidden(true), CURSOR_HIDE_DELAY_MS);
+      }
+    };
+    const handleMouseLeave = () => {
+      setCursorHidden(false);
+      if (hideCursorTimeoutRef.current) {
+        clearTimeout(hideCursorTimeoutRef.current);
+        hideCursorTimeoutRef.current = null;
+      }
+    };
     container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseleave', handleMouseLeave);
     return () => {
       container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseleave', handleMouseLeave);
       if (hideControlsTimeoutRef.current) clearTimeout(hideControlsTimeoutRef.current);
+      if (hideCursorTimeoutRef.current) clearTimeout(hideCursorTimeoutRef.current);
     };
   }, []);
 
@@ -666,7 +777,8 @@ export function VideoPlayer({
       ref={containerRef}
       className={cn(
         'relative w-full aspect-video bg-black rounded-lg group video-player-main',
-        showSettings ? 'overflow-visible' : 'overflow-hidden'
+        showSettings ? 'overflow-visible' : 'overflow-hidden',
+        cursorHidden && 'cursor-none'
       )}
     >
       {/* Video Element - no onClick; tap handled by overlay */}
@@ -686,9 +798,30 @@ export function VideoPlayer({
         onEnded={onEnded}
       />
 
+      {/* Double-tap seek: same icon left (prev) / right (next), above other UI */}
+      {seekIndicator === 'backward' && (
+        <div
+          className="absolute left-[18%] top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 pointer-events-none"
+          aria-hidden
+        >
+          <SkipForward className="w-6 h-6 sm:w-7 sm:h-7 text-white/90 rotate-180" strokeWidth={2} />
+        </div>
+      )}
+      {seekIndicator === 'forward' && (
+        <div
+          className="absolute right-[18%] top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/40 pointer-events-none"
+          aria-hidden
+        >
+          <SkipForward className="w-6 h-6 sm:w-7 sm:h-7 text-white/90" strokeWidth={2} />
+        </div>
+      )}
+
       {/* Tap overlay: sides = show/hide bar, center = play/pause; touch resets auto-hide */}
       <div
-        className="absolute inset-0 z-[1] cursor-pointer"
+        className={cn(
+          'absolute inset-0 z-[1]',
+          !cursorHidden && 'cursor-pointer'
+        )}
         onClick={(e) => {
           e.stopPropagation();
           handleContainerTap(e.clientX);
@@ -728,29 +861,33 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* Play Button Overlay - single play icon when paused (at start or mid-video) */}
+      {/* Play Button Overlay - only the icon is clickable (icon-sized hit area) */}
       {!isPlaying && !isLoading && (
-        <div
-          className="absolute inset-0 z-[2] flex items-center justify-center bg-black/30 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleContainerTap(e.clientX);
-          }}
-          onTouchEnd={(e) => {
-            if (e.changedTouches[0]) {
-              e.preventDefault();
-              handleContainerTap(e.changedTouches[0].clientX);
-            }
-          }}
-          onTouchMove={() => resetHideTimer()}
-        >
-          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/30 pointer-events-none">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+              resetHideTimer();
+              setCursorHidden(false);
+            }}
+            onTouchEnd={(e) => {
+              if (e.changedTouches[0]) {
+                e.preventDefault();
+                togglePlay();
+                resetHideTimer();
+              }
+            }}
+            className="pointer-events-auto p-0 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors shrink-0"
+            aria-label="Play"
+          >
             <Play className="w-7 h-7 sm:w-10 sm:h-10 text-white ml-0.5 sm:ml-1" />
-          </div>
+          </button>
         </div>
       )}
 
-      {/* Pause icon overlay - when playing + controls visible; tap to pause; hides with controls */}
+      {/* Pause icon overlay - when playing + controls visible; only icon-sized hit area */}
       {isPlaying && showControls && (
         <div
           className="absolute inset-0 z-[2] flex items-center justify-center pointer-events-none"
@@ -770,7 +907,7 @@ export function VideoPlayer({
                 resetHideTimer();
               }
             }}
-            className="pointer-events-auto w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors"
+            className="pointer-events-auto p-0 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-500 transition-colors shrink-0"
             aria-label="Pause"
           >
             <Pause className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
