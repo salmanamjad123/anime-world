@@ -17,6 +17,7 @@ interface PlayerStore extends PlayerConfig {
   setDefaultLanguage: (language: LanguageCategory) => void;
   setVolume: (volume: number) => void;
   setPlaybackSpeed: (speed: number) => void;
+  setSubtitlePosition: (position: number) => void;
   resetSettings: () => void;
 }
 
@@ -29,6 +30,7 @@ const defaultConfig: PlayerConfig = {
   defaultLanguage: 'sub',
   volume: 0.8,
   playbackSpeed: 1.0,
+  subtitlePosition: 100, // 100 = max top (default), 0 = bottom
 };
 
 export const usePlayerStore = create<PlayerStore>()(
@@ -44,7 +46,9 @@ export const usePlayerStore = create<PlayerStore>()(
       setDefaultLanguage: (defaultLanguage) => set({ defaultLanguage }),
       setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
       setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),
-      
+      setSubtitlePosition: (subtitlePosition) =>
+        set({ subtitlePosition: Math.max(0, Math.min(100, subtitlePosition)) }),
+
       resetSettings: () => set(defaultConfig),
     }),
     {

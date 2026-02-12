@@ -117,6 +117,7 @@ const memoryCache = new MemoryCache();
 export const CACHE_TTL = {
   ANIME_SEARCH: 30 * 60 * 1000,      // 30 minutes
   ANIME_INFO: 24 * 60 * 60 * 1000,   // 24 hours (rarely changes)
+  ANIME_LIST: 5 * 60 * 1000,         // 5 minutes (trending, popular, top-rated, season)
   EPISODE_LIST: 15 * 60 * 1000, // 15 minutes (new episodes visible within 15 min)
   STREAM_SOURCES: 5 * 60 * 1000,     // 5 minutes (links expire)
   PROVIDER_HEALTH: 1 * 60 * 1000,    // 1 minute

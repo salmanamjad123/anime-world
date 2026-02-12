@@ -70,7 +70,7 @@ export function VideoPlayer({
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('off');
   const [autoQuality, setAutoQuality] = useState(true);
   
-  const { volume, playbackSpeed, setVolume } = usePlayerStore();
+  const { volume, playbackSpeed, setVolume, subtitlePosition, setSubtitlePosition } = usePlayerStore();
   const isMobile = useIsMobile();
 
   // Keep ref in sync for timeout callback
@@ -585,13 +585,24 @@ export function VideoPlayer({
     };
   }, []);
 
-  // Keyboard shortcuts: Left = -10s, Right = +10s
+   // Keyboard shortcuts: Space = play/pause, Left = -10s, Right = +10s
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!videoRef.current) return;
       const video = videoRef.current;
       const skip = 10;
-      if (e.key === 'ArrowLeft') {
+
+      if (e.key === ' ') {
+        e.preventDefault();
+        // Don't toggle when focus is in an input (e.g. search)
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+        if (video.paused) {
+          video.play().catch(console.error);
+        } else {
+          video.pause();
+        }
+      } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         video.currentTime = Math.max(0, video.currentTime - skip);
         setCurrentTime(video.currentTime);
@@ -662,6 +673,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         className="w-full h-full video-subtitles"
+        style={{ ['--subtitle-position' as string]: subtitlePosition }}
         poster={poster}
         onPlay={() => {
           setIsPlaying(true);
@@ -1064,6 +1076,40 @@ export function VideoPlayer({
                       )}
                     </div>
                   )}
+
+                  {/* Move subtitles up / down - thin slider; +/- buttons change value */}
+                  <div className="px-4 py-3 border-t border-gray-700 text-center">
+                    <p className="text-sm text-gray-400 mb-2">Move subtitles up / down</p>
+                    <div className="flex items-center gap-2 min-h-[24px]">
+                      <button
+                        type="button"
+                        onClick={() => setSubtitlePosition(Math.max(0, subtitlePosition - 10))}
+                        className="text-gray-400 hover:text-white text-base font-light select-none shrink-0 self-center p-1 -m-1 rounded touch-manipulation"
+                        aria-label="Move subtitles down"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={subtitlePosition}
+                        onChange={(e) => setSubtitlePosition(Number(e.target.value))}
+                        style={{ ['--slider-fill' as string]: `${subtitlePosition}%` }}
+                        className="subtitle-position-slider flex-1 min-w-0 self-center"
+                        aria-label="Subtitle position: left is bottom, right is max top"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSubtitlePosition(Math.min(100, subtitlePosition + 10))}
+                        className="text-gray-400 hover:text-white text-base font-light select-none shrink-0 self-center p-1 -m-1 rounded touch-manipulation"
+                        aria-label="Move subtitles up"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

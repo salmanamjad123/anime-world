@@ -5,7 +5,10 @@
 
 import { axiosInstance } from './axios';
 import { ANILIST_API_URL } from '@/constants/api';
+import { getCached, CACHE_TTL } from '@/lib/cache';
 import type { Anime, AnimeSearchResult, AnimeFilters } from '@/types';
+
+const RATE_LIMIT_RETRY_MS = 60_000; // wait 1 min on 429 then retry
 
 /**
  * GraphQL Queries
@@ -136,33 +139,50 @@ const ANIME_BY_ID_QUERY = `
 `;
 
 /**
- * Execute GraphQL query
+ * Execute GraphQL query. Retries once after 1 min on 429 (rate limit).
  */
-async function executeQuery<T>(query: string, variables: Record<string, any> = {}): Promise<T> {
+async function executeQuery<T>(query: string, variables: Record<string, any> = {}, retryCount = 0): Promise<T> {
   try {
     const response = await axiosInstance.post<T>(ANILIST_API_URL, {
       query,
       variables,
     });
     return response.data;
-  } catch (error) {
+  } catch (error: unknown) {
+    const status = (error as { response?: { status?: number; headers?: { 'retry-after'?: string } } })?.response?.status;
+    if (status === 429 && retryCount < 1) {
+      const retryAfter =
+        (error as { response?: { headers?: { 'retry-after'?: string } } })?.response?.headers?.['retry-after'];
+      const waitMs = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, 120_000) : RATE_LIMIT_RETRY_MS;
+      console.warn(`[AniList] 429 rate limit - waiting ${waitMs / 1000}s before retry`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      return executeQuery<T>(query, variables, retryCount + 1);
+    }
     console.error('[AniList API Error]', error);
     throw new Error('Failed to fetch data from AniList');
   }
 }
 
 /**
- * Get trending anime
+ * Get trending anime (cached 5 min)
  */
 export async function getTrendingAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  return executeQuery<AnimeSearchResult>(TRENDING_QUERY, { page, perPage });
+  return getCached(
+    `anilist:trending:${page}:${perPage}`,
+    () => executeQuery<AnimeSearchResult>(TRENDING_QUERY, { page, perPage }),
+    CACHE_TTL.ANIME_LIST
+  );
 }
 
 /**
- * Get popular anime
+ * Get popular anime (cached 5 min)
  */
 export async function getPopularAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  return executeQuery<AnimeSearchResult>(POPULAR_QUERY, { page, perPage });
+  return getCached(
+    `anilist:popular:${page}:${perPage}`,
+    () => executeQuery<AnimeSearchResult>(POPULAR_QUERY, { page, perPage }),
+    CACHE_TTL.ANIME_LIST
+  );
 }
 
 // AniList uses different names for some genres
@@ -201,11 +221,15 @@ export async function searchAnime(
 }
 
 /**
- * Get anime by ID
+ * Get anime by ID (cached 24 h)
  */
 export async function getAnimeById(id: string | number): Promise<{ data: { Media: Anime } }> {
   const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-  return executeQuery<{ data: { Media: Anime } }>(ANIME_BY_ID_QUERY, { id: numericId });
+  return getCached(
+    `anilist:anime:${numericId}`,
+    () => executeQuery<{ data: { Media: Anime } }>(ANIME_BY_ID_QUERY, { id: numericId }),
+    CACHE_TTL.ANIME_INFO
+  );
 }
 
 /**
@@ -223,21 +247,23 @@ export async function getAnimeByIds(ids: string[]): Promise<Anime[]> {
 }
 
 /**
- * Get top rated anime
+ * Get top rated anime (cached 5 min)
  */
 export async function getTopRatedAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  return executeQuery<AnimeSearchResult>(
-    SEARCH_QUERY,
-    {
-      page,
-      perPage,
-      sort: ['SCORE_DESC'],
-    }
+  return getCached(
+    `anilist:top:${page}:${perPage}`,
+    () =>
+      executeQuery<AnimeSearchResult>(SEARCH_QUERY, {
+        page,
+        perPage,
+        sort: ['SCORE_DESC'],
+      }),
+    CACHE_TTL.ANIME_LIST
   );
 }
 
 /**
- * Get anime by season
+ * Get anime by season (cached 5 min)
  */
 export async function getAnimeBySeason(
   season: string,
@@ -245,14 +271,16 @@ export async function getAnimeBySeason(
   page = 1,
   perPage = 20
 ): Promise<AnimeSearchResult> {
-  return executeQuery<AnimeSearchResult>(
-    SEARCH_QUERY,
-    {
-      page,
-      perPage,
-      season,
-      year,
-      sort: ['POPULARITY_DESC'],
-    }
+  return getCached(
+    `anilist:season:${season}:${year}:${page}:${perPage}`,
+    () =>
+      executeQuery<AnimeSearchResult>(SEARCH_QUERY, {
+        page,
+        perPage,
+        season,
+        year,
+        sort: ['POPULARITY_DESC'],
+      }),
+    CACHE_TTL.ANIME_LIST
   );
 }
