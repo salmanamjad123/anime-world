@@ -76,19 +76,93 @@ body {
     -1px -1px 2px black,
     0 0 4px black;
 }
-/* WebKit/Chrome: move subtitle container up from bottom (desktop) */
+/* Subtitle position: 0–100 from video --subtitle-position. Desktop and mobile keep their own default gaps. */
 .video-player-main video::-webkit-media-text-track-container,
 video.video-subtitles::-webkit-media-text-track-container {
-  bottom: 4.5rem;
+  /* Desktop: 0 = 0.5rem (bottom), 100 = 4.5rem (max top, default) */
+  bottom: calc(0.5rem + (4 * (var(--subtitle-position, 100) / 100)) * 1rem);
 }
 
-/* Mobile: portrait and landscape fullscreen */
+/* Mobile: portrait and landscape fullscreen - same 0–100 scale, different rem range */
 @media (max-width: 640px), ((max-width: 896px) and (max-height: 500px)) {
   .video-subtitles::cue {
     transform: translateY(-4px);
   }
   .video-player-main video::-webkit-media-text-track-container,
   video.video-subtitles::-webkit-media-text-track-container {
-    bottom: 1.25rem;
+    /* Mobile: 0 = 0.25rem (bottom), 100 = 1.25rem (max top, default) */
+    bottom: calc(0.25rem + (1 * (var(--subtitle-position, 100) / 100)) * 1rem);
   }
+}
+
+/* Thin subtitle position slider - thumb and track vertically centered (desktop + mobile) */
+.subtitle-position-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+  box-sizing: border-box;
+}
+
+/* WebKit: track 4px tall, drawn centered; transition for smooth fill when value changes */
+.subtitle-position-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 24px;
+  border-radius: 0;
+  background: linear-gradient(
+      to right,
+      #6c717b 0,
+      #6c717b var(--slider-fill, 50%),
+      #454a52 var(--slider-fill, 50%) 100%
+    )
+    0 50% / 100% 4px no-repeat;
+  transition: background 0.12s ease-out;
+}
+/* WebKit: 14px thumb centered on track; smooth drag feel */
+.subtitle-position-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #4a90e2;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.08s ease-out, box-shadow 0.12s ease;
+}
+.subtitle-position-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.08);
+}
+.subtitle-position-slider::-webkit-slider-thumb:active {
+  transform: scale(1.02);
+}
+
+/* Firefox: track 4px, thumb 14px; smooth transition */
+.subtitle-position-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #454a52;
+  transition: background 0.12s ease-out;
+}
+.subtitle-position-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4a90e2;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.08s ease-out, box-shadow 0.12s ease;
+}
+.subtitle-position-slider::-moz-range-thumb:hover {
+  transform: scale(1.08);
+}
+.subtitle-position-slider::-moz-range-thumb:active {
+  transform: scale(1.02);
 }

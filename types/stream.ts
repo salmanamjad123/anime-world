@@ -85,4 +85,6 @@ export interface PlayerConfig {
   defaultLanguage: LanguageCategory;
   volume: number; // 0-1
   playbackSpeed: number; // 0.25 - 2.0
+  /** Subtitle vertical position: 0 = bottom (min gap), 100 = max top. Only decrease from max. */
+  subtitlePosition: number; // 0-100
 }
