@@ -19,14 +19,14 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900">
       <Header />
       
-      <main className="container mx-auto px-4 py-8">
-        <section className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2">
+      <main className="container mx-auto px-4 py-4">
+        <section className="mb-4 sm:mb-6">
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
             Anime Village – Watch Anime Online Free
           </h1>
-          {/* <p className="text-gray-400 text-sm sm:text-base max-w-2xl">
-            Like Aniwatch, Anilab, HiAnime. Stream One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and 10000+ anime with sub and dub.
-          </p> */}
+          <p className="text-gray-500 text-xs sm:text-sm max-w-2xl">
+            Anime Village is a free place to watch anime online. Stream thousands of series in English sub and dub.
+          </p>
         </section>
         {/* Spotlight Slider (first section) */}
         <SpotlightSlider

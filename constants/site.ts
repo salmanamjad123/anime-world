@@ -8,4 +8,4 @@ export const SITE_URL =
 
 export const SITE_NAME = 'Anime Village';
 export const SITE_DESCRIPTION =
-  'Stream thousands of anime series free with English sub and dub. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer, Dragon Ball and more. Best free anime streaming site.';
+  'Anime Village — watch anime online free. Stream thousands of series in English sub and dub. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and more.';

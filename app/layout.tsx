@@ -30,6 +30,7 @@ const WEB_SITE_JSON_LD = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: SITE_NAME,
+  alternateName: ["Anime Village", "animevillage", "animevillage.org"],
   url: SITE_URL,
   description: SITE_DESCRIPTION,
   potentialAction: {
@@ -43,6 +44,7 @@ const ORGANIZATION_JSON_LD = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: SITE_NAME,
+  alternateName: ["Anime Village", "animevillage", "animevillage.org"],
   url: SITE_URL,
   description: SITE_DESCRIPTION,
   sameAs: [],
@@ -89,19 +91,22 @@ export const metadata: Metadata = {
   keywords: [...ALL_SEO_KEYWORDS],
   authors: [{ name: SITE_NAME, url: SITE_URL }],
   creator: SITE_NAME,
+  icons: {
+    icon: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: `${SITE_NAME} - Watch Anime Free | Aniwatch, Anilab, HiAnime Alternative`,
+    title: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
     description: SITE_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: SITE_NAME,
+        alt: `${SITE_NAME} - Free anime streaming with sub and dub`,
       },
     ],
   },
