@@ -103,7 +103,11 @@ export async function GET(
             forceRefresh
           );
 
-          if (sources?.sources && sources.sources.length > 0) {
+          // Accept HLS sources OR embed-only (Anikoto/Megaplay iframe playback)
+          if (
+            (sources?.sources && sources.sources.length > 0) ||
+            sources?.embedUrl
+          ) {
             return NextResponse.json(sources);
           }
         } catch (err) {

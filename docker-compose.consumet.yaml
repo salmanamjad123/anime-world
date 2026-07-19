@@ -1,0 +1,13 @@
+# Self-hosted Consumet API (required for streaming when HiAnime/aniwatch scrapers fail).
+# Start: docker compose -f docker-compose.consumet.yaml up -d
+# If compose errors reading .env (e.g. JSON in FIREBASE_SERVICE_ACCOUNT_JSON), use:
+#   docker compose --env-file /dev/null -f docker-compose.consumet.yaml up -d
+# Then set in anime-world/.env.local: CONSUMET_API_URL=http://localhost:3333
+services:
+  consumet-api:
+    image: riimuru/consumet-api
+    platform: linux/amd64
+    ports:
+      - '3333:3000'
+    environment:
+      NODE_ENV: PROD

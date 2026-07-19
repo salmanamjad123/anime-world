@@ -250,18 +250,26 @@ export async function getHiAnimeStreamSources(
       timeout: HIANIME_TIMEOUT,
     });
 
-    if (!response.data || !response.data.data || !response.data.data.sources) {
+    const data = response.data?.data;
+    if (!data) {
+      throw new Error('No sources in response');
+    }
+    if (
+      !(data.sources?.length) &&
+      !data.embedURL &&
+      !data.embedUrl
+    ) {
       throw new Error('No sources in response');
     }
 
-    const data = response.data.data;
-
-    // Convert HiAnime response to our standard format
-    const sources = data.sources.map((source: any) => ({
-      url: source.url,
-      quality: source.quality || 'default',
-      isM3U8: source.type === 'hls' || source.url.includes('.m3u8'),
-    }));
+    // Convert HiAnime response to our standard format (skip iframe embeds)
+    const sources = (data.sources || [])
+      .filter((source: any) => source?.url && source.type !== 'embed')
+      .map((source: any) => ({
+        url: source.url,
+        quality: source.quality || 'default',
+        isM3U8: source.type === 'hls' || String(source.url).includes('.m3u8'),
+      }));
 
     // Convert tracks/subtitles to our format - API may return tracks (vidstreaming) or subtitles (megacloud)
     const rawTracks = data.tracks || data.subtitles || [];
@@ -349,14 +357,15 @@ export async function getHiAnimeStreamSources(
       ? { start: toSeconds(outroRaw.start), end: toSeconds(outroRaw.end) }
       : undefined;
 
+    const embedUrl = data.embedURL || data.embedUrl;
     return {
-      headers: {
-        Referer: 'https://hianime.to',
-        Origin: 'https://hianime.to',
+      headers: data.headers || {
+        Referer: embedUrl ? 'https://megaplay.buzz/' : 'https://hianime.to',
+        Origin: embedUrl ? 'https://megaplay.buzz' : 'https://hianime.to',
       },
       sources,
       subtitles: uniqueSubtitles,
-      embedUrl: data.embedURL,
+      embedUrl,
       intro,
       outro,
     };

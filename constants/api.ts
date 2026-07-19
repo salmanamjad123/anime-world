@@ -11,8 +11,7 @@ export const ANILIST_API_URL =
 export const CONSUMET_API_URL = 
   process.env.NEXT_PUBLIC_CONSUMET_API_URL || 'https://api.consumet.org';
 
-// HiAnime API (Primary streaming provider - Aniwatch API)
-// Deploy from: https://github.com/ghoshRitesh12/aniwatch-api
+// Streaming API (Anikoto-backed, HiAnime-compatible) — see ../streaming-api
 export const HIANIME_API_URL = 
   process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
 

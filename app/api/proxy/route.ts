@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     // CDN header variants - try alternate Referers on 403 (stormshade, fogtwist, etc.)
     const headerSets: Record<string, string>[] = [
+      { 'Referer': 'https://megaplay.buzz/', 'Origin': 'https://megaplay.buzz' },
       { 'Referer': 'https://megacloud.blog/', 'Origin': 'https://hianime.to' },
       { 'Referer': 'https://hianime.to/', 'Origin': 'https://hianime.to' },
       { 'Referer': 'https://stormshade84.live/', 'Origin': 'https://stormshade84.live' },

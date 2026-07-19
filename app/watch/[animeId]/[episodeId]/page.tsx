@@ -85,8 +85,12 @@ export default function WatchPage() {
   );
   const currentEpisode = episodes[currentEpisodeIndex];
   const videoSource = streamData?.sources?.[0]?.url;
+  const hasPlayback = Boolean(videoSource || streamData?.embedUrl);
   const resolvingFallback = isFallbackEpisode && resolvedEpisodeId === undefined;
-  const showStreamDown = (isFallbackEpisode && resolvedEpisodeId === null) || streamError || (!videoSource && !isStreamLoading && !resolvingFallback);
+  const showStreamDown =
+    (isFallbackEpisode && resolvedEpisodeId === null) ||
+    streamError ||
+    (!hasPlayback && !isStreamLoading && !resolvingFallback);
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
 

@@ -639,15 +639,21 @@ export function VideoPlayer({
     return `${embedUrl}${sep}sub=${encodeURIComponent(subUrl)}&subtitle=${encodeURIComponent(subUrl)}`;
   }, [embedUrl, subtitles]);
 
-  // Embed mode: iframe loads CDN embed page (like AniWatch)
-  if (embedUrl) {
+  // Prefer native HLS when available (avoids Megaplay iframe ads).
+  const hasNativeSource =
+    Boolean(src?.includes('.m3u8')) ||
+    (sources?.some((s) => s?.isM3U8 || s?.url?.includes('.m3u8')) ?? false);
+
+  // Embed mode only when we have no HLS source
+  if (embedUrl && !hasNativeSource) {
     return (
       <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
         <iframe
           src={embedWithSubs}
           className="absolute inset-0 w-full h-full border-0"
           allowFullScreen
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
           title="Anime player"
           onLoad={() => setIsLoading(false)}
         />
