@@ -129,6 +129,9 @@ export const metadata: Metadata = {
   category: "entertainment",
   verification: {
     google: "QFwlV5RYwIEsVd1vRMwIDymOoFTbsXXymurEz8kmBtc",
+    other: {
+      "msvalidate.01": "5327699643950CD79841C270F5840575",
+    },
   },
 };
 
