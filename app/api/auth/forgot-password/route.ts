@@ -7,11 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { getAdminAuth } from '@/lib/firebase/admin';
 import { SITE_NAME } from '@/constants/site';
+import { EMAIL_FROM, isEmailConfigured } from '@/lib/email';
 import { authRateLimiters, getClientIdentifier } from '@/lib/utils/rate-limiter';
-
-function isResendConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY?.trim();
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isResendConfigured()) {
+    if (!isEmailConfigured()) {
       return NextResponse.json(
         { error: 'Email service is not configured' },
         { status: 503 }
@@ -82,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(process.env.RESEND_API_KEY!);
     const { error } = await resend.emails.send({
-      from: `${SITE_NAME} <noreply@animevillage.org>`,
+      from: EMAIL_FROM,
       to: normalizedEmail,
       subject: `Reset your password - ${SITE_NAME}`,
       html: `

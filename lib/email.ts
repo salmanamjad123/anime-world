@@ -1,42 +1,32 @@
 /**
- * Email Service
- * Sends verification codes via Nodemailer (Gmail app password, etc.)
+ * Email Service — Resend (verified domain animevillage.org)
  */
 
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Anime Village';
 
-// Gmail defaults - only SMTP_USER and SMTP_APP_PASSWORD needed from env
-const GMAIL_HOST = 'smtp.gmail.com';
-const GMAIL_PORT = 587;
-
-function getTransporter() {
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_APP_PASSWORD?.trim().replace(/\s/g, ''); // Remove spaces from app password
-
-  if (!user || !pass) {
-    throw new Error('SMTP not configured: set SMTP_USER and SMTP_APP_PASSWORD in env');
-  }
-
-  return nodemailer.createTransport({
-    host: GMAIL_HOST,
-    port: GMAIL_PORT,
-    secure: false,
-    auth: { user, pass },
-  });
-}
+/** Branded From — domain must be verified in Resend */
+export const EMAIL_FROM =
+  process.env.EMAIL_FROM?.trim() ||
+  `${SITE_NAME} <hello@animevillage.org>`;
 
 export function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_USER && process.env.SMTP_APP_PASSWORD);
+  return !!process.env.RESEND_API_KEY?.trim();
+}
+
+function getResend(): Resend {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) {
+    throw new Error('Email not configured: set RESEND_API_KEY in env');
+  }
+  return new Resend(key);
 }
 
 export async function sendVerificationCode(to: string, code: string): Promise<void> {
-  const transporter = getTransporter();
-  const from = process.env.SMTP_USER!;
-
-  await transporter.sendMail({
-    from: `"${SITE_NAME}" <${from}>`,
+  const resend = getResend();
+  const { error } = await resend.emails.send({
+    from: EMAIL_FROM,
     to,
     subject: `Your verification code: ${code}`,
     html: `
@@ -51,4 +41,8 @@ export async function sendVerificationCode(to: string, code: string): Promise<vo
     `,
     text: `Your ${SITE_NAME} verification code is: ${code}. It expires in 10 minutes.`,
   });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to send verification email');
+  }
 }
