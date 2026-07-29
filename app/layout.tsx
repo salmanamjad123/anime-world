@@ -5,7 +5,7 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Footer } from "@/components/layout/Footer";
-import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/constants/site";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, SITE_TITLE_DEFAULT, SOCIAL_LINKS } from "@/constants/site";
 import { ALL_SEO_KEYWORDS } from "@/constants/seo";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 
@@ -47,7 +47,7 @@ const ORGANIZATION_JSON_LD = {
   alternateName: ["Anime Village", "animevillage", "animevillage.org"],
   url: SITE_URL,
   description: SITE_DESCRIPTION,
-  sameAs: [],
+  sameAs: [...SOCIAL_LINKS],
 };
 
 const FAQ_JSON_LD = {
@@ -72,10 +72,18 @@ const FAQ_JSON_LD = {
     },
     {
       "@type": "Question",
-      name: "Does Anime Village have sub and dub?",
+      name: "Does Anime Village have English sub and dub?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Most anime on Anime Village are available in both sub (Japanese with English subtitles) and dub (English dubbed) versions. Toggle between them on each anime page.",
+        text: "Yes. Most anime on Anime Village are available with English subtitles (sub) and English dubbed (dub) versions. Toggle between them on each anime page.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can I watch anime online free on Anime Village?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Anime Village is a free anime streaming site. Search for a series, pick an episode, and watch online with sub or dub.",
       },
     },
   ],
@@ -84,7 +92,7 @@ const FAQ_JSON_LD = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
+    default: SITE_TITLE_DEFAULT,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
@@ -99,20 +107,20 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
+    title: SITE_TITLE_DEFAULT,
     description: SITE_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} - Free anime streaming with sub and dub`,
+        alt: `${SITE_NAME} — watch anime online free with English sub and dub`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} - Free Anime Streaming | Watch 10,000+ Anime Online`,
+    title: SITE_TITLE_DEFAULT,
     description: SITE_DESCRIPTION,
   },
   robots: {

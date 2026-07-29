@@ -18,6 +18,7 @@ export const ROUTES = {
   PROFILE_SECTION: (section: string, tab?: string) =>
     tab ? `/profile?section=${section}&tab=${tab}` : `/profile?section=${section}`,
   SETTINGS: '/settings',
+  ADMIN: '/admin',
 } as const;
 
 export const AZ_LETTERS = [

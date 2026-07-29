@@ -64,9 +64,17 @@ export async function generateMetadata({
   }
 
   const title = getPreferredTitle(anime.title);
-  const description = anime.description
-    ? stripHtml(anime.description).slice(0, 160)
-    : `Watch ${title} online free. Stream ${title} episodes with sub and dub on ${SITE_NAME}.`;
+  const synopsis = anime.description
+    ? stripHtml(anime.description).replace(/\s+/g, ' ').trim()
+    : '';
+  const seoTail = `Watch ${title} online free with English sub and dub on ${SITE_NAME}.`;
+  const description = synopsis
+    ? `${synopsis.slice(0, 110).trim()}${synopsis.length > 110 ? '…' : ''} ${seoTail}`.slice(
+        0,
+        160
+      )
+    : seoTail;
+  const pageTitle = `Watch ${title} Online Free (Sub & Dub)`;
   const canonicalUrl = `${SITE_URL}/anime/${id}`;
   const image =
     anime.bannerImage ||
@@ -88,21 +96,24 @@ export async function generateMetadata({
     .map((t) => t.name);
 
   return {
-    title: `Watch ${title} Online Free`,
+    title: pageTitle,
     description,
     keywords: [
       title,
       ...titleVariants.filter((t) => t !== title),
       `watch ${title}`,
+      `watch ${title} online free`,
       `${title} online`,
       `${title} episodes`,
+      `${title} english sub`,
+      `${title} english dub`,
       `${title} sub`,
       `${title} dub`,
       ...(anime.genres || []),
       ...tagKeywords,
     ],
     openGraph: {
-      title: `Watch ${title} Online Free | ${SITE_NAME}`,
+      title: `${pageTitle} | ${SITE_NAME}`,
       description,
       url: canonicalUrl,
       siteName: SITE_NAME,
@@ -112,13 +123,13 @@ export async function generateMetadata({
           url: image,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: `${title} anime poster — watch online free on ${SITE_NAME}`,
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title: `Watch ${title} Online Free | ${SITE_NAME}`,
+      title: `${pageTitle} | ${SITE_NAME}`,
       description,
     },
     alternates: {
@@ -135,7 +146,7 @@ function buildAnimeJsonLd(anime: Anime, id: string) {
   const title = getPreferredTitle(anime.title);
   const description = anime.description
     ? stripHtml(anime.description).slice(0, 200)
-    : `Watch ${title} online free.`;
+    : `Watch ${title} online free with English sub and dub on ${SITE_NAME}.`;
   const image =
     anime.bannerImage ||
     anime.coverImage?.extraLarge ||
@@ -145,12 +156,18 @@ function buildAnimeJsonLd(anime: Anime, id: string) {
   const keywords = [
     ...(anime.genres || []),
     ...(anime.tags?.slice(0, 8).map((t) => t.name) || []),
+    'watch anime online free',
+    'anime sub',
+    'anime dub',
   ].filter(Boolean);
 
   const tvSeries = {
     '@context': 'https://schema.org',
     '@type': 'TVSeries',
     name: title,
+    alternateName: [anime.title.english, anime.title.romaji, anime.title.native].filter(
+      (t): t is string => Boolean(t?.trim()) && t !== title
+    ),
     description,
     image: image ? [image] : undefined,
     url,

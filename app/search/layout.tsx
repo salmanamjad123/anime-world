@@ -1,5 +1,5 @@
 /**
- * Search page layout - SEO metadata
+ * Search page layout - SEO metadata only (no visible copy changes)
  */
 
 import type { Metadata } from 'next';
@@ -9,20 +9,30 @@ import {
   CORE_KEYWORDS,
 } from '@/constants/seo';
 
+const SEARCH_TITLE = 'Search Anime Online Free | Browse by Genre & Title';
+const SEARCH_DESCRIPTION = `Search anime online free on ${SITE_NAME}. Browse by genre, type, or season — English sub and dub. Find One Piece, Naruto, Jujutsu Kaisen and more.`;
+
 export const metadata: Metadata = {
-  title: 'Search Anime | Browse 10,000+ Anime by Genre',
-  description: `Search and browse 10,000+ anime free. Filter by genre, type, season. One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and more.`,
+  title: SEARCH_TITLE,
+  description: SEARCH_DESCRIPTION,
   keywords: [
     'search anime',
+    'browse anime online free',
     'anime filter',
-    'browse anime',
+    'anime by genre',
     'anime village',
     ...POPULAR_ANIME_KEYWORDS.slice(0, 15),
     ...CORE_KEYWORDS.slice(0, 8),
   ],
   openGraph: {
-    title: `Search Anime | ${SITE_NAME}`,
+    title: `${SEARCH_TITLE} | ${SITE_NAME}`,
+    description: SEARCH_DESCRIPTION,
     url: `${SITE_URL}/search`,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${SEARCH_TITLE} | ${SITE_NAME}`,
+    description: SEARCH_DESCRIPTION,
   },
   alternates: {
     canonical: `${SITE_URL}/search`,

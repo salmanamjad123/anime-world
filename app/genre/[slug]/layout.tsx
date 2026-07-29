@@ -21,23 +21,32 @@ export async function generateMetadata({
   if (!genre) return { title: 'Genre Not Found' };
 
   const title = `${genre} Anime`;
-  const description = `Watch ${genre} anime online free. Stream the best ${genre.toLowerCase()} anime series with sub and dub on ${SITE_NAME}.`;
+  const pageTitle = `Watch ${genre} Anime Online Free (Sub & Dub)`;
+  const description = `Watch ${genre.toLowerCase()} anime online free on ${SITE_NAME}. Stream top ${genre.toLowerCase()} series with English subtitles and dub.`;
   const url = `${SITE_URL}/genre/${slug}`;
 
   return {
-    title: `Watch ${title} Online Free`,
+    title: pageTitle,
     description,
     keywords: [
       `${genre} anime`,
       `watch ${genre} anime`,
+      `watch ${genre} anime online free`,
       `${genre.toLowerCase()} anime online`,
       `${genre} anime list`,
       `best ${genre} anime`,
+      `${genre} anime sub`,
+      `${genre} anime dub`,
     ],
     openGraph: {
-      title: `${title} | ${SITE_NAME}`,
+      title: `${pageTitle} | ${SITE_NAME}`,
       description,
       url,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${pageTitle} | ${SITE_NAME}`,
+      description,
     },
     alternates: { canonical: url },
   };

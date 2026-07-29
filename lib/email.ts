@@ -46,3 +46,50 @@ export async function sendVerificationCode(to: string, code: string): Promise<vo
     throw new Error(error.message || 'Failed to send verification email');
   }
 }
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Engagement / broadcast email to one recipient (plain text body → simple HTML). */
+export async function sendEngagementEmail(
+  to: string,
+  subject: string,
+  body: string
+): Promise<void> {
+  const resend = getResend();
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
+    'https://animevillage.org';
+  const paragraphs = body
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 12px;line-height:1.6;color:#334155;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
+    .join('');
+
+  const { error } = await resend.emails.send({
+    from: EMAIL_FROM,
+    to,
+    subject,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+        <h2 style="color:#2563eb;margin:0 0 16px;">${escapeHtml(SITE_NAME)}</h2>
+        ${paragraphs}
+        <p style="margin:24px 0 0;">
+          <a href="${siteUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Visit ${escapeHtml(SITE_NAME)}</a>
+        </p>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
+        <p style="color:#94a3b8;font-size:12px;margin:0;">You received this because you have an account on ${escapeHtml(SITE_NAME)}.</p>
+      </div>
+    `,
+    text: `${body.trim()}\n\nVisit ${SITE_NAME}: ${siteUrl}`,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to send email');
+  }
+}

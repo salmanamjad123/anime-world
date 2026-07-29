@@ -142,8 +142,11 @@ export const POPULAR_ANIME_KEYWORDS = [
 /** Brand keywords - helps rank for "anime village" (with space) */
 export const BRAND_KEYWORDS = [
   'anime village',
+  'animevillage',
+  'animevillage.org',
   'anime village streaming',
   'anime village watch',
+  'anime village watch anime',
 ] as const;
 
 /** Core streaming keywords */
@@ -158,6 +161,10 @@ export const CORE_KEYWORDS = [
   'anime sub',
   'anime dub',
   'anime sub and dub',
+  'english sub anime',
+  'english dubbed anime',
+  'watch anime online free',
+  'watch anime with english subtitles',
   'free anime',
   'anime free',
   'watch anime free',

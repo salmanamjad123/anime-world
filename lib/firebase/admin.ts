@@ -3,24 +3,61 @@
  * Used for Firestore in API routes (stream cache, etc.)
  *
  * Requires FIREBASE_SERVICE_ACCOUNT_JSON env var (JSON string of service account key)
- * Or GOOGLE_APPLICATION_CREDENTIALS for local file path
  */
 
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
 import type { Firestore } from 'firebase-admin/firestore';
 
 let admin: typeof import('firebase-admin') | null = null;
 let firestore: Firestore | null = null;
 
+/**
+ * Next/dotenv often break nested JSON in .env when written as:
+ *   FIREBASE_SERVICE_ACCOUNT_JSON="{"type":"..."}"
+ * Extract the {...} object from the .env file as a fallback.
+ */
+function loadServiceAccountFromEnvFile(): Record<string, string> | null {
+  try {
+    const envPath = resolve(process.cwd(), '.env');
+    if (!existsSync(envPath)) return null;
+    const text = readFileSync(envPath, 'utf8');
+    const key = 'FIREBASE_SERVICE_ACCOUNT_JSON';
+    const idx = text.indexOf(key);
+    if (idx === -1) return null;
+    const rest = text.slice(idx);
+    const nextKey = rest.search(/\n[A-Z_]+=/);
+    const chunk = nextKey === -1 ? rest : rest.slice(0, nextKey);
+    const brace = chunk.indexOf('{');
+    const last = chunk.lastIndexOf('}');
+    if (brace === -1 || last === -1) return null;
+    return JSON.parse(chunk.slice(brace, last + 1)) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+function parseServiceAccount(): Record<string, string> | null {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (raw && raw.length > 2) {
+    try {
+      return JSON.parse(raw) as Record<string, string>;
+    } catch {
+      /* try .env file fallback */
+    }
+  }
+  return loadServiceAccountFromEnvFile();
+}
+
 function getAdmin() {
   if (admin) return admin;
 
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!serviceAccountJson) {
+  const serviceAccount = parseServiceAccount();
+  if (!serviceAccount) {
     return null;
   }
 
   try {
-    const serviceAccount = JSON.parse(serviceAccountJson) as Record<string, string>;
     const adminModule = require('firebase-admin').default;
     admin = adminModule;
 
@@ -53,5 +90,5 @@ export function getAdminAuth() {
 }
 
 export function isFirebaseAdminConfigured(): boolean {
-  return !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  return !!parseServiceAccount();
 }

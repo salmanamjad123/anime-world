@@ -42,19 +42,20 @@ export async function generateMetadata({
   const url = `${SITE_URL}/search${search ? `?search=${encodeURIComponent(search)}` : ''}`;
 
   if (search) {
-    const title = `Watch ${search} Online Free`;
-    const description = `Search and watch ${search} online free. Stream ${search} with sub and dub on ${SITE_NAME}.`;
+    const title = `Watch ${search} Online Free (Sub & Dub)`;
+    const description = `Watch ${search} online free on ${SITE_NAME}. Stream episodes with English subtitles and dub.`;
     return {
       title,
       description,
-      openGraph: { title, description, url },
+      openGraph: { title: `${title} | ${SITE_NAME}`, description, url },
+      twitter: { card: 'summary_large_image', title: `${title} | ${SITE_NAME}`, description },
       alternates: { canonical: url },
     };
   }
 
   return {
-    title: 'Search Anime - Filter by Genre, Type, Season',
-    description: `Search and browse 10,000+ anime free. Filter by genre, type, season.`,
+    title: 'Search Anime Online Free | Browse by Genre & Title',
+    description: `Search anime online free on ${SITE_NAME}. Browse by genre, type, or season — English sub and dub.`,
     alternates: { canonical: url },
   };
 }
