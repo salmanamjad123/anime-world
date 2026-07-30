@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 
+/**
+ * When true, next/image skips Vercel Image Optimization and serves the
+ * original src (plain <img>). Avoids blank images after the monthly
+ * optimization quota is exceeded. Set NEXT_PUBLIC_IMAGES_UNOPTIMIZED=false
+ * to turn optimization back on (e.g. after upgrading the Vercel plan).
+ */
+const imagesUnoptimized =
+  process.env.NEXT_PUBLIC_IMAGES_UNOPTIMIZED !== "false";
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -17,6 +26,8 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    // Global: all next/image usages — no per-component changes needed
+    unoptimized: imagesUnoptimized,
     remotePatterns: [
       {
         protocol: 'https',
