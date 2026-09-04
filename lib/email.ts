@@ -1,7 +1,6 @@
 /**
  * Email Service — Resend (verified domain animevillage.org)
  */
-
 import { Resend } from 'resend';
 
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Anime Village';
