@@ -63,6 +63,8 @@ export interface StreamCacheDocument {
 
   /** When cached (ISO string) */
   cachedAt: string;
+  /** When this cache entry expires (ISO string) — HLS URLs expire in minutes */
+  expiresAt?: string;
   /** Schema version for migrations */
   schemaVersion: string;
 }

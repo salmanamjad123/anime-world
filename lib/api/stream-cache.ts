@@ -1,9 +1,7 @@
 /**
  * Stream Cache - 3-tier: Redis → Firestore → HiAnime
  *
- * Firestore: stream_cache collection with clean schema
- * - Document ID: hash(episodeId|server|category)
- * - Fields: episodeId, server, category, sources, subtitles, metadata
+ * HLS CDN links expire in ~5–8 minutes (Megaplay). Keep cache TTL short.
  */
 
 import {
@@ -16,8 +14,11 @@ import {
   toStreamCacheDocId,
   type StreamCacheDocument,
 } from '@/lib/firebase/stream-cache-schema';
-import { getCached } from '@/lib/cache';
+import { deleteCacheKey, getCached } from '@/lib/cache';
 import type { StreamSourcesResponse } from '@/types';
+
+/** Megaplay/CDN m3u8 links expire quickly — align with streaming-api megaplay cache (~8 min) */
+export const STREAM_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Redis cache key */
 function toRedisKey(
@@ -28,12 +29,23 @@ function toRedisKey(
   return `stream:${episodeId}:${server}:${category}`;
 }
 
+function isCacheExpired(doc: StreamCacheDocument): boolean {
+  if (doc.expiresAt) {
+    return Date.parse(doc.expiresAt) <= Date.now();
+  }
+  if (doc.cachedAt) {
+    return Date.parse(doc.cachedAt) + STREAM_CACHE_TTL_MS <= Date.now();
+  }
+  return true;
+}
+
 function toCachedDocument(
   data: StreamSourcesResponse,
   episodeId: string,
   server: string,
   category: string
 ): StreamCacheDocument {
+  const now = Date.now();
   const doc: StreamCacheDocument = {
     episodeId,
     server,
@@ -48,15 +60,21 @@ function toCachedDocument(
       lang: s.lang,
       label: s.label,
     })),
-    cachedAt: new Date().toISOString(),
+    cachedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + STREAM_CACHE_TTL_MS).toISOString(),
     schemaVersion: STREAM_CACHE_SCHEMA_VERSION,
   };
-  // Firestore rejects undefined - only include optional fields when defined
   if (data.embedUrl != null) doc.embedUrl = data.embedUrl;
   if (data.headers != null) doc.headers = data.headers;
-  // Only store real intro/outro - not default { start: 0, end: 0 }
   if (data.intro && data.intro.end != null && data.intro.end > 0) doc.intro = data.intro;
-  if (data.outro && data.outro.start != null && data.outro.end != null && (data.outro.end - data.outro.start) > 0) doc.outro = data.outro;
+  if (
+    data.outro &&
+    data.outro.start != null &&
+    data.outro.end != null &&
+    data.outro.end - data.outro.start > 0
+  ) {
+    doc.outro = data.outro;
+  }
   return doc;
 }
 
@@ -65,9 +83,17 @@ function fromCachedDocument(doc: StreamCacheDocument): StreamSourcesResponse {
     Referer: 'https://hianime.to',
     Origin: 'https://hianime.to',
   } as const;
-  // Only pass intro/outro when real data - filter default { start: 0, end: 0 }
-  const intro = doc.intro && typeof doc.intro.end === 'number' && doc.intro.end > 0 ? doc.intro : undefined;
-  const outro = doc.outro && typeof doc.outro.end === 'number' && typeof doc.outro.start === 'number' && (doc.outro.end - doc.outro.start) > 0 ? doc.outro : undefined;
+  const intro =
+    doc.intro && typeof doc.intro.end === 'number' && doc.intro.end > 0
+      ? doc.intro
+      : undefined;
+  const outro =
+    doc.outro &&
+    typeof doc.outro.end === 'number' &&
+    typeof doc.outro.start === 'number' &&
+    doc.outro.end - doc.outro.start > 0
+      ? doc.outro
+      : undefined;
   return {
     headers: { ...defaultHeaders, ...doc.headers },
     sources: doc.sources as StreamSourcesResponse['sources'],
@@ -79,7 +105,7 @@ function fromCachedDocument(doc: StreamCacheDocument): StreamSourcesResponse {
 }
 
 /**
- * Get stream from Firestore (L2 - permanent)
+ * Get stream from Firestore (L2) — skips expired entries
  */
 export async function getStreamFromFirestore(
   episodeId: string,
@@ -99,6 +125,11 @@ export async function getStreamFromFirestore(
     const data = doc.data() as StreamCacheDocument;
     if (!data?.sources?.length) return null;
 
+    if (isCacheExpired(data)) {
+      await docRef.delete().catch(() => {});
+      return null;
+    }
+
     return fromCachedDocument(data);
   } catch (err) {
     console.warn('[Stream Cache] Firestore read failed:', (err as Error).message);
@@ -106,9 +137,6 @@ export async function getStreamFromFirestore(
   }
 }
 
-/**
- * Save stream to Firestore (permanent storage)
- */
 export async function saveStreamToFirestore(
   episodeId: string,
   server: string,
@@ -121,19 +149,12 @@ export async function saveStreamToFirestore(
   try {
     const doc = toCachedDocument(data, episodeId, server, category);
     const docId = toStreamCacheDocId(episodeId, server, category);
-    const docRef = db.collection(STREAM_CACHE_COLLECTION).doc(docId);
-    await docRef.set(doc);
+    await db.collection(STREAM_CACHE_COLLECTION).doc(docId).set(doc);
   } catch (err) {
-    console.warn(
-      '[Stream Cache] Firestore write failed:',
-      (err as Error).message
-    );
+    console.warn('[Stream Cache] Firestore write failed:', (err as Error).message);
   }
 }
 
-/**
- * Delete stream from Firestore (for broken link refresh)
- */
 export async function deleteStreamFromFirestore(
   episodeId: string,
   server: string,
@@ -144,22 +165,25 @@ export async function deleteStreamFromFirestore(
 
   try {
     const docId = toStreamCacheDocId(episodeId, server, category);
-    const docRef = db.collection(STREAM_CACHE_COLLECTION).doc(docId);
-    await docRef.delete();
+    await db.collection(STREAM_CACHE_COLLECTION).doc(docId).delete();
   } catch (err) {
-    console.warn(
-      '[Stream Cache] Firestore delete failed:',
-      (err as Error).message
-    );
+    console.warn('[Stream Cache] Firestore delete failed:', (err as Error).message);
   }
 }
 
-/** Redis TTL for stream cache - 12h for embed URLs (stable) */
-const STREAM_CACHE_TTL = 12 * 60 * 60 * 1000;
+/** Clear Redis + Firestore for an episode/server (use before force refresh) */
+export async function invalidateStreamCache(
+  episodeId: string,
+  server: string,
+  category: string
+): Promise<void> {
+  deleteCacheKey(toRedisKey(episodeId, server, category));
+  await deleteStreamFromFirestore(episodeId, server, category);
+}
 
 /**
  * Get stream with 3-tier cache: Redis → Firestore → HiAnime.
- * forceRefresh=true: bypass cache, fetch fresh, update Firestore.
+ * forceRefresh=true: bypass cache, fetch fresh, update stores.
  */
 export async function getStreamCached(
   episodeId: string,
@@ -169,11 +193,16 @@ export async function getStreamCached(
   forceRefresh: boolean = false
 ): Promise<StreamSourcesResponse> {
   if (forceRefresh) {
-    await deleteStreamFromFirestore(episodeId, server, category);
+    await invalidateStreamCache(episodeId, server, category);
+    // Also clear alternate server cache (route tries hd-1 then hd-2)
+    const altServer = server === 'hd-1' ? 'hd-2' : 'hd-1';
+    await invalidateStreamCache(episodeId, altServer, category);
+
     const fresh = await fetchFn();
     if (isFirebaseAdminConfigured()) {
       await saveStreamToFirestore(episodeId, server, category, fresh);
     }
+    deleteCacheKey(toRedisKey(episodeId, server, category));
     return fresh;
   }
 
@@ -182,7 +211,6 @@ export async function getStreamCached(
   return getCached(
     redisKey,
     async () => {
-      // L2: Firestore
       if (isFirebaseAdminConfigured()) {
         const fromFirestore = await getStreamFromFirestore(
           episodeId,
@@ -192,13 +220,12 @@ export async function getStreamCached(
         if (fromFirestore) return fromFirestore;
       }
 
-      // L3: HiAnime
       const fresh = await fetchFn();
       if (isFirebaseAdminConfigured()) {
         await saveStreamToFirestore(episodeId, server, category, fresh);
       }
       return fresh;
     },
-    STREAM_CACHE_TTL
+    STREAM_CACHE_TTL_MS
   );
 }

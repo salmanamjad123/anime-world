@@ -400,14 +400,55 @@ function searchTitleSuggestsSequel(cleanTitle: string): boolean {
   return SEQUEL_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+const TITLE_STOP_WORDS = new Set(['the', 'and', 'for', 'part', 'arc']);
+
 /**
  * Check if result name/id reasonably matches the search (avoids cross-anime matches)
  */
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().replace(/[-_]/g, ' ');
+}
+
+function extractSearchWords(title: string): string[] {
+  return buildSearchTitleStripped(title).split(/\s+/).filter(Boolean);
+}
+
+function getAnchorWord(words: string[]): string | null {
+  return words.find((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w)) ?? null;
+}
+
 function titleOverlap(searchWords: string[], resultId: string, resultName: string): boolean {
-  const text = `${resultId} ${resultName}`.toLowerCase();
-  const core = searchWords.filter((w) => w.length >= 3);
+  const text = normalizeForMatch(`${resultId} ${resultName}`);
+  const core = searchWords.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
   if (core.length === 0) return true;
+
+  const anchor = getAnchorWord(searchWords);
+  if (anchor && !text.includes(anchor)) return false;
+
   return core.every((w) => text.includes(w));
+}
+
+function decodeEpisodeTitle(title: string): string {
+  return title
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+/** Verify a HiAnime slug plausibly matches the AniList title (guards stale/wrong provider picks). */
+export function hiAnimeSlugMatchesTitle(animeTitle: string, hiAnimeId: string): boolean {
+  return titleOverlap(extractSearchWords(animeTitle), hiAnimeId, '');
+}
+
+function countSlugTokenOverlap(searchTitle: string, slug: string): number {
+  const tokens = searchTitle
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter((t) => t.length >= 3 && !TITLE_STOP_WORDS.has(t));
+  const normalizedSlug = slug.toLowerCase();
+  return tokens.filter((t) => normalizedSlug.includes(t)).length;
 }
 
 /**
@@ -429,6 +470,7 @@ function buildSearchTitleStripped(title: string): string {
     .toLowerCase()
     .replace(/season\s*\d+/gi, '')
     .replace(/\d+(st|nd|rd|th)\s*season/gi, '')
+    .replace(/[-_:]/g, ' ')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -448,7 +490,7 @@ export async function findHiAnimeMatch(
   try {
     const fullSearchTitle = buildSearchTitlePreservingSeason(animeTitle);
     const strippedTitle = buildSearchTitleStripped(animeTitle);
-    const searchWords = strippedTitle.split(/\s+/).filter(Boolean);
+    const searchWords = extractSearchWords(animeTitle);
     const weWantSequel = searchTitleSuggestsSequel(fullSearchTitle);
 
     // First try with full title (preserving "season 2", "2nd season", "part 2", etc.)
@@ -469,13 +511,12 @@ export async function findHiAnimeMatch(
       if (dubMatches.length > 0) matches = dubMatches;
     }
 
-    // Filter to results that actually match the search (avoid cross-anime like Sword Gai for Jujutsu Kaisen)
+    // Filter to results that actually match the search (avoid cross-anime like Beheneko for Bleach)
     const titleMatched = matches.filter((r) =>
       titleOverlap(searchWords, r.id, r.name ?? '')
     );
-    if (titleMatched.length > 0) matches = titleMatched;
-
-    if (matches.length === 0) return null;
+    if (titleMatched.length === 0) return null;
+    matches = titleMatched;
     if (matches.length === 1) return matches[0];
 
     // When searching for a sequel (e.g. "Hell's Paradise Season 2"), prefer results whose id/name
@@ -499,9 +540,20 @@ export async function findHiAnimeMatch(
           !weWantSequel
             ? 50
             : 0;
-        return epDiff + sequelPenalty;
+        const slugOverlap = countSlugTokenOverlap(fullSearchTitle, r.id);
+        return epDiff + sequelPenalty - slugOverlap * 2;
       };
       const best = matches.reduce((a, b) => (score(a) <= score(b) ? a : b));
+      return best;
+    }
+
+    // No episode count hint: prefer strongest slug overlap with full search title
+    if (matches.length > 1) {
+      const best = matches.reduce((a, b) =>
+        countSlugTokenOverlap(fullSearchTitle, a.id) >= countSlugTokenOverlap(fullSearchTitle, b.id)
+          ? a
+          : b
+      );
       return best;
     }
 
@@ -528,7 +580,7 @@ export async function getHiAnimeEpisodesStandard(
       episodes: hiAnimeEpisodes.map((ep) => ({
         id: ep.episodeId,
         number: ep.number,
-        title: ep.title || `Episode ${ep.number}`,
+        title: decodeEpisodeTitle(ep.title || `Episode ${ep.number}`),
       })),
       _provider: 'hianime',
     };

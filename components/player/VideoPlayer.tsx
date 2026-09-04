@@ -33,6 +33,8 @@ interface VideoPlayerProps {
   outroLengthSeconds?: number;
   /** Start playback at this position in seconds (for Continue Watching). */
   initialTime?: number;
+  /** Called after repeated HLS/network failures (stale CDN link — trigger stream refresh). */
+  onPlaybackError?: () => void;
 }
 
 export function VideoPlayer({
@@ -48,9 +50,11 @@ export function VideoPlayer({
   introEndSeconds,
   outroLengthSeconds,
   initialTime,
+  onPlaybackError,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const hlsFatalRetriesRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -180,6 +184,7 @@ export function VideoPlayer({
     if (!video || !currentSrc) return;
 
     setIsLoading(true);
+    hlsFatalRetriesRef.current = 0;
 
     // Check if HLS is supported
     if (currentSrc.includes('.m3u8')) {
@@ -221,13 +226,28 @@ export function VideoPlayer({
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
+                hlsFatalRetriesRef.current += 1;
+                if (hlsFatalRetriesRef.current >= 3) {
+                  setIsLoading(false);
+                  hls.destroy();
+                  hlsRef.current = null;
+                  onPlaybackError?.();
+                } else {
+                  hls.startLoad();
+                }
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
+                hlsFatalRetriesRef.current += 1;
+                if (hlsFatalRetriesRef.current >= 2) {
+                  setIsLoading(false);
+                  onPlaybackError?.();
+                } else {
+                  hls.recoverMediaError();
+                }
                 break;
               default:
                 setIsLoading(false);
+                onPlaybackError?.();
                 break;
             }
           }
@@ -235,6 +255,7 @@ export function VideoPlayer({
 
         return () => {
           hls.destroy();
+          hlsRef.current = null;
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS support (Safari) - always direct, no proxy needed
@@ -252,7 +273,7 @@ export function VideoPlayer({
         if (autoPlay) video.play().catch(console.error);
       }
     }
-  }, [src, autoPlay, currentQuality, autoQuality, initialTime]);
+  }, [src, autoPlay, currentQuality, autoQuality, initialTime, onPlaybackError]);
 
   // Seek to initialTime when video can play (Continue Watching from ?t=)
   // Keeps loading until seek completes so progress bar doesn't jump

@@ -6,7 +6,7 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
@@ -35,6 +35,8 @@ export default function WatchPage() {
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [currentProvider] = useState('hianime');
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
+  const [streamRefreshNonce, setStreamRefreshNonce] = useState(0);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
 
   // Only hd-1 and hd-2 work - reset if invalid
   useEffect(() => {
@@ -67,11 +69,39 @@ export default function WatchPage() {
     staleTime: 0,
   });
   const streamEpisodeId = isFallbackEpisode ? (resolvedEpisodeId ?? null) : episodeId;
-  const { data: streamData, isLoading: isStreamLoading, error: streamError } = useStreamingSourcesWithFallback(
+  const {
+    data: streamData,
+    isLoading: isStreamLoading,
+    error: streamError,
+    isFetching: isStreamFetching,
+  } = useStreamingSourcesWithFallback(
     streamEpisodeId,
     selectedLanguage,
-    selectedServer
+    selectedServer,
+    streamRefreshNonce
   );
+
+  const handlePlaybackError = useCallback(() => {
+    setStreamRefreshNonce((n) => {
+      if (n === 0) {
+        setPlaybackFailed(false);
+        return 1;
+      }
+      setPlaybackFailed(true);
+      return n;
+    });
+  }, []);
+
+  const handleRetryStream = useCallback(() => {
+    setPlaybackFailed(false);
+    setStreamRefreshNonce((n) => n + 1);
+  }, []);
+
+  // Reset playback error when episode or server changes
+  useEffect(() => {
+    setPlaybackFailed(false);
+    setStreamRefreshNonce(0);
+  }, [episodeId, selectedServer, selectedLanguage]);
 
   const { updateProgress, getProgress } = useHistoryStore();
   const { user } = useUserStore();
@@ -90,7 +120,7 @@ export default function WatchPage() {
   const showStreamDown =
     (isFallbackEpisode && resolvedEpisodeId === null) ||
     streamError ||
-    (!hasPlayback && !isStreamLoading && !resolvingFallback);
+    (!hasPlayback && !isStreamLoading && !isStreamFetching && !resolvingFallback && !playbackFailed);
 
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
 
@@ -272,13 +302,42 @@ export default function WatchPage() {
             </div>
 
             {/* Video Player - wait for stream + episodes so initialTime is stable (no mid-playback seek) */}
-            {isStreamLoading || resolvingFallback || isEpisodesLoading ? (
+            {isStreamLoading || isStreamFetching || resolvingFallback || isEpisodesLoading ? (
               <div className="w-full aspect-video bg-gray-800 rounded-lg flex items-center justify-center min-h-[200px]">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
                   <p className="text-gray-400">
-                    {resolvingFallback ? 'Resolving episode...' : isEpisodesLoading ? 'Loading...' : 'Loading video...'}
+                    {resolvingFallback
+                      ? 'Resolving episode...'
+                      : isEpisodesLoading
+                        ? 'Loading...'
+                        : streamRefreshNonce > 0
+                          ? 'Refreshing stream link...'
+                          : 'Loading video...'}
                   </p>
+                </div>
+              </div>
+            ) : playbackFailed ? (
+              <div className="w-full aspect-video bg-gray-800 rounded-lg flex items-center justify-center min-h-[200px]">
+                <div className="text-center max-w-md px-6">
+                  <div className="text-6xl mb-4">⏳</div>
+                  <p className="text-amber-400 text-xl font-bold mb-3">Video link expired</p>
+                  <p className="text-gray-300 mb-4 text-sm">
+                    This episode&apos;s stream URL may have expired. Refreshing usually fixes it.
+                  </p>
+                  <div className="flex gap-3 justify-center flex-wrap">
+                    <Button variant="primary" onClick={handleRetryStream}>
+                      Refresh stream
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setSelectedServer((s) => (s === 'hd-1' ? 'hd-2' : 'hd-1'))
+                      }
+                    >
+                      Try {selectedServer === 'hd-1' ? 'HD-2' : 'HD-1'} server
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : showStreamDown ? (
@@ -311,8 +370,9 @@ export default function WatchPage() {
                 </div>
               </div>
             ) : (
-              <div className="w-full overflow-visible rounded-lg">
+              <div className="w-full overflow-visible rounded-lg relative">
                 <VideoPlayer
+                  key={`${streamEpisodeId}-${streamRefreshNonce}-${videoSource ?? ''}`}
                   src={videoSource ?? ''}
                   sources={streamData?.sources}
                   subtitles={allSubtitles}
@@ -320,6 +380,7 @@ export default function WatchPage() {
                   embedUrl={streamData?.embedUrl}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEpisodeEnd}
+                  onPlaybackError={handlePlaybackError}
                   autoPlay
                   initialTime={initialTime}
                   introStartSeconds={

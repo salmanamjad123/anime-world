@@ -12,6 +12,7 @@ import type { Episode, EpisodeListResponse } from '@/types';
 import {
   findHiAnimeMatch,
   getHiAnimeEpisodesStandard,
+  hiAnimeSlugMatchesTitle,
   isHiAnimeAvailable,
   searchHiAnime,
 } from './hianime';
@@ -152,6 +153,13 @@ export async function getReliableEpisodes(
     }
 
     if (match) {
+      if (!hiAnimeSlugMatchesTitle(animeTitle, match.id)) {
+        console.warn(`⚠️ [Episodes] Rejected provider mismatch: ${match.id} for "${animeTitle}"`);
+        match = null;
+      }
+    }
+
+    if (match) {
       let episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
 
       // Smart cache: if AniList has more episodes than cache, new episodes likely available - invalidate and refetch
@@ -183,7 +191,11 @@ export async function getReliableEpisodes(
   const category = isDub ? 'dub' : 'sub';
   const cached = await getEpisodesFromFirestore(animeId, category);
   if (cached?.episodes?.length) {
-    return cached;
+    const cachedSlug = cached.episodes[0].id.split('?')[0];
+    if (hiAnimeSlugMatchesTitle(animeTitle, cachedSlug)) {
+      return cached;
+    }
+    console.warn(`⚠️ [Episodes] Ignoring stale Firestore cache for ${animeId} (wrong provider)`);
   }
 
   // No cache: server down, don't show wrong fallbacks
