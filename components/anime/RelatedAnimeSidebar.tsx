@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { getPreferredTitle } from '@/lib/utils';
@@ -49,7 +49,7 @@ export function RelatedAnimeSidebar({
                 className="flex gap-3 p-2 -mx-2 rounded-lg hover:bg-gray-700/50 transition-colors group"
               >
                 <div className="relative h-14 w-10 shrink-0 rounded overflow-hidden bg-gray-800">
-                  <Image
+                  <SafeImage
                     src={item.coverImage.medium}
                     alt={titleText}
                     fill

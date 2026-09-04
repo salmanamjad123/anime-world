@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import { usePathname, useRouter } from 'next/navigation';
 import { Search, Heart, History, Moon, Sun, Loader2, Filter, Menu, LogIn, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -271,7 +271,7 @@ export function Header() {
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
-                              <Image
+                              <SafeImage
                                 src={imageUrl}
                                 alt={title}
                                 fill
@@ -438,7 +438,7 @@ export function Header() {
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
-                              <Image
+                              <SafeImage
                                 src={imageUrl}
                                 alt={title}
                                 fill

@@ -6,7 +6,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
@@ -146,7 +146,7 @@ export default function AnimeDetailPage() {
         {/* Background Image */}
         {anime.bannerImage && (
           <div className="absolute inset-0">
-            <Image
+            <SafeImage
               src={anime.bannerImage}
               alt={title}
               fill
@@ -163,7 +163,7 @@ export default function AnimeDetailPage() {
             {/* Cover Image: centered on mobile, left on desktop */}
             <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48 md:-mb-24">
               <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl">
-                <Image
+                <SafeImage
                   src={anime.coverImage.extraLarge || anime.coverImage.large}
                   alt={title}
                   fill

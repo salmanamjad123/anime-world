@@ -5,7 +5,7 @@
 
 'use client';
 
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { getPreferredTitle, formatNumber } from '@/lib/utils';
@@ -26,7 +26,7 @@ export function AnimeCard({ anime }: AnimeCardProps) {
       <Card hover className="overflow-hidden group h-full flex flex-col">
         {/* Image Container */}
         <div className="relative aspect-[2/3] overflow-hidden">
-          <Image
+          <SafeImage
             src={anime.coverImage.large}
             alt={title}
             fill

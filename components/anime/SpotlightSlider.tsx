@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import Link from 'next/link';
 import { Play, ChevronRight, ChevronLeft, Tv, Clock, Calendar } from 'lucide-react';
 import { getPreferredTitle, stripHtml } from '@/lib/utils';
@@ -227,7 +227,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                 {(coverUrl || bannerUrl) && (
                   <>
                     {/* Mobile: cover image so artwork isn't cut off */}
-                    <Image
+                    <SafeImage
                       src={coverUrl || bannerUrl}
                       alt={title}
                       fill
@@ -237,7 +237,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                       sizes="100vw"
                     />
                     {/* Desktop: banner image */}
-                    <Image
+                    <SafeImage
                       src={bannerUrl}
                       alt={title}
                       fill

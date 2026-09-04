@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import { cn } from '@/lib/utils';
 
 interface UserAvatarProps {
@@ -30,7 +30,7 @@ export function UserAvatar({ photoURL, name, size = 'md', className }: UserAvata
 
   if (photoURL) {
     return (
-      <Image
+      <SafeImage
         src={photoURL}
         alt=""
         width={w}
