@@ -10,16 +10,6 @@ const imagesUnoptimized =
   process.env.NEXT_PUBLIC_IMAGES_UNOPTIMIZED !== "false";
 
 const nextConfig: NextConfig = {
-  async redirects() {
-    return [
-      {
-        source: '/:path*',
-        has: [{ type: 'host', value: 'www.animevillage.org' }],
-        destination: 'https://animevillage.org/:path*',
-        permanent: true,
-      },
-    ];
-  },
   async headers() {
     return [
       {
