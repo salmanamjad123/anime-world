@@ -122,6 +122,6 @@ export async function GET() {
     return NextResponse.json({ days });
   } catch (error) {
     console.error('[Schedule API]', error);
-    return NextResponse.json({ error: 'Failed to fetch schedule', days: [] }, { status: 500 });
+    return NextResponse.json({ days: [], _degraded: true });
   }
 }

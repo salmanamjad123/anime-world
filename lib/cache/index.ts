@@ -72,6 +72,7 @@ export async function getCached<T>(
 }
 
 export { invalidateCache } from './memory-cache';
+export { saveStaleCache, getStaleCache, STALE_TTL_MS } from './stale-cache';
 export { default as memoryCache } from './memory-cache';
 
 /**
