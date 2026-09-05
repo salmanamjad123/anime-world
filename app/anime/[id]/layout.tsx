@@ -8,6 +8,7 @@ import { cache } from 'react';
 import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
 import { getPreferredTitle, stripHtml } from '@/lib/utils';
+import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import { SITE_URL, SITE_NAME } from '@/constants/site';
 import {
   buildAnimeDetailUrl,
@@ -24,18 +25,15 @@ const getAnimeForMetadata = cache(async (id: string): Promise<Anime | null> => {
     }
     const info = await getHiAnimeInfo(id);
     if (!info) return null;
-    const poster =
-      typeof info.poster === 'string' && info.poster.trim().startsWith('http')
-        ? info.poster.trim()
-        : undefined;
+    const poster = resolveAnimeImageUrl(info.poster);
     return {
       id: info.id,
       title: { romaji: info.name, english: info.name, native: info.name ?? '' },
       description: info.description ?? undefined,
       coverImage: {
-        large: poster ?? '',
-        medium: poster ?? '',
-        extraLarge: poster ?? '',
+        large: poster,
+        medium: poster,
+        extraLarge: poster,
       },
       bannerImage: poster,
       genres: Array.isArray(info.genres) ? info.genres : [],

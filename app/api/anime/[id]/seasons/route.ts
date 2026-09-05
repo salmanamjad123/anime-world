@@ -6,9 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnimeSeasons } from '@/lib/api/anime-relations';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
+import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { AnimeRelation } from '@/lib/api/anime-relations';
 
-const PLACEHOLDER_IMAGE = 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
 const SEASONS_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
 
 function isAniListId(id: string): boolean {
@@ -16,7 +16,7 @@ function isAniListId(id: string): boolean {
 }
 
 function validCover(url: string | undefined): string {
-  return typeof url === 'string' && url.trim().startsWith('http') ? url.trim() : PLACEHOLDER_IMAGE;
+  return resolveAnimeImageUrl(url);
 }
 
 export async function GET(

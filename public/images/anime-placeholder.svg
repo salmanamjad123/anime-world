@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" role="img" aria-label="Anime poster placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="600" fill="url(#bg)"/>
+  <rect x="24" y="24" width="352" height="552" rx="12" fill="none" stroke="#334155" stroke-width="2"/>
+  <circle cx="200" cy="250" r="56" fill="none" stroke="#475569" stroke-width="3"/>
+  <polygon points="188,220 188,280 232,250" fill="#64748b"/>
+  <text x="200" y="360" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="18" font-weight="600">Anime</text>
+</svg>

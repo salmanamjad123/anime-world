@@ -6,14 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
+import { ANIME_PLACEHOLDER, resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { Anime, AnimeStatus } from '@/types';
 import type { HiAnimeInfo } from '@/lib/api/hianime';
 
 function isAniListId(id: string): boolean {
   return /^\d+$/.test(id);
 }
-
-const PLACEHOLDER_IMAGE = 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
 
 function parseStatus(s: string | undefined): AnimeStatus | undefined {
   if (!s || typeof s !== 'string') return undefined;
@@ -59,7 +58,7 @@ function mapHiAnimeInfoToAnime(info: HiAnimeInfo): Anime {
   const duration = durationStr ? parseInt(String(durationStr).replace(/\D/g, ''), 10) || undefined : undefined;
   const typeStr = info.stats?.type?.toUpperCase().replace(/\s+/g, '_');
   const format = (typeStr === 'TV' || typeStr === 'MOVIE' || typeStr === 'OVA' || typeStr === 'ONA' || typeStr === 'SPECIAL' || typeStr === 'TV_SHORT' || typeStr === 'MUSIC' ? typeStr : 'TV') as Anime['format'];
-  const poster = typeof info.poster === 'string' && info.poster.trim().startsWith('http') ? info.poster.trim() : PLACEHOLDER_IMAGE;
+  const poster = resolveAnimeImageUrl(info.poster);
   const studiosStr = info.studios?.trim();
   const studios = studiosStr
     ? { nodes: studiosStr.split(/[,&]/).map((name) => ({ name: name.trim(), isAnimationStudio: true })).filter((n) => n.name.length > 0) }
@@ -73,7 +72,7 @@ function mapHiAnimeInfoToAnime(info: HiAnimeInfo): Anime {
       medium: poster,
       extraLarge: poster,
     },
-    bannerImage: poster !== PLACEHOLDER_IMAGE ? poster : undefined,
+    bannerImage: poster !== ANIME_PLACEHOLDER ? poster : undefined,
     genres: Array.isArray(info.genres) ? info.genres : [],
     averageScore: parseScore(info.malscore, info.stats?.rating),
     status: parseStatus(info.status),

@@ -4,15 +4,13 @@
  */
 
 import { axiosInstance } from './axios';
+import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { HiAnimeSearchResult } from './hianime';
 import type { Anime, AnimeFormat, AnimeSearchResult } from '@/types';
 
 const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
 /** Keep fallback fast for Vercel serverless limits */
 const FALLBACK_TIMEOUT = 12_000;
-
-const PLACEHOLDER =
-  'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
 
 /** Curated popular titles — first hit per query is usually the main series */
 const BROWSE_QUERIES = [
@@ -56,10 +54,7 @@ function mapFormat(type?: string | null): AnimeFormat | undefined {
 }
 
 export function mapHiAnimeSearchToAnime(item: HiAnimeSearchResult): Anime {
-  const poster =
-    typeof item.poster === 'string' && item.poster.startsWith('http')
-      ? item.poster
-      : PLACEHOLDER;
+  const poster = resolveAnimeImageUrl(item.poster);
   const sub = item.episodes?.sub ?? 0;
   const dub = item.episodes?.dub ?? 0;
   const episodes = sub + dub || undefined;

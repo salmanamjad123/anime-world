@@ -97,7 +97,7 @@ export function Header() {
 
               const mediaById = new Map<string, Anime>(media.map((m: Anime) => [String(m.id), m]));
               const firstCover = (first as Anime).coverImage?.medium || (first as Anime).coverImage?.large;
-              const genericPlaceholder = 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-nxxpfCRq.png';
+              const genericPlaceholder = '/images/anime-placeholder.svg';
               const relationToAnime = (r: { id: string; title: string; coverImage?: string; format?: string }) => {
                 const original = mediaById.get(String(r.id)) as Anime | undefined;
                 const origCover = original?.coverImage as { medium?: string; large?: string } | undefined;

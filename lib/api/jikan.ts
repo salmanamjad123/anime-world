@@ -4,6 +4,7 @@
  */
 
 import { axiosInstance } from './axios';
+import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { Anime, AnimeFormat, AnimeSearchResult, AnimeStatus } from '@/types';
 
 const JIKAN_BASE = 'https://api.jikan.moe/v4';
@@ -76,10 +77,9 @@ function parseSeasonYear(aired?: { from?: string | null }, year?: number | null)
 
 /** Map Jikan entry to our Anime shape. Uses mal_id as id (matches many classic AniList IDs). */
 export function mapJikanToAnime(item: JikanAnime, preserveId?: string): Anime {
-  const image =
-    item.images?.jpg?.large_image_url ||
-    item.images?.jpg?.image_url ||
-    'https://cdn.myanimelist.net/img/sp/icon/apple-touch-icon-256.png';
+  const image = resolveAnimeImageUrl(
+    item.images?.jpg?.large_image_url || item.images?.jpg?.image_url
+  );
 
   return {
     id: preserveId ?? String(item.mal_id),
