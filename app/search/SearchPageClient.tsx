@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { FilterSection } from '@/components/search/FilterSection';
+import { SearchFallbackBanner } from '@/components/search/SearchFallbackBanner';
 import { useSearchAnime } from '@/hooks/useAnime';
 import { Filter, X } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
@@ -150,6 +151,8 @@ export function SearchPageContent({ initialFilters }: { initialFilters: AnimeFil
             />
           </div>
         )}
+
+        <SearchFallbackBanner source={data?._fallback} />
 
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base sm:text-lg font-bold text-blue-400">Results</h2>

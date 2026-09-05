@@ -80,6 +80,12 @@ export interface AnimeWithStreaming extends Anime {
   totalEpisodesDub?: number;
 }
 
+/** Source when AniList is down and results come from HiAnime/Jikan */
+export type AnimeSearchFallbackSource =
+  | 'hianime-genre'
+  | 'hianime-search'
+  | 'hianime-browse';
+
 /**
  * Search result from AniList
  */
@@ -96,6 +102,8 @@ export interface AnimeSearchResult {
       media: Anime[];
     };
   };
+  /** Set when AniList failed and a backup catalog was used */
+  _fallback?: AnimeSearchFallbackSource;
 }
 
 /**

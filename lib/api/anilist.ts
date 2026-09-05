@@ -14,8 +14,13 @@ import {
   isAnilistOutage,
 } from './anilist-resilience';
 import { searchJikanAnime } from './jikan';
-import { searchHiAnimeAsList } from './hianime-fallback';
-import type { Anime, AnimeSearchResult, AnimeFilters } from '@/types';
+import { getHiAnimeBrowseList, searchHiAnimeAsList } from './hianime-fallback';
+import type {
+  Anime,
+  AnimeSearchResult,
+  AnimeSearchFallbackSource,
+  AnimeFilters,
+} from '@/types';
 
 const RATE_LIMIT_RETRY_MS = 60_000; // wait 1 min on 429 then retry
 
@@ -212,6 +217,49 @@ function mapGenresForAniList(genres: string[]): string[] {
   return genres.map((g) => GENRE_ANILIST_MAP[g] ?? g);
 }
 
+/** HiAnime/Jikan fallback when AniList search is unavailable */
+async function searchAnimeOutageFallback(
+  filters: AnimeFilters,
+  page: number,
+  perPage: number
+): Promise<AnimeSearchResult> {
+  const textQuery = filters.search?.trim() ?? '';
+  const genreQuery = filters.genres?.length ? filters.genres.join(' ') : '';
+
+  if (textQuery) {
+    const query = genreQuery ? `${textQuery} ${genreQuery}` : textQuery;
+    const fallback: AnimeSearchFallbackSource = genreQuery
+      ? 'hianime-genre'
+      : 'hianime-search';
+
+    console.warn('[AniList] Outage — HiAnime search fallback');
+    try {
+      const result = await searchHiAnimeAsList(query, page, perPage);
+      return { ...result, _fallback: fallback };
+    } catch {
+      console.warn('[AniList] Outage — Jikan search fallback');
+      const result = await searchJikanAnime(textQuery, page, perPage);
+      return { ...result, _fallback: 'hianime-search' };
+    }
+  }
+
+  if (genreQuery) {
+    console.warn('[AniList] Outage — HiAnime genre search fallback');
+    try {
+      const result = await searchHiAnimeAsList(genreQuery, page, perPage);
+      if (result.data.Page.media.length > 0) {
+        return { ...result, _fallback: 'hianime-genre' };
+      }
+    } catch {
+      /* fall through to browse */
+    }
+  }
+
+  console.warn('[AniList] Outage — HiAnime browse fallback for filtered search');
+  const browse = await getHiAnimeBrowseList(page, perPage, 'popular');
+  return { ...browse, _fallback: 'hianime-browse' };
+}
+
 /**
  * Search anime with filters
  * Only pass defined filters - empty arrays/strings would restrict results to nothing
@@ -237,24 +285,8 @@ export async function searchAnime(
   try {
     return await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
   } catch (error) {
-    const hasTextSearch = Boolean(filters.search?.trim());
-    const hasComplexFilters =
-      Boolean(filters.genres?.length) ||
-      Boolean(filters.year) ||
-      Boolean(filters.season) ||
-      Boolean(filters.format) ||
-      Boolean(filters.status);
-
-    if (!hasTextSearch || hasComplexFilters) throw error;
     if (!isAnilistOutage(error)) throw error;
-
-    console.warn('[AniList] Outage — HiAnime search fallback');
-    try {
-      return await searchHiAnimeAsList(filters.search!.trim(), page, perPage);
-    } catch {
-      console.warn('[AniList] Outage — Jikan search fallback');
-      return searchJikanAnime(filters.search!.trim(), page, perPage);
-    }
+    return searchAnimeOutageFallback(filters, page, perPage);
   }
 }
 
