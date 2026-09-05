@@ -21,6 +21,7 @@ import {
   saveEpisodesToFirestoreBackground,
 } from './episode-cache';
 import { deleteCacheKey } from '@/lib/cache';
+import { saveAnimeSlugMapping } from '@/lib/seo/anime-slug';
 
 /** Thrown when no episodes available (HiAnime down + Firebase miss) */
 export class EpisodesUnavailableError extends Error {
@@ -173,6 +174,7 @@ export async function getReliableEpisodes(
       }
 
       if (episodes.episodes.length > 0) {
+        saveAnimeSlugMapping(animeId, match.id).catch(() => {});
         // Save to Firebase in background (fire-and-forget, no extra latency)
         saveEpisodesToFirestoreBackground(
           animeId,

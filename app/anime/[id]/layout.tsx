@@ -3,20 +3,22 @@
  */
 
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
 import { getPreferredTitle, stripHtml } from '@/lib/utils';
 import { SITE_URL, SITE_NAME } from '@/constants/site';
+import {
+  buildAnimeDetailUrl,
+  isAniListNumericId,
+  resolveAnimeSlug,
+} from '@/lib/seo/anime-slug';
 import type { Anime } from '@/types';
-
-function isAniListId(id: string): boolean {
-  return /^\d+$/.test(id);
-}
 
 const getAnimeForMetadata = cache(async (id: string): Promise<Anime | null> => {
   try {
-    if (isAniListId(id)) {
+    if (isAniListNumericId(id)) {
       const result = await getAnimeById(id);
       return result?.data?.Media ?? null;
     }
@@ -50,6 +52,15 @@ const getAnimeForMetadata = cache(async (id: string): Promise<Anime | null> => {
   }
 });
 
+const resolveSlugForPage = cache(
+  async (id: string, anime: Anime | null): Promise<string | null> => {
+    if (!anime || !isAniListNumericId(id)) return null;
+    return resolveAnimeSlug(id, getPreferredTitle(anime.title), anime.episodes, {
+      allowLookup: true,
+    });
+  }
+);
+
 export async function generateMetadata({
   params,
 }: {
@@ -75,7 +86,8 @@ export async function generateMetadata({
       )
     : seoTail;
   const pageTitle = `Watch ${title} Online Free (Sub & Dub)`;
-  const canonicalUrl = `${SITE_URL}/anime/${id}`;
+  const slug = await resolveSlugForPage(id, anime);
+  const canonicalUrl = buildAnimeDetailUrl(id, slug);
   const image =
     anime.bannerImage ||
     anime.coverImage?.extraLarge ||
@@ -142,7 +154,7 @@ export async function generateMetadata({
   };
 }
 
-function buildAnimeJsonLd(anime: Anime, id: string) {
+function buildAnimeJsonLd(anime: Anime, canonicalUrl: string) {
   const title = getPreferredTitle(anime.title);
   const description = anime.description
     ? stripHtml(anime.description).slice(0, 200)
@@ -151,7 +163,7 @@ function buildAnimeJsonLd(anime: Anime, id: string) {
     anime.bannerImage ||
     anime.coverImage?.extraLarge ||
     anime.coverImage?.large;
-  const url = `${SITE_URL}/anime/${id}`;
+  const url = canonicalUrl;
 
   const keywords = [
     ...(anime.genres || []),
@@ -207,10 +219,20 @@ export default async function AnimeDetailLayout({
   const { id } = await params;
   const anime = await getAnimeForMetadata(id);
 
+  if (anime && isAniListNumericId(id)) {
+    const slug = await resolveSlugForPage(id, anime);
+    if (slug && slug !== id) {
+      redirect(`/anime/${slug}`);
+    }
+  }
+
+  const slug = await resolveSlugForPage(id, anime);
+  const canonicalUrl = anime ? buildAnimeDetailUrl(id, slug) : `${SITE_URL}/anime/${id}`;
+
   return (
     <>
       {anime &&
-        buildAnimeJsonLd(anime, id).map((schema, i) => (
+        buildAnimeJsonLd(anime, canonicalUrl).map((schema, i) => (
           <script
             key={i}
             type="application/ld+json"
