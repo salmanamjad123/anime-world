@@ -83,7 +83,7 @@ export async function createDailySocialPost(
 
   const anime = media[dayOfYear(date) % media.length];
   const title = getPreferredTitle(anime.title);
-  const pageUrl = `${SITE_URL.replace(/\/$/, '')}${ROUTES.ANIME_DETAIL(String(anime.id))}`;
+  const pageUrl = `${SITE_URL.replace(/\/$/, '')}${ROUTES.ANIME_DETAIL(anime)}`;
 
   return {
     animeId: String(anime.id),

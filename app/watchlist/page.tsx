@@ -109,7 +109,7 @@ export default function WatchlistPage() {
 
               {/* Anime Card (simplified version) */}
               <a
-                href={`/anime/${item.animeId}`}
+                href={ROUTES.ANIME_DETAIL({ id: item.animeId, slug: item.slug })}
                 className="block bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
               >
                 <div className="relative aspect-[2/3]">

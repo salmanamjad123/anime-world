@@ -3,14 +3,18 @@
  * Application route paths
  */
 
+import { getAnimeDetailPath, getWatchAnimeId } from '@/lib/seo/anime-path';
+
 export const ROUTES = {
   HOME: '/',
-  ANIME_DETAIL: (id: string) => `/anime/${id}`,
+  ANIME_DETAIL: (idOrAnime: string | { id: string; slug?: string | null }) =>
+    getAnimeDetailPath(idOrAnime),
   ANIME_AZ: (letter: string) => `/anime/az/${letter}`,
   GENRE: (slug: string) => `/genre/${slug}`,
   SEARCH: '/search',
   SEARCH_GENRE: (genre: string) => `/search?genres=${encodeURIComponent(genre)}`,
-  WATCH: (animeId: string, episodeId: string) => `/watch/${animeId}/${encodeURIComponent(episodeId)}`,
+  WATCH: (animeId: string | { id: string; slug?: string | null }, episodeId: string) =>
+    `/watch/${getWatchAnimeId(animeId)}/${encodeURIComponent(episodeId)}`,
   WATCHLIST: '/watchlist',
   HISTORY: '/history',
   PROFILE: '/profile',

@@ -7,6 +7,8 @@ import { axiosInstance } from './axios';
 import { ANILIST_API_URL } from '@/constants/api';
 import { getPreferredTitle } from '@/lib/utils';
 import { CACHE_TTL, getCached } from '@/lib/cache';
+import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
+import { isAnilistOutage } from '@/lib/api/anilist-resilience';
 
 const RELATIONS_QUERY = `
   query ($id: Int) {
@@ -236,9 +238,69 @@ export async function getEpisodeCountFromRelations(animeId: string): Promise<num
 }
 
 /**
- * Get all seasons and related content for an anime (direct relations only)
+ * Get all seasons and related content for an anime (direct relations only).
+ * Cached + stale fallback when AniList is down (does not affect episode APIs).
  */
 export async function getAnimeSeasons(animeId: string): Promise<{
+  main: AnimeRelation;
+  seasons: AnimeRelation[];
+  movies: AnimeRelation[];
+  specials: AnimeRelation[];
+}> {
+  const cacheKey = `anilist:seasons:${animeId}`;
+
+  try {
+    return await getCached(
+      cacheKey,
+      async () => {
+        const fresh = await fetchAnimeSeasonsFromAnilist(animeId);
+        await saveStaleCache(cacheKey, fresh);
+        return fresh;
+      },
+      CACHE_TTL.ANIME_INFO
+    );
+  } catch (error) {
+    if (!isAnilistOutage(error)) throw error;
+
+    const stale = await getStaleCache<{
+      main: AnimeRelation;
+      seasons: AnimeRelation[];
+      movies: AnimeRelation[];
+      specials: AnimeRelation[];
+    }>(cacheKey);
+    if (stale?.main) {
+      console.warn(`[AniList] Outage — stale seasons for ${animeId}`);
+      return stale;
+    }
+
+    const detailStale = await getStaleCache<{ data: { Media: any } }>(
+      `anilist:anime:${animeId}`
+    );
+    const media = detailStale?.data?.Media;
+    if (media) {
+      console.warn(`[AniList] Outage — minimal seasons from stale detail for ${animeId}`);
+      return {
+        main: {
+          id: animeId,
+          malId: media.idMal,
+          title: getPreferredTitle(media.title),
+          format: media.format,
+          episodes: media.episodes || 0,
+          seasonYear: media.seasonYear,
+          relationType: 'MAIN',
+          coverImage: media.coverImage?.large || '',
+        },
+        seasons: [],
+        movies: [],
+        specials: [],
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function fetchAnimeSeasonsFromAnilist(animeId: string): Promise<{
   main: AnimeRelation;
   seasons: AnimeRelation[];
   movies: AnimeRelation[];

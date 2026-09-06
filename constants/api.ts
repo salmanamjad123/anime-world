@@ -11,9 +11,11 @@ export const ANILIST_API_URL =
 export const CONSUMET_API_URL = 
   process.env.NEXT_PUBLIC_CONSUMET_API_URL || 'https://api.consumet.org';
 
-// Streaming API (Anikoto-backed, HiAnime-compatible) — see ../streaming-api
-export const HIANIME_API_URL = 
-  process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
+// Streaming API — server-side HIANIME_API_URL overrides public URL when set (Vercel).
+export const HIANIME_API_URL =
+  process.env.HIANIME_API_URL ||
+  process.env.NEXT_PUBLIC_HIANIME_API_URL ||
+  'http://localhost:4000';
 
 // API Endpoints
 export const API_ENDPOINTS = {

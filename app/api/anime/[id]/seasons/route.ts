@@ -7,13 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAnimeSeasons } from '@/lib/api/anime-relations';
 import { getHiAnimeInfo } from '@/lib/api/hianime';
 import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
+import { resolveAnilistIdFromSegment } from '@/lib/seo/anime-slug';
 import type { AnimeRelation } from '@/lib/api/anime-relations';
 
 const SEASONS_CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=1800';
-
-function isAniListId(id: string): boolean {
-  return /^\d+$/.test(id);
-}
 
 function validCover(url: string | undefined): string {
   return resolveAnimeImageUrl(url);
@@ -33,8 +30,10 @@ export async function GET(
       );
     }
 
-    if (isAniListId(id)) {
-      const result = await getAnimeSeasons(id);
+    const anilistId = await resolveAnilistIdFromSegment(id);
+
+    if (anilistId) {
+      const result = await getAnimeSeasons(anilistId);
       return NextResponse.json(result, {
         headers: {
           'Cache-Control': SEASONS_CACHE_CONTROL,

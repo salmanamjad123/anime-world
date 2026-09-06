@@ -308,14 +308,14 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                   {/* Actions - single row buttons, wrapping if needed */}
                   <div className="flex flex-row flex-wrap gap-2 sm:gap-3">
                     <Link
-                      href={ROUTES.ANIME_DETAIL(item.id)}
+                      href={ROUTES.ANIME_DETAIL(item)}
                       className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-colors"
                     >
                       <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current shrink-0" />
                       Watch Now
                     </Link>
                     <Link
-                      href={ROUTES.ANIME_DETAIL(item.id)}
+                      href={ROUTES.ANIME_DETAIL(item)}
                       className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-white text-sm sm:text-base font-medium transition-colors"
                     >
                       Detail

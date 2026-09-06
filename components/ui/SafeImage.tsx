@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import NextImage, { type ImageProps } from 'next/image';
 import { cn } from '@/lib/utils';
-import { ANIME_PLACEHOLDER, normalizeImageUrl } from '@/lib/utils/image-url';
+import { ANIME_PLACEHOLDER, getDisplayImageUrl, getProxiedImageUrl, normalizeImageUrl } from '@/lib/utils/image-url';
 
 function isRemoteUrl(src: ImageProps['src']): src is string {
   return typeof src === 'string' && /^https?:\/\//.test(src);
@@ -11,7 +11,7 @@ function isRemoteUrl(src: ImageProps['src']): src is string {
 
 function resolveSrc(src: ImageProps['src']): ImageProps['src'] {
   if (typeof src === 'string') {
-    return normalizeImageUrl(src) ?? ANIME_PLACEHOLDER;
+    return getDisplayImageUrl(src);
   }
   return src;
 }
@@ -43,6 +43,15 @@ export function SafeImage({
   const handleError = useCallback(
     (event: React.SyntheticEvent<HTMLImageElement, Event>) => {
       if (typeof currentSrc === 'string' && currentSrc !== ANIME_PLACEHOLDER) {
+        const normalized = normalizeImageUrl(currentSrc);
+        if (
+          normalized &&
+          normalized.startsWith('http') &&
+          !currentSrc.includes('/api/image?')
+        ) {
+          setCurrentSrc(getProxiedImageUrl(normalized));
+          return;
+        }
         setCurrentSrc(ANIME_PLACEHOLDER);
       }
       onError?.(event);

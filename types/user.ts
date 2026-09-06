@@ -30,6 +30,8 @@ export type ListStatus = 'watching' | 'on-hold' | 'plan-to-watch' | 'dropped' | 
  */
 export interface WatchlistItem {
   animeId: string;
+  /** Cached HiAnime slug for smooth /anime/{slug} links */
+  slug?: string;
   title: string;
   image: string;
   addedAt: Date;

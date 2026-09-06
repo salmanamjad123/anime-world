@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getHiAnimeStreamSources, isHiAnimeAvailable } from '@/lib/api/hianime';
+import { getHiAnimeStreamSources } from '@/lib/api/hianime';
 import { getStreamCached } from '@/lib/api/stream-cache';
 import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
@@ -55,28 +55,7 @@ export async function GET(
       );
     }
 
-    // Check HiAnime API availability (/health is fast, no scraping)
-    const hiAnimeAvailable = await Promise.race([
-      isHiAnimeAvailable(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-    ]).catch(() => false) as boolean;
-    
-    if (!hiAnimeAvailable) {
-      console.error('❌ [Stream API] HiAnime API not available at', HIANIME_API_URL);
-      return NextResponse.json(
-        { 
-          error: 'Streaming server down',
-          message: 'The streaming server is temporarily unavailable. Please try again later.',
-          suggestions: [
-            `Ensure HiAnime API is running at ${HIANIME_API_URL}`,
-            'Refresh the page and try again',
-          ]
-        },
-        { status: 503 }
-      );
-    }
-    
-    // Fetch streaming sources: Redis → Firestore → HiAnime (with retry + server fallback)
+    // Fetch streaming sources: Redis → Firestore → HiAnime (no blocking health pre-check)
     const serversToTry = server === 'hd-1' ? ['hd-1', 'hd-2'] : [server];
     let lastError: unknown;
 

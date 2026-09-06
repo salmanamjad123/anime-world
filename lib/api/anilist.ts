@@ -300,6 +300,31 @@ export async function getAnimeById(id: string | number): Promise<{ data: { Media
   );
 }
 
+/** Lightweight title search for slug → AniList id resolution. */
+export async function searchAnilistMediaByTitle(
+  query: string,
+  perPage = 8
+): Promise<Anime[]> {
+  if (!query.trim()) return [];
+  try {
+    const result = await executeQuery<AnimeSearchResult>(SEARCH_QUERY, {
+      search: query.trim(),
+      page: 1,
+      perPage,
+      sort: ['SEARCH_MATCH'],
+    });
+    return result?.data?.Page?.media ?? [];
+  } catch (error) {
+    if (!isAnilistOutage(error)) return [];
+    try {
+      const jikan = await searchJikanAnime(query.trim(), 1, perPage);
+      return jikan?.data?.Page?.media ?? [];
+    } catch {
+      return [];
+    }
+  }
+}
+
 /**
  * Get anime by multiple IDs (batch request)
  */

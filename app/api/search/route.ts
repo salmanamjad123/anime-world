@@ -5,6 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { searchAnime } from '@/lib/api/anilist';
+import {
+  attachSlugsToSearchResult,
+  warmAnimeSlugsInBackground,
+} from '@/lib/seo/enrich-slugs';
 import type { AnimeFilters } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -25,7 +29,16 @@ export async function GET(request: NextRequest) {
     const perPage = parseInt(searchParams.get('perPage') || '20', 10);
 
     const result = await searchAnime(filters, page, perPage);
-    return NextResponse.json(result);
+    const enriched = await attachSlugsToSearchResult(result, {
+      allowLookup: true,
+      maxLookups: perPage,
+      lookupConcurrency: 5,
+    });
+    if (page > 1) {
+      warmAnimeSlugsInBackground(enriched.data.Page.media);
+    }
+
+    return NextResponse.json(enriched);
   } catch (error) {
     console.error('[API Error] /api/search:', error);
     return NextResponse.json(

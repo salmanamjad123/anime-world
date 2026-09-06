@@ -11,6 +11,7 @@ export interface ScheduleItem {
   title: string;
   episode: number;
   animeId: string;
+  slug?: string;
 }
 
 export interface ScheduleDay {

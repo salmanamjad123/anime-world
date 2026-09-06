@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
@@ -20,6 +20,7 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { updateWatchProgress } from '@/lib/firebase/firestore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
+import { isAniListNumericId } from '@/lib/seo/anime-path';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
@@ -28,6 +29,7 @@ import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 export default function WatchPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
   const animeId = params.animeId as string;
   const episodeId = decodeURIComponent(params.episodeId as string);
 
@@ -47,9 +49,16 @@ export default function WatchPage() {
   const [allSubtitles, setAllSubtitles] = useState<any[]>([]);
 
   const { data: animeData } = useAnimeById(animeId);
+  const anime = animeData?.data?.Media;
+  const episodesAnimeId =
+    anime && isAniListNumericId(String(anime.id)) ? String(anime.id) : animeId;
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
-  const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(animeId, selectedLanguage === 'dub', { refetchOnMount: 'always' });
+  const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(
+    episodesAnimeId,
+    selectedLanguage === 'dub',
+    { refetchOnMount: 'always' }
+  );
   const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
   const fallbackEpisodeNum = useMemo(
     () => (isFallbackEpisode ? parseInt(episodeId.match(/-episode-(\d+)$/)?.[1] ?? '0', 10) : null),
@@ -57,15 +66,15 @@ export default function WatchPage() {
   );
   // When URL is fallback format (e.g. 182587-episode-1), refetch episodes to get real HiAnime ID so we can load stream
   const { data: resolvedEpisodeId } = useQuery({
-    queryKey: ['resolve-episode', animeId, selectedLanguage === 'dub', fallbackEpisodeNum],
+    queryKey: ['resolve-episode', episodesAnimeId, selectedLanguage === 'dub', fallbackEpisodeNum],
     queryFn: async () => {
-      const res = await fetch(`/api/episodes/${animeId}?dub=${selectedLanguage === 'dub'}`);
+      const res = await fetch(`/api/episodes/${episodesAnimeId}?dub=${selectedLanguage === 'dub'}`);
       if (!res.ok) return null;
       const data = await res.json();
       const ep = data.episodes?.find((e: { number: number; id: string }) => e.number === fallbackEpisodeNum);
       return ep?.id?.includes('?ep=') ? ep.id : null;
     },
-    enabled: !!animeId && isFallbackEpisode && !!fallbackEpisodeNum,
+    enabled: !!episodesAnimeId && isFallbackEpisode && !!fallbackEpisodeNum,
     staleTime: 0,
   });
   const streamEpisodeId = isFallbackEpisode ? (resolvedEpisodeId ?? null) : episodeId;
@@ -108,7 +117,16 @@ export default function WatchPage() {
   const { autoNext } = usePlayerStore();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const anime = animeData?.data?.Media;
+  const watchTarget = { id: episodesAnimeId, slug: anime?.slug };
+  const animeDetailPath = ROUTES.ANIME_DETAIL(watchTarget);
+
+  // Fix broken watch URLs that used a HiAnime special slug instead of the AniList id
+  useEffect(() => {
+    if (!anime || !isAniListNumericId(String(anime.id))) return;
+    if (animeId === String(anime.id)) return;
+    const canonical = ROUTES.WATCH(String(anime.id), episodeId);
+    if (pathname !== canonical) router.replace(canonical);
+  }, [anime, animeId, episodeId, pathname, router]);
   const episodes = episodesData?.episodes || [];
   const currentEpisodeIndex = episodes.findIndex(
     (ep) => ep.id === episodeId || (isFallbackEpisode && fallbackEpisodeNum != null && ep.number === fallbackEpisodeNum)
@@ -236,7 +254,7 @@ export default function WatchPage() {
   const handleEpisodeEnd = () => {
     if (autoNext && currentEpisodeIndex < episodes.length - 1) {
       const nextEpisode = episodes[currentEpisodeIndex + 1];
-      router.push(ROUTES.WATCH(animeId, nextEpisode.id));
+      router.push(ROUTES.WATCH(watchTarget, nextEpisode.id));
     }
   };
 
@@ -244,7 +262,7 @@ export default function WatchPage() {
   const handlePrevious = () => {
     if (currentEpisodeIndex > 0) {
       const prevEpisode = episodes[currentEpisodeIndex - 1];
-      router.push(ROUTES.WATCH(animeId, prevEpisode.id));
+      router.push(ROUTES.WATCH(watchTarget, prevEpisode.id));
     }
   };
 
@@ -252,13 +270,13 @@ export default function WatchPage() {
   const handleNext = () => {
     if (currentEpisodeIndex < episodes.length - 1) {
       const nextEpisode = episodes[currentEpisodeIndex + 1];
-      router.push(ROUTES.WATCH(animeId, nextEpisode.id));
+      router.push(ROUTES.WATCH(watchTarget, nextEpisode.id));
     }
   };
 
   // Navigate to specific episode
   const handleEpisodeSelect = (epId: string) => {
-    router.push(ROUTES.WATCH(animeId, epId));
+    router.push(ROUTES.WATCH(watchTarget, epId));
     setShowEpisodes(false);
   };
 
@@ -281,7 +299,7 @@ export default function WatchPage() {
         {/* Back Button - text wraps on multiple lines, no overflow on mobile */}
         <Button
           variant="ghost"
-          onClick={() => router.push(ROUTES.ANIME_DETAIL(animeId))}
+          onClick={() => router.push(animeDetailPath)}
           className="mb-3 sm:mb-4 text-sm sm:text-base flex items-start sm:items-center flex max-w-full text-left"
         >
           <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 shrink-0 mt-0.5 sm:mt-0" />
@@ -363,7 +381,7 @@ export default function WatchPage() {
                     <Button variant="primary" onClick={() => window.location.reload()}>
                       Retry
                     </Button>
-                    <Button variant="ghost" onClick={() => router.push(ROUTES.ANIME_DETAIL(animeId))}>
+                    <Button variant="ghost" onClick={() => router.push(animeDetailPath)}>
                       Back to Episodes
                     </Button>
                   </div>

@@ -21,6 +21,7 @@ import { ROUTES } from '@/constants/routes';
 import { Play, Plus, Star, Calendar, Tv, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
+import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
 
 export default function AnimeDetailPage() {
   const params = useParams();
@@ -75,6 +76,36 @@ export default function AnimeDetailPage() {
   
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
+
+  // URL may be a HiAnime slug while seasons use AniList ids — keep selection in sync
+  useEffect(() => {
+    setSelectedSeasonId(animeId);
+  }, [animeId]);
+
+  useEffect(() => {
+    if (!anime?.id) return;
+    setSelectedSeasonId((prev) => {
+      const resolved = String(anime.id);
+      if (prev === animeId || prev === resolved) return resolved;
+      return prev;
+    });
+  }, [anime?.id, animeId]);
+
+  useEffect(() => {
+    if (seasons.length === 0 && movies.length === 0) return;
+    setSelectedSeasonId((prev) => {
+      const seasonIds = new Set(seasons.map((s) => String(s.id)));
+      const movieIds = new Set(movies.map((m) => String(m.id)));
+      const prevStr = String(prev);
+      if (seasonIds.has(prevStr) || movieIds.has(prevStr)) return prevStr;
+      const resolved = anime?.id ? String(anime.id) : null;
+      if (resolved && seasonIds.has(resolved)) return resolved;
+      const main = seasons.find((s) => s.relationType === 'MAIN') ?? seasons[0];
+      if (main) return String(main.id);
+      return prevStr;
+    });
+  }, [seasons, movies, anime?.id]);
+
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
@@ -110,7 +141,7 @@ export default function AnimeDetailPage() {
   const description = anime.description ? stripHtml(anime.description) : 'No description available.';
 
   const handleListSelect = async (status: 'watching' | 'on-hold' | 'plan-to-watch' | 'dropped' | 'completed') => {
-    addToList(animeId, title, anime.coverImage.large, status);
+    addToList(animeId, title, anime.coverImage.large, status, anime.slug);
     if (user?.uid) {
       try {
         await setListItemDb(user.uid, animeId, title, anime.coverImage.large, status);
@@ -133,12 +164,15 @@ export default function AnimeDetailPage() {
 
   const handlePlayFirst = () => {
     if (episodes.length > 0) {
-      router.push(ROUTES.WATCH(animeId, episodes[0].id));
+      router.push(
+        ROUTES.WATCH({ id: animeId, slug: anime?.slug }, episodes[0].id)
+      );
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <AnimeSlugUrlSync slug={anime.slug} />
       <Header />
 
       {/* Banner Section */}
@@ -285,7 +319,7 @@ export default function AnimeDetailPage() {
                     <p className="text-sm text-gray-400 mb-2">Seasons</p>
                     <div className="flex flex-wrap gap-2">
                       {seasons.map((season, index) => {
-                        const isSelected = selectedSeasonId === season.id;
+                        const isSelected = String(selectedSeasonId) === String(season.id);
                         const displayCount = seasonEpisodeCounts[season.id];
                         return (
                           <Button
@@ -311,7 +345,7 @@ export default function AnimeDetailPage() {
                       {movies.map((movie) => (
                         <Button
                           key={movie.id}
-                          variant={selectedSeasonId === movie.id ? 'primary' : 'ghost'}
+                          variant={String(selectedSeasonId) === String(movie.id) ? 'primary' : 'ghost'}
                           size="sm"
                           onClick={() => setSelectedSeasonId(movie.id)}
                         >
@@ -329,9 +363,9 @@ export default function AnimeDetailPage() {
               <div className="flex items-center justify-between mb-4 md:mb-6">
                 <h2 className="text-xl md:text-2xl font-bold text-white">
                   Episodes
-                  {seasons.find(s => s.id === selectedSeasonId)?.relationType !== 'MAIN' && 
-                    ` - ${seasons.find(s => s.id === selectedSeasonId)?.title || 'Season'}`
-                  }
+                  {seasons.find((s) => String(s.id) === String(selectedSeasonId))?.relationType !==
+                    'MAIN' &&
+                    ` - ${seasons.find((s) => String(s.id) === String(selectedSeasonId))?.title || 'Season'}`}
                 </h2>
                 
                 {/* Sub/Dub Toggle */}
@@ -381,7 +415,14 @@ export default function AnimeDetailPage() {
                     {episodes.map((episode) => (
                       <button
                         key={episode.id}
-                        onClick={() => router.push(ROUTES.WATCH(selectedSeasonId, episode.id))}
+                        onClick={() =>
+                          router.push(
+                            ROUTES.WATCH(
+                              { id: selectedSeasonId, slug: anime?.slug },
+                              episode.id
+                            )
+                          )
+                        }
                         className="bg-gray-700/50 hover:bg-gray-700 rounded-lg p-4 transition-colors text-left"
                       >
                         <div className="text-white font-semibold">Episode {episode.number}</div>

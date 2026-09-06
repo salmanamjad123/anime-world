@@ -10,6 +10,10 @@ import {
   getTopRatedAnime,
   getAnimeBySeason,
 } from '@/lib/api/anilist';
+import {
+  attachSlugsToSearchResult,
+  warmAnimeSlugsInBackground,
+} from '@/lib/seo/enrich-slugs';
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,7 +58,16 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    return NextResponse.json(result);
+    const enriched = await attachSlugsToSearchResult(result, {
+      allowLookup: true,
+      maxLookups: perPage,
+      lookupConcurrency: 5,
+    });
+    if (page > 1) {
+      warmAnimeSlugsInBackground(enriched.data.Page.media);
+    }
+
+    return NextResponse.json(enriched);
   } catch (error) {
     console.error('[API Error] /api/anime:', error);
     return NextResponse.json(

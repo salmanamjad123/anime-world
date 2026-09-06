@@ -12,6 +12,8 @@ export type AnimeSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
  */
 export interface Anime {
   id: string;
+  /** Public URL segment (HiAnime slug) when different from AniList id */
+  slug?: string;
   malId?: number;
   title: {
     romaji: string;

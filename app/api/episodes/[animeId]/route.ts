@@ -11,10 +11,7 @@ import {
 import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeEpisodesStandard } from '@/lib/api/hianime';
 import { saveEpisodesToFirestoreBackground } from '@/lib/api/episode-cache';
-
-function isAniListId(id: string): boolean {
-  return /^\d+$/.test(id);
-}
+import { resolveAnilistIdFromSegment } from '@/lib/seo/anime-slug';
 
 export async function GET(
   request: NextRequest,
@@ -32,31 +29,35 @@ export async function GET(
       );
     }
 
-    // HiAnime slug: fetch from HiAnime, fallback to Firebase cache
-    if (!isAniListId(animeId)) {
+    const anilistId = await resolveAnilistIdFromSegment(animeId, { allowLookup: true });
+
+    if (!anilistId) {
       const category = dub ? 'dub' : 'sub';
+      const slug = animeId;
       try {
-        const result = await getHiAnimeEpisodesStandard(animeId, animeId);
+        const result = await getHiAnimeEpisodesStandard(slug, slug);
         if (result.episodes.length > 0) {
-          saveEpisodesToFirestoreBackground(animeId, category, animeId, result);
+          saveEpisodesToFirestoreBackground(slug, category, slug, result);
           return NextResponse.json(result);
         }
       } catch (error) {
         console.warn('[Episodes] HiAnime slug fetch failed, trying Firebase cache');
       }
       const { getEpisodesFromFirestore } = await import('@/lib/api/episode-cache');
-      const cached = await getEpisodesFromFirestore(animeId, category);
+      const cached = await getEpisodesFromFirestore(slug, category);
       if (cached?.episodes?.length) {
         return NextResponse.json(cached);
       }
       return NextResponse.json(
-        { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId },
+        { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId: slug },
         { status: 404 }
       );
     }
 
-    // AniList id: get anime info then multi-source episodes
-    const animeData = await getAnimeById(animeId);
+    const resolvedAnilistId = anilistId;
+
+    // AniList id (numeric or title slug): get anime info then multi-source episodes
+    const animeData = await getAnimeById(resolvedAnilistId);
     const anime = animeData.data.Media;
 
     if (!anime) {
@@ -67,13 +68,18 @@ export async function GET(
     }
 
     const animeTitle = anime.title.english || anime.title.romaji;
+    const searchTitles = [
+      anime.title.english,
+      anime.title.romaji,
+      anime.title.native,
+    ].filter((t): t is string => Boolean(t?.trim()));
     const episodeCount = anime.episodes || 0;
     const malId = anime.malId;
 
     const result = await getEpisodesMultiSource(
-      animeId,
+      resolvedAnilistId,
       malId,
-      animeTitle,
+      searchTitles.length > 0 ? searchTitles : [animeTitle],
       episodeCount,
       dub
     );

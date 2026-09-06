@@ -45,7 +45,7 @@ export function RelatedAnimeSidebar({
             return (
               <Link
                 key={item.id}
-                href={ROUTES.ANIME_DETAIL(item.id)}
+                href={ROUTES.ANIME_DETAIL(item)}
                 className="flex gap-3 p-2 -mx-2 rounded-lg hover:bg-gray-700/50 transition-colors group"
               >
                 <div className="relative h-14 w-10 shrink-0 rounded overflow-hidden bg-gray-800">

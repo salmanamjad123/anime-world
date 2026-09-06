@@ -13,7 +13,13 @@ interface WatchlistStore {
   watchlist: WatchlistItem[];
 
   // Actions
-  addToList: (animeId: string, title: string, image: string, status?: ListStatus) => void;
+  addToList: (
+    animeId: string,
+    title: string,
+    image: string,
+    status?: ListStatus,
+    slug?: string
+  ) => void;
   setListStatus: (animeId: string, status: ListStatus) => void;
   removeFromList: (animeId: string) => void;
   getListStatus: (animeId: string) => ListStatus | null;
@@ -33,18 +39,21 @@ export const useWatchlistStore = create<WatchlistStore>()(
     (set, get) => ({
       watchlist: [],
 
-      addToList: (animeId, title, image, status = DEFAULT_STATUS) => {
+      addToList: (animeId, title, image, status = DEFAULT_STATUS, slug) => {
         const { watchlist } = get();
         const existing = watchlist.find((item) => item.animeId === animeId);
         if (existing) {
           set({
             watchlist: watchlist.map((item) =>
-              item.animeId === animeId ? { ...item, status, title, image } : item
+              item.animeId === animeId
+                ? { ...item, status, title, image, slug: slug ?? item.slug }
+                : item
             ),
           });
         } else {
           const newItem: WatchlistItem = {
             animeId,
+            slug,
             title,
             image,
             addedAt: new Date(),

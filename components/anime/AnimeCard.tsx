@@ -22,7 +22,7 @@ export function AnimeCard({ anime }: AnimeCardProps) {
   const score = anime.averageScore ? anime.averageScore / 10 : null;
 
   return (
-    <Link href={ROUTES.ANIME_DETAIL(anime.id)} className="block h-full">
+    <Link href={ROUTES.ANIME_DETAIL(anime)} className="block h-full">
       <Card hover className="overflow-hidden group h-full flex flex-col">
         {/* Image Container */}
         <div className="relative aspect-[2/3] overflow-hidden">

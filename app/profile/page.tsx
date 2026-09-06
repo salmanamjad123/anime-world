@@ -62,7 +62,7 @@ function WatchListCard({
   onStatusChange,
   onRemove,
 }: {
-  item: { animeId: string; title: string; image: string; addedAt: Date; status?: ListStatus };
+  item: { animeId: string; slug?: string; title: string; image: string; addedAt: Date; status?: ListStatus };
   onStatusChange: (status: ListStatus) => void;
   onRemove: () => void;
 }) {
@@ -80,7 +80,7 @@ function WatchListCard({
 
   return (
     <div ref={ref} className="relative group bg-gray-800 rounded-lg overflow-visible hover:ring-2 hover:ring-blue-500 transition-all">
-      <Link href={ROUTES.ANIME_DETAIL(item.animeId)} className="block overflow-hidden rounded-lg">
+      <Link href={ROUTES.ANIME_DETAIL({ id: item.animeId, slug: item.slug })} className="block overflow-hidden rounded-lg">
         <div className="relative aspect-[2/3] overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.image} alt={item.title} className="w-full h-full object-cover" />

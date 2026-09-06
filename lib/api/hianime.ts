@@ -438,8 +438,40 @@ function decodeEpisodeTitle(title: string): string {
 }
 
 /** Verify a HiAnime slug plausibly matches the AniList title (guards stale/wrong provider picks). */
-export function hiAnimeSlugMatchesTitle(animeTitle: string, hiAnimeId: string): boolean {
-  return titleOverlap(extractSearchWords(animeTitle), hiAnimeId, '');
+const SPECIAL_SLUG_MARKERS = [
+  '-episode-of-',
+  '-movie-',
+  '-film-',
+  '-special-',
+  '-ova-',
+  '-ona-',
+];
+
+export function hiAnimeSlugMatchesTitle(
+  animeTitle: string,
+  hiAnimeId: string,
+  options?: { episodeCount?: number; allowSpecials?: boolean }
+): boolean {
+  const words = extractSearchWords(animeTitle);
+  const core = words.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
+  const slug = hiAnimeId.toLowerCase();
+
+  if (!titleOverlap(words, hiAnimeId, '')) return false;
+
+  const overlap = countSlugTokenOverlap(buildSearchTitleStripped(animeTitle), hiAnimeId);
+  const minOverlap = Math.min(3, core.length);
+  if (core.length >= 2 && overlap < minOverlap) return false;
+
+  const titleSlug = buildSearchTitleStripped(animeTitle).replace(/\s+/g, '-');
+  if (core.length <= 2 && !slug.startsWith(titleSlug) && overlap < 3) return false;
+
+  const expectSeries =
+    options?.episodeCount == null || options.episodeCount === 0 || options.episodeCount > 1;
+  if (!options?.allowSpecials && expectSeries) {
+    if (SPECIAL_SLUG_MARKERS.some((marker) => slug.includes(marker))) return false;
+  }
+
+  return true;
 }
 
 function countSlugTokenOverlap(searchTitle: string, slug: string): number {

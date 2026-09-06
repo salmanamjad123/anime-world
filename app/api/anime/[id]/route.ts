@@ -4,15 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAnimeById } from '@/lib/api/anilist';
-import { getHiAnimeInfo } from '@/lib/api/hianime';
+import { fetchAnimeByRouteSegment } from '@/lib/seo/anime-route';
 import { ANIME_PLACEHOLDER, resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { Anime, AnimeStatus } from '@/types';
 import type { HiAnimeInfo } from '@/lib/api/hianime';
-
-function isAniListId(id: string): boolean {
-  return /^\d+$/.test(id);
-}
 
 function parseStatus(s: string | undefined): AnimeStatus | undefined {
   if (!s || typeof s !== 'string') return undefined;
@@ -65,6 +60,7 @@ function mapHiAnimeInfoToAnime(info: HiAnimeInfo): Anime {
     : undefined;
   return {
     id: info.id,
+    slug: info.id,
     title: { romaji: info.name, english: info.name, native: info.name ?? '' },
     description: info.description ?? undefined,
     coverImage: {
@@ -98,13 +94,11 @@ export async function GET(
       );
     }
 
-    if (isAniListId(id)) {
-      const result = await getAnimeById(id);
-      return NextResponse.json(result);
+    const media = await fetchAnimeByRouteSegment(id, mapHiAnimeInfoToAnime);
+    if (!media) {
+      return NextResponse.json({ error: 'Anime not found' }, { status: 404 });
     }
 
-    const info = await getHiAnimeInfo(id);
-    const media = mapHiAnimeInfoToAnime(info);
     return NextResponse.json({ data: { Media: media } });
   } catch (error) {
     console.error('[API Error] /api/anime/[id]:', error);

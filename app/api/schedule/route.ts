@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { axiosInstance } from '@/lib/api/axios';
 import { ANILIST_API_URL } from '@/constants/api';
 import { getPreferredTitle } from '@/lib/utils';
+import { attachSlugsToIdRows } from '@/lib/seo/enrich-slugs';
 
 const AIRING_SCHEDULE_QUERY = `
   query ($airingAtGreater: Int, $airingAtLesser: Int, $page: Int) {
@@ -49,7 +50,10 @@ export async function GET() {
     const todayStart = getStartOfDayUTC(now);
     const endTimestamp = todayStart + 7 * 24 * 3600;
 
-    const dayMap = new Map<string, Array<{ time: string; title: string; episode: number; animeId: string }>>();
+    const dayMap = new Map<
+      string,
+      Array<{ time: string; title: string; episode: number; animeId: string; slug?: string }>
+    >();
     let page = 1;
     let hasNextPage = true;
 
@@ -105,17 +109,23 @@ export async function GET() {
       if (schedules.length < 50) hasNextPage = false;
     }
 
-    const days: Array<{ date: string; label: string; shortLabel: string; items: Array<{ time: string; title: string; episode: number; animeId: string }> }> = [];
+    const days: Array<{
+      date: string;
+      label: string;
+      shortLabel: string;
+      items: Array<{ time: string; title: string; episode: number; animeId: string; slug?: string }>;
+    }> = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date((todayStart + i * 86400) * 1000);
       const dateStr = d.toISOString().slice(0, 10);
       const dayName = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
       const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      const items = await attachSlugsToIdRows(dayMap.get(dateStr) ?? []);
       days.push({
         date: dateStr,
         label: `${dayName} ${monthDay}`,
         shortLabel: dayName,
-        items: dayMap.get(dateStr) ?? [],
+        items,
       });
     }
 

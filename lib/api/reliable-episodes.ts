@@ -22,6 +22,10 @@ import {
 } from './episode-cache';
 import { deleteCacheKey } from '@/lib/cache';
 import { saveAnimeSlugMapping } from '@/lib/seo/anime-slug';
+import {
+  getRequiredHiAnimeSearch,
+  HIANIME_REQUIRED_SEARCH,
+} from '@/lib/api/hianime-required';
 
 /** Thrown when no episodes available (HiAnime down + Firebase miss) */
 export class EpisodesUnavailableError extends Error {
@@ -32,9 +36,7 @@ export class EpisodesUnavailableError extends Error {
 }
 
 /** AniList IDs that must use HiAnime for episodes (AniList lacks full episode data) */
-const HIANIME_REQUIRED_SEARCH: Record<string, string> = {
-  '21': 'one piece', // One Piece - AniList doesn't have full 1000+ episode list
-};
+export { HIANIME_REQUIRED_SEARCH };
 
 /**
  * Generate episodes based on AniList episode count
@@ -103,6 +105,14 @@ export async function searchAnimeMultiProvider(
   }
 }
 
+function anyTitleMatchesSlug(
+  titles: string[],
+  hiAnimeId: string,
+  episodeCount?: number
+): boolean {
+  return titles.some((t) => hiAnimeSlugMatchesTitle(t, hiAnimeId, { episodeCount }));
+}
+
 /**
  * Fetch episodes from multiple providers
  * TIER 1: HiAnime API (direct, fastest, most reliable)
@@ -111,10 +121,15 @@ export async function searchAnimeMultiProvider(
  */
 export async function getReliableEpisodes(
   animeId: string,
-  animeTitle: string,
+  animeTitles: string | string[],
   episodeCount: number,
   isDub: boolean = false
 ): Promise<EpisodeListResponse & { _provider?: string }> {
+  const titles = (Array.isArray(animeTitles) ? animeTitles : [animeTitles]).filter(
+    (t, i, arr) => Boolean(t?.trim()) && arr.indexOf(t) === i
+  );
+  const primaryTitle = titles[0] ?? '';
+
   // TIER 1: Try HiAnime API directly (Primary source)
   // Skip health check - it blocks 15s on Railway cold start. Try HiAnime directly; fallback on failure.
   try {
@@ -150,14 +165,20 @@ export async function getReliableEpisodes(
     }
 
     if (!match) {
-      match = await findHiAnimeMatch(animeTitle, isDub, episodeCount);
+      for (const title of titles) {
+        const candidate = await findHiAnimeMatch(title, isDub, episodeCount);
+        if (candidate && anyTitleMatchesSlug(titles, candidate.id, episodeCount)) {
+          match = candidate;
+          break;
+        }
+      }
     }
 
-    if (match) {
-      if (!hiAnimeSlugMatchesTitle(animeTitle, match.id)) {
-        console.warn(`⚠️ [Episodes] Rejected provider mismatch: ${match.id} for "${animeTitle}"`);
-        match = null;
-      }
+    if (match && !anyTitleMatchesSlug(titles, match.id, episodeCount)) {
+      console.warn(
+        `⚠️ [Episodes] Rejected provider mismatch: ${match.id} for "${primaryTitle}"`
+      );
+      match = null;
     }
 
     if (match) {
@@ -192,9 +213,9 @@ export async function getReliableEpisodes(
   // TIER 2: Firebase cache (when HiAnime fails)
   const category = isDub ? 'dub' : 'sub';
   const cached = await getEpisodesFromFirestore(animeId, category);
-  if (cached?.episodes?.length) {
+    if (cached?.episodes?.length) {
     const cachedSlug = cached.episodes[0].id.split('?')[0];
-    if (hiAnimeSlugMatchesTitle(animeTitle, cachedSlug)) {
+    if (anyTitleMatchesSlug(titles, cachedSlug, episodeCount)) {
       return cached;
     }
     console.warn(`⚠️ [Episodes] Ignoring stale Firestore cache for ${animeId} (wrong provider)`);
@@ -259,9 +280,12 @@ export async function getEpisodesFromJikan(
 export async function getEpisodesMultiSource(
   anilistId: string,
   _malId: number | undefined,
-  animeTitle: string,
+  animeTitle: string | string[],
   episodeCount: number,
   isDub: boolean = false
 ): Promise<EpisodeListResponse> {
-  return getReliableEpisodes(anilistId, animeTitle, episodeCount, isDub);
+  const titles = (Array.isArray(animeTitle) ? animeTitle : [animeTitle]).filter(
+    (t, i, arr) => Boolean(t?.trim()) && arr.indexOf(t) === i
+  );
+  return getReliableEpisodes(anilistId, titles, episodeCount, isDub);
 }

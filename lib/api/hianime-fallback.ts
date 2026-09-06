@@ -61,6 +61,7 @@ export function mapHiAnimeSearchToAnime(item: HiAnimeSearchResult): Anime {
 
   return {
     id: item.id,
+    slug: item.id,
     title: {
       romaji: item.name,
       english: item.name,

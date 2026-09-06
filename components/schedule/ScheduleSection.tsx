@@ -188,7 +188,7 @@ export function ScheduleSection() {
               {displayedItems.map((item) => (
                 <Link
                   key={`${item.animeId}-${item.episode}-${item.time}`}
-                  href={ROUTES.ANIME_DETAIL(item.animeId)}
+                  href={ROUTES.ANIME_DETAIL({ id: item.animeId, slug: item.slug })}
                   className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-3 px-1 hover:bg-gray-700/30 rounded-lg transition-colors group"
                 >
                   <span className="text-gray-400 text-sm font-medium w-14 shrink-0 tabular-nums">

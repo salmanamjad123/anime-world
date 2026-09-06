@@ -109,6 +109,7 @@ export function Header() {
                   genericPlaceholder;
                 return {
                   id: String(r.id),
+                  slug: original?.slug,
                   title: { romaji: r.title, english: r.title, native: '' },
                   coverImage: { large: img, medium: img },
                   genres: r.format ? [r.format] : [],
@@ -159,12 +160,12 @@ export function Header() {
 
   const showDropdown = searchOpen && (searchQuery.length >= 1 || searchResults.length > 0);
 
-  const handleResultClick = (animeId: string) => {
+  const handleResultClick = (item: Anime) => {
     setSearchQuery('');
     setSearchOpen(false);
     setMobileSearchOpen(false);
     setSearchResults([]);
-    router.push(ROUTES.ANIME_DETAIL(animeId));
+    router.push(ROUTES.ANIME_DETAIL(item));
   };
 
   const toggleMobileSearch = () => {
@@ -267,7 +268,7 @@ export function Header() {
                         <li key={item.id}>
                           <button
                             type="button"
-                            onClick={() => handleResultClick(item.id)}
+                            onClick={() => handleResultClick(item)}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
@@ -434,7 +435,7 @@ export function Header() {
                         <li key={item.id}>
                           <button
                             type="button"
-                            onClick={() => handleResultClick(item.id)}
+                            onClick={() => handleResultClick(item)}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
