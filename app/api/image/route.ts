@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isUnreliableImageCdn, normalizeImageUrl, getImageProxyReferers } from '@/lib/utils/image-url';
+import { isImageProxyAllowed, normalizeImageUrl, getImageProxyReferers, isMangaDexChapterImageUrl } from '@/lib/utils/image-url';
 
 const ALLOWED_TYPES = new Set([
   'image/jpeg',
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const raw = request.nextUrl.searchParams.get('url');
     const url = normalizeImageUrl(raw);
 
-    if (!url || !isUnreliableImageCdn(url)) {
+    if (!url || !isImageProxyAllowed(url)) {
       return NextResponse.json({ error: 'Invalid or disallowed image URL' }, { status: 400 });
     }
 
@@ -60,11 +60,15 @@ export async function GET(request: NextRequest) {
 
     const data = await response.arrayBuffer();
 
+    const cacheControl = isMangaDexChapterImageUrl(url)
+      ? 'public, max-age=600, stale-while-revalidate=300'
+      : 'public, max-age=86400, stale-while-revalidate=604800';
+
     return new NextResponse(data, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Cache-Control': cacheControl,
         'Access-Control-Allow-Origin': '*',
       },
     });

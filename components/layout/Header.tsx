@@ -42,6 +42,7 @@ export function Header() {
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const scrollRafRef = useRef<number | null>(null);
 
   const MOBILE_TAB_SCROLL_RANGE = 72;
@@ -50,6 +51,7 @@ export function Header() {
   const { user } = useUserStore();
 
   const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
+  const isReaderPage = pathname.includes('/read') || pathname.startsWith('/watch/');
   const profileLinks =
     activeTab === 'manga'
       ? {
@@ -194,10 +196,33 @@ export function Header() {
     return () => { cancelled = true; };
   }, [debouncedQuery, activeTab]);
 
+  // Sync --site-header-height to the actual rendered header height (for sticky sub-headers)
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    const syncHeaderHeight = () => {
+      document.documentElement.style.setProperty(
+        '--site-header-height',
+        `${header.getBoundingClientRect().height}px`
+      );
+    };
+
+    syncHeaderHeight();
+    const observer = new ResizeObserver(syncHeaderHeight);
+    observer.observe(header);
+    window.addEventListener('resize', syncHeaderHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncHeaderHeight);
+    };
+  }, [isReaderPage, mobileTabProgress, mobileSearchOpen]);
+
   // Mobile: tabs slide up into the top row as the user scrolls
   useEffect(() => {
     const updateTabProgress = () => {
-      if (window.innerWidth >= 768) {
+      if (isReaderPage || window.innerWidth >= 768) {
         setMobileTabProgress(0);
         return;
       }
@@ -220,7 +245,7 @@ export function Header() {
       window.removeEventListener('resize', onResize);
       if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
     };
-  }, []);
+  }, [isReaderPage]);
 
   // Close dropdown when clicking outside (exclude search toggle button)
   useEffect(() => {
@@ -299,11 +324,11 @@ export function Header() {
 
   return (
     <>
-    <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
+    <header ref={headerRef} className="sticky top-0 z-[100] w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
       <div className="relative w-full">
         {/* Header row */}
-        <div className="container mx-auto px-4 relative overflow-hidden">
-          <div className="relative z-10 flex h-14 md:h-16 items-center justify-between gap-2 md:gap-4 bg-gray-900/95 supports-[backdrop-filter]:bg-gray-900/60">
+        <div className="container mx-auto px-4 relative">
+          <div className="relative z-20 flex h-14 md:h-16 items-center justify-between gap-2 md:gap-4 bg-gray-900/95 supports-[backdrop-filter]:bg-gray-900/60">
             {/* Toggle + Logo (+ Tabs on desktop) */}
             <div className="flex items-center gap-1 sm:gap-2 min-w-0">
               <button
@@ -336,7 +361,7 @@ export function Header() {
             </div>
 
             {/* Search + Auth */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 justify-end">
             {/* Mobile: Search icon only - tap to open/close */}
             <button
               ref={searchToggleRef}
@@ -350,7 +375,7 @@ export function Header() {
             </button>
 
             {/* Desktop: Filter (anime only) + Search bar */}
-            <div ref={searchRef} className="relative flex-1 max-w-xl mx-4 hidden md:flex items-center gap-2 min-w-0">
+            <div ref={searchRef} className="relative z-50 hidden md:flex items-center gap-2 w-full max-w-[400px] flex-none">
             {showFilter && (
               <Link
                 href={ROUTES.SEARCH}
@@ -361,7 +386,7 @@ export function Header() {
               </Link>
             )}
             <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-20" />
               <input
                 type="text"
                 placeholder={activeTab === 'manga' ? 'Search manga...' : 'Search any anime...'}
@@ -369,18 +394,17 @@ export function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchOpen(true)}
                 className={cn(
-                  'w-full pl-10 pr-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent text-sm',
+                  'relative z-0 w-full pl-10 pr-4 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent text-sm',
                   activeTab === 'manga' ? 'focus:ring-amber-500' : 'focus:ring-blue-500'
                 )}
               />
               {isSearching && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin z-20 pointer-events-none" />
               )}
-            </div>
 
             {/* Search results dropdown */}
             {showDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 rounded-lg bg-gray-800 border border-gray-700 shadow-xl max-h-[70vh] overflow-y-auto z-50">
+              <div className="absolute top-full left-0 right-0 mt-0 rounded-lg bg-gray-800 border border-gray-700 shadow-2xl max-h-72 overflow-y-auto z-[110]">
                 {isSearching ? (
                   <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
@@ -388,9 +412,9 @@ export function Header() {
                     {searchQuery.length < 1 ? 'Type to search' : activeTab === 'manga' ? 'No manga found' : 'No anime found'}
                   </div>
                 ) : (
-                  <ul className="py-2">
+                  <ul className="py-1">
                     {debouncedQuery && searchResults.length > 0 && (
-                      <li className="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
+                      <li className="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-700">
                         {isFallback ? (activeTab === 'manga' ? 'Popular manga' : 'Similar / Popular anime') : 'Search results'}
                       </li>
                     )}
@@ -403,9 +427,9 @@ export function Header() {
                           <button
                             type="button"
                             onClick={() => handleResultClick(item)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
+                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-700/80 transition-colors"
                           >
-                            <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
+                            <div className="relative w-10 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-700">
                               <SafeImage
                                 src={imageUrl}
                                 alt={title}
@@ -429,9 +453,10 @@ export function Header() {
               </div>
             )}
             </div>
+            </div>
 
             {/* Auth: Login button or User menu */}
-            <div ref={userMenuRef} className="relative shrink-0">
+            <div ref={userMenuRef} className="relative shrink-0 ml-2">
               {user ? (
                 <>
                   <button
@@ -452,7 +477,7 @@ export function Header() {
                     </span>
                   </button>
                   {userMenuOpen && (
-                    <div className="absolute right-0 top-full mt-1 py-2 w-64 rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl z-50">
+                    <div className="absolute right-0 top-full mt-1 py-2 w-64 rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl z-[110]">
                       <div className="px-4 pb-2">
                         <p className="text-sm font-semibold text-white truncate">
                           {user.displayName || user.email}
@@ -513,7 +538,8 @@ export function Header() {
           </div>
           </div>
 
-          {/* Mobile: tabs slide up behind logo/search row on scroll */}
+          {/* Mobile: tabs slide up behind logo/search row on scroll (hidden on reader pages) */}
+          {!isReaderPage && (
           <div
             className="md:hidden relative z-0 overflow-hidden"
             style={{ height: `${MOBILE_TAB_ROW_HEIGHT * (1 - mobileTabProgress)}px` }}
@@ -528,27 +554,28 @@ export function Header() {
               {renderTabToggle()}
             </div>
           </div>
+          )}
         </div>
 
         {/* Mobile Search Bar - absolute overlay below header, takes extra space */}
         {mobileSearchOpen && (
           <div
             ref={searchRef}
-            className="md:hidden absolute top-full left-0 right-0 z-50 w-full px-4 py-4 border-t border-gray-800 bg-gray-900 shadow-xl"
+            className="md:hidden absolute top-full left-0 right-0 z-[110] w-full px-4 py-3 border-t border-gray-800 bg-gray-900 shadow-2xl"
           >
             <div className="flex gap-2 w-full">
               {showFilter && (
                 <Link
                   href={ROUTES.SEARCH}
                   onClick={closeMobileSearch}
-                  className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                  className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                   aria-label="Filters"
                 >
-                  <Filter className="w-5 h-5" />
+                  <Filter className="w-4 h-4" />
                 </Link>
               )}
               <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-20" />
                 <input
                   type="text"
                   placeholder={activeTab === 'manga' ? 'Search manga...' : 'Search anime...'}
@@ -556,26 +583,26 @@ export function Header() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setSearchOpen(true)}
                   autoFocus
-                  className="w-full h-12 pl-10 pr-10 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                  className="relative z-0 w-full h-10 pl-10 pr-10 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
                 {isSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin z-20 pointer-events-none" />
                 )}
               </div>
             </div>
             {/* Search results dropdown */}
             {showDropdown && (
-              <div className="mt-2 rounded-lg bg-gray-800 border border-gray-700 max-h-[60vh] overflow-y-auto">
+              <div className="relative z-[110] mt-1 rounded-lg bg-gray-800 border border-gray-700 shadow-2xl max-h-64 overflow-y-auto">
                 {isSearching ? (
-                  <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
+                  <div className="p-3 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
-                  <div className="p-4 text-center text-gray-400 text-sm">
+                  <div className="p-3 text-center text-gray-400 text-sm">
                     {searchQuery.length < 1 ? 'Type to search' : activeTab === 'manga' ? 'No manga found' : 'No anime found'}
                   </div>
                 ) : (
-                  <ul className="py-2">
+                  <ul className="py-1">
                     {debouncedQuery && searchResults.length > 0 && (
-                      <li className="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
+                      <li className="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-700">
                         {isFallback ? (activeTab === 'manga' ? 'Popular manga' : 'Similar / Popular anime') : 'Search results'}
                       </li>
                     )}
@@ -588,15 +615,15 @@ export function Header() {
                           <button
                             type="button"
                             onClick={() => handleResultClick(item)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-700/80 transition-colors"
+                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-700/80 transition-colors"
                           >
-                            <div className="relative w-12 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-700">
+                            <div className="relative w-10 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-700">
                               <SafeImage
                                 src={imageUrl}
                                 alt={title}
                                 fill
                                 className="object-cover"
-                                sizes="48px"
+                                sizes="40px"
                               />
                             </div>
                             <div className="min-w-0 flex-1">

@@ -6,7 +6,6 @@
 'use client';
 
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useChapterPages, useMangaChapters, useMangaInfo } from '@/hooks/useManga';
 import { ROUTES } from '@/constants/routes';
@@ -14,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
-  LayoutList,
   Square,
   X,
 } from 'lucide-react';
@@ -24,6 +22,7 @@ import { useReadingHistoryStore } from '@/store/useReadingHistoryStore';
 import { useUserStore } from '@/store/useUserStore';
 import { updateReadingProgress } from '@/lib/firebase/manga-firestore';
 import { getPreferredTitle } from '@/lib/utils';
+import { MangaPageImage } from '@/components/manga/MangaPageImage';
 
 export default function MangaReadPage() {
   const params = useParams();
@@ -205,10 +204,8 @@ export default function MangaReadPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <Header />
-
-      {/* Reader bar */}
-      <div className="sticky top-16 z-40 bg-gray-900/95 backdrop-blur border-b border-gray-800">
+      {/* Reader bar — only chrome on read pages; site header hidden for immersive reading */}
+      <div className="sticky top-0 z-50 bg-gray-900/95 backdrop-blur border-b border-gray-800 pt-[env(safe-area-inset-top,0px)]">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <Button
@@ -263,10 +260,10 @@ export default function MangaReadPage() {
         </div>
       </div>
 
-      {/* Content - Scroll view: all pages stacked */}
-      <main className="container mx-auto px-4 py-4">
+      {/* Content - Scroll view: all pages stacked, edge-to-edge */}
+      <main className="w-full pb-4">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-24">
+          <div className="flex flex-col items-center justify-center py-24 px-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mb-4" />
             <p className="text-gray-400">Loading chapter...</p>
           </div>
@@ -286,31 +283,24 @@ export default function MangaReadPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center w-full max-w-[720px] mx-auto">
-            <div className="flex items-center gap-2 mb-4 self-start">
-              <LayoutList className="w-4 h-4 text-amber-500" />
-              <span className="text-sm text-gray-400">Scroll view · All pages</span>
-            </div>
-            <div className="flex flex-col gap-2 w-full">
-              {pages.map((page: MangaChapterPage, idx: number) => (
-                <div
-                  key={idx}
-                  ref={(el) => {
-                    if (el) pageRefs.current.set(idx + 1, el);
-                    else pageRefs.current.delete(idx + 1);
-                  }}
-                  data-page-index={idx + 1}
-                  className="w-full bg-gray-800/30 rounded-lg overflow-hidden select-none"
-                >
-                  <img
-                    src={page.img}
-                    alt={`Page ${idx + 1}`}
-                    className="w-full h-auto block"
-                    draggable={false}
-                  />
-                </div>
-              ))}
-            </div>
+          <div className="flex flex-col w-full md:max-w-[720px] md:mx-auto md:px-4 md:py-4 md:gap-2">
+            {pages.map((page: MangaChapterPage, idx: number) => (
+              <div
+                key={idx}
+                ref={(el) => {
+                  if (el) pageRefs.current.set(idx + 1, el);
+                  else pageRefs.current.delete(idx + 1);
+                }}
+                data-page-index={idx + 1}
+                className="w-full select-none md:rounded-lg md:overflow-hidden md:bg-gray-800/30"
+              >
+                <MangaPageImage
+                  src={page.img}
+                  alt={`Page ${idx + 1}`}
+                  priority={idx < 2}
+                />
+              </div>
+            ))}
           </div>
         )}
       </main>
@@ -363,11 +353,11 @@ export default function MangaReadPage() {
 
           {/* Content - one page, fit to view */}
           <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden p-2 sm:p-4">
-            <img
-              src={pages[currentPageIndex]?.img}
+            <MangaPageImage
+              src={pages[currentPageIndex]?.img ?? ''}
               alt={`Page ${currentPageIndex + 1}`}
-              className="max-w-full max-h-full object-contain"
-              draggable={false}
+              priority
+              fitInView
             />
           </div>
 
