@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isUnreliableImageCdn, normalizeImageUrl } from '@/lib/utils/image-url';
+import { isUnreliableImageCdn, normalizeImageUrl, getImageProxyReferers } from '@/lib/utils/image-url';
 
 const ALLOWED_TYPES = new Set([
   'image/jpeg',
@@ -25,11 +25,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or disallowed image URL' }, { status: 400 });
     }
 
-    const referers = [
-      'https://hianime.to/',
-      'https://megaplay.buzz/',
-      'https://megacloud.blog/',
-    ];
+    const referers = getImageProxyReferers(url);
 
     let response: Response | null = null;
     for (const referer of referers) {

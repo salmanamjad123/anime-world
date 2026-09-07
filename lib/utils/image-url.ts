@@ -8,14 +8,36 @@ const UNRELIABLE_IMAGE_HOSTS = new Set([
   'gogocdn.net',
 ]);
 
+/** MangaDex serves placeholder/hotlink block without Referer */
+const PROXY_IMAGE_HOSTS = new Set([
+  ...UNRELIABLE_IMAGE_HOSTS,
+  'uploads.mangadex.org',
+]);
+
 export function isUnreliableImageCdn(url: unknown): boolean {
   const normalized = normalizeImageUrl(url);
   if (!normalized) return false;
   try {
-    return UNRELIABLE_IMAGE_HOSTS.has(new URL(normalized).hostname);
+    return PROXY_IMAGE_HOSTS.has(new URL(normalized).hostname);
   } catch {
     return false;
   }
+}
+
+export function getImageProxyReferers(url: string): string[] {
+  try {
+    const host = new URL(url).hostname;
+    if (host === 'uploads.mangadex.org') {
+      return ['https://mangadex.org/'];
+    }
+  } catch {
+    /* fall through */
+  }
+  return [
+    'https://hianime.to/',
+    'https://megaplay.buzz/',
+    'https://megacloud.blog/',
+  ];
 }
 
 /** Serve through same-origin image proxy (adds Referer server-side). */

@@ -6,7 +6,7 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
@@ -125,7 +125,7 @@ export default function MangaDetailPage() {
         </div>
         {(manga.bannerImage || coverImage) && (
           <div className="absolute inset-0">
-            <Image
+            <SafeImage
               src={manga.bannerImage || coverImage}
               alt={title}
               fill
@@ -140,7 +140,7 @@ export default function MangaDetailPage() {
           <div className="flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl">
             <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48 md:-mb-24">
               <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border-2 border-amber-500/20">
-                <Image
+                <SafeImage
                   src={coverImage}
                   alt={title}
                   fill

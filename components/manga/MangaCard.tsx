@@ -5,7 +5,7 @@
 
 'use client';
 
-import Image from 'next/image';
+import { SafeImage } from '@/components/ui/SafeImage';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { getPreferredTitle } from '@/lib/utils';
@@ -25,7 +25,7 @@ export function MangaCard({ manga }: MangaCardProps) {
     <Link href={ROUTES.MANGA_DETAIL(manga.id, manga.mangadexId)} className="block h-full">
       <Card hover className="overflow-hidden group h-full flex flex-col">
         <div className="relative aspect-[2/3] overflow-hidden">
-          <Image
+          <SafeImage
             src={manga.coverImage.large}
             alt={title}
             fill
