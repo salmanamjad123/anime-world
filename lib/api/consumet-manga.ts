@@ -7,10 +7,63 @@ import { axiosInstance } from './axios';
 import { CONSUMET_API_URL } from '@/constants/api';
 import { getChapterCached } from './chapter-cache';
 import { getCached, CACHE_TTL } from '@/lib/cache';
-import type { MangaInfoConsumet, MangaChapterPage, MangaChapter } from '@/types';
+import type { MangaInfoConsumet, MangaChapterPage, MangaChapter, Manga, MangaStatus } from '@/types';
 
 const DEFAULT_PROVIDER = 'mangapill';
 const MANGA_PROVIDERS = ['mangapill', 'mangadex', 'mangareader', 'mangahere', 'mangakakalot'] as const;
+
+function mapConsumetStatus(status?: string): MangaStatus | undefined {
+  if (!status) return undefined;
+  const s = status.toLowerCase();
+  if (s.includes('finish') || s.includes('complete')) return 'FINISHED';
+  if (s.includes('publish') || s.includes('ongoing')) return 'RELEASING';
+  if (s.includes('not yet')) return 'NOT_YET_RELEASED';
+  if (s.includes('cancel')) return 'CANCELLED';
+  return undefined;
+}
+
+/** Map Consumet meta response to our Manga shape for detail fallback */
+export function mapConsumetToManga(info: MangaInfoConsumet, anilistId: string): Manga {
+  const titleObj = info.title;
+  const romaji =
+    typeof titleObj === 'string'
+      ? titleObj
+      : titleObj?.romaji || titleObj?.english || 'Unknown';
+  const english = typeof titleObj === 'string' ? titleObj : titleObj?.english;
+  const image = info.image || '/images/anime-placeholder.svg';
+
+  return {
+    id: anilistId,
+    malId: info.malId,
+    title: {
+      romaji,
+      english,
+    },
+    description: info.description,
+    coverImage: {
+      large: image,
+      medium: image,
+      extraLarge: image,
+    },
+    genres: info.genres ?? [],
+    averageScore: info.rating != null ? Math.round(info.rating * 10) : undefined,
+    status: mapConsumetStatus(info.status),
+    format: 'MANGA',
+    chapters: info.chapters?.length,
+  };
+}
+
+/**
+ * Fetch manga metadata from Consumet when AniList is down.
+ */
+export async function getConsumetMangaMetadata(anilistId: string): Promise<Manga | null> {
+  for (const provider of MANGA_PROVIDERS) {
+    const info = await getMangaInfo(anilistId, provider);
+    if (!info?.title) continue;
+    return mapConsumetToManga(info, anilistId);
+  }
+  return null;
+}
 
 /** Normalize chapters from Consumet - can be array or object with numeric keys */
 function normalizeChapters(raw: unknown): MangaChapter[] {

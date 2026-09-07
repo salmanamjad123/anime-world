@@ -38,13 +38,34 @@ export function Header() {
   const [isSearching, setIsSearching] = useState(false);
   const { isOpen: authModalOpen, defaultView: authModalDefaultView, openAuthModal, closeAuthModal } = useAuthModalStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileTabProgress, setMobileTabProgress] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+
+  const MOBILE_TAB_SCROLL_RANGE = 72;
+  const MOBILE_TAB_ROW_HEIGHT = 52;
 
   const { user } = useUserStore();
 
   const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
+  const profileLinks =
+    activeTab === 'manga'
+      ? {
+          profile: ROUTES.MANGA_PROFILE,
+          continue: ROUTES.MANGA_PROFILE_SECTION('reading'),
+          list: ROUTES.MANGA_PROFILE_SECTION('readlist'),
+          continueLabel: 'Continue Reading',
+          listLabel: 'Read List',
+        }
+      : {
+          profile: ROUTES.PROFILE,
+          continue: ROUTES.PROFILE_SECTION('watching'),
+          list: ROUTES.PROFILE_SECTION('watchlist'),
+          continueLabel: 'Continue Watching',
+          listLabel: 'Watch List',
+        };
   const debouncedQuery = useDebounce(searchQuery.trim(), 300);
   const showFilter = activeTab === 'anime';
 
@@ -173,6 +194,34 @@ export function Header() {
     return () => { cancelled = true; };
   }, [debouncedQuery, activeTab]);
 
+  // Mobile: tabs slide up into the top row as the user scrolls
+  useEffect(() => {
+    const updateTabProgress = () => {
+      if (window.innerWidth >= 768) {
+        setMobileTabProgress(0);
+        return;
+      }
+      const progress = Math.min(Math.max(window.scrollY / MOBILE_TAB_SCROLL_RANGE, 0), 1);
+      setMobileTabProgress(progress);
+    };
+
+    const onScroll = () => {
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = requestAnimationFrame(updateTabProgress);
+    };
+
+    const onResize = () => updateTabProgress();
+
+    updateTabProgress();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, []);
+
   // Close dropdown when clicking outside (exclude search toggle button)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -198,7 +247,11 @@ export function Header() {
     setMobileSearchOpen(false);
     setSearchResults([]);
     if (activeTab === 'manga') {
-      router.push(ROUTES.MANGA_DETAIL(String(item.id)));
+      const md =
+        'mangadexId' in item && item.mangadexId
+          ? item.mangadexId
+          : undefined;
+      router.push(ROUTES.MANGA_DETAIL(String(item.id), md));
     } else {
       router.push(ROUTES.ANIME_DETAIL(item));
     }
@@ -217,15 +270,42 @@ export function Header() {
     setSearchOpen(false);
   }, []);
 
+  const renderTabToggle = () => (
+    <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 w-full md:w-auto">
+      <Link
+        href={ROUTES.HOME}
+        className={cn(
+          'flex-1 md:flex-none text-center px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          activeTab === 'anime'
+            ? 'bg-blue-600 text-white'
+            : 'text-gray-400 hover:text-white'
+        )}
+      >
+        Anime
+      </Link>
+      <Link
+        href={ROUTES.MANGA}
+        className={cn(
+          'flex-1 md:flex-none text-center px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          activeTab === 'manga'
+            ? 'bg-amber-600 text-white'
+            : 'text-gray-400 hover:text-white'
+        )}
+      >
+        Manga
+      </Link>
+    </div>
+  );
+
   return (
     <>
     <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
       <div className="relative w-full">
         {/* Header row */}
-        <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between gap-4">
-            {/* Toggle + Logo + Tabs */}
-            <div className="flex items-center gap-1 sm:gap-2">
+        <div className="container mx-auto px-4 relative overflow-hidden">
+          <div className="relative z-10 flex h-14 md:h-16 items-center justify-between gap-2 md:gap-4 bg-gray-900/95 supports-[backdrop-filter]:bg-gray-900/60">
+            {/* Toggle + Logo (+ Tabs on desktop) */}
+            <div className="flex items-center gap-1 sm:gap-2 min-w-0">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
@@ -238,7 +318,7 @@ export function Header() {
                 href={activeTab === 'manga' ? ROUTES.MANGA : ROUTES.HOME}
                 className="flex-shrink-0 flex items-center"
               >
-                <div className="text-xl sm:text-2xl font-bold">
+                <div className="text-lg sm:text-xl md:text-2xl font-bold whitespace-nowrap">
                   {activeTab === 'manga' ? (
                     <>
                       <span className="text-amber-500">Manga</span>
@@ -252,34 +332,11 @@ export function Header() {
                   )}
                 </div>
               </Link>
-              <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 ml-1 sm:ml-2">
-                <Link
-                  href={ROUTES.HOME}
-                  className={cn(
-                    'px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
-                    activeTab === 'anime'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  )}
-                >
-                  Anime
-                </Link>
-                <Link
-                  href={ROUTES.MANGA}
-                  className={cn(
-                    'px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
-                    activeTab === 'manga'
-                      ? 'bg-amber-600 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  )}
-                >
-                  Manga
-                </Link>
-              </div>
+              <div className="hidden md:block ml-2">{renderTabToggle()}</div>
             </div>
 
-            {/* Search + Auth - grouped together at end, minimal gap */}
-            <div className="flex items-center gap-2 flex-1 justify-end min-w-0 ml-2">
+            {/* Search + Auth */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Mobile: Search icon only - tap to open/close */}
             <button
               ref={searchToggleRef}
@@ -404,7 +461,7 @@ export function Header() {
                       </div>
                       <div className="mt-1 space-y-1 px-2 pb-2">
                         <Link
-                          href={ROUTES.PROFILE}
+                          href={profileLinks.profile}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
                         >
@@ -412,20 +469,20 @@ export function Header() {
                           <span>Profile</span>
                         </Link>
                         <Link
-                          href={ROUTES.PROFILE_SECTION('watching')}
+                          href={profileLinks.continue}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
                         >
                           <History className="w-4 h-4" />
-                          <span>Continue Watching</span>
+                          <span>{profileLinks.continueLabel}</span>
                         </Link>
                         <Link
-                          href={ROUTES.PROFILE_SECTION('watchlist')}
+                          href={profileLinks.list}
                           onClick={() => setUserMenuOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-100 text-sm transition-colors"
                         >
                           <Heart className="w-4 h-4" />
-                          <span>Watch List</span>
+                          <span>{profileLinks.listLabel}</span>
                         </Link>
                         <button
                           type="button"
@@ -453,6 +510,22 @@ export function Header() {
                 </button>
               )}
             </div>
+          </div>
+          </div>
+
+          {/* Mobile: tabs slide up behind logo/search row on scroll */}
+          <div
+            className="md:hidden relative z-0 overflow-hidden"
+            style={{ height: `${MOBILE_TAB_ROW_HEIGHT * (1 - mobileTabProgress)}px` }}
+          >
+            <div
+              className="max-w-xs mx-auto px-0 pb-3 pt-1 will-change-transform"
+              style={{
+                transform: `translateY(${-mobileTabProgress * MOBILE_TAB_ROW_HEIGHT}px)`,
+                opacity: 1 - mobileTabProgress * 0.35,
+              }}
+            >
+              {renderTabToggle()}
             </div>
           </div>
         </div>

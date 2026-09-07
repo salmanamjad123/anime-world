@@ -22,7 +22,7 @@ export function MangaCard({ manga }: MangaCardProps) {
   const score = manga.averageScore ? manga.averageScore / 10 : null;
 
   return (
-    <Link href={ROUTES.MANGA_DETAIL(manga.id)} className="block h-full">
+    <Link href={ROUTES.MANGA_DETAIL(manga.id, manga.mangadexId)} className="block h-full">
       <Card hover className="overflow-hidden group h-full flex flex-col">
         <div className="relative aspect-[2/3] overflow-hidden">
           <Image

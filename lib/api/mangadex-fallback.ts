@@ -4,6 +4,8 @@
  */
 
 import { axiosInstance } from './axios';
+import { getCached, CACHE_TTL } from '@/lib/cache';
+import { saveStaleCache } from '@/lib/cache/stale-cache';
 import type { Manga, MangaSearchResult } from '@/types';
 
 const MANGADEX_API = 'https://api.mangadex.org';
@@ -77,6 +79,7 @@ export function mapMangaDexToManga(item: MangaDexTitle): Manga | null {
   return {
     id,
     malId: malId ?? undefined,
+    mangadexId: item.id,
     title: {
       romaji: title,
       english: title,
@@ -97,6 +100,53 @@ export function mapMangaDexToManga(item: MangaDexTitle): Manga | null {
           : undefined,
     format: 'MANGA',
   };
+}
+
+/** Persist MangaDex search/browse hits so detail pages work after AniList outage */
+export async function persistMangaDexResults(items: MangaDexTitle[]): Promise<Manga[]> {
+  const media: Manga[] = [];
+
+  for (const item of items) {
+    const manga = mapMangaDexToManga(item);
+    if (!manga) continue;
+
+    media.push(manga);
+    await saveStaleCache(`manga:detail:${manga.id}`, { data: { Media: manga } });
+    await saveStaleCache(`mangadex:uuid:${manga.id}`, item.id);
+    if (manga.malId) {
+      await saveStaleCache(`manga:malfor:${manga.id}`, manga.malId);
+      await saveStaleCache(`manga:malmap:${manga.malId}`, manga.id);
+    }
+  }
+
+  return media;
+}
+
+/** Fetch a single manga from MangaDex by UUID */
+export async function getMangaDexMangaByUuid(uuid: string): Promise<Manga | null> {
+  const key = `mangadex:uuid-detail:${uuid}`;
+
+  return getCached(
+    key,
+    async () => {
+      try {
+        const response = await axiosInstance.get<{ data: MangaDexTitle }>(
+          `${MANGADEX_API}/manga/${uuid}`,
+          {
+            params: { 'includes[]': 'cover_art' },
+            timeout: FALLBACK_TIMEOUT,
+          }
+        );
+        const item = response.data?.data;
+        if (!item) return null;
+        return mapMangaDexToManga(item);
+      } catch (err) {
+        console.warn('[MangaDex] fetch by UUID failed:', (err as Error).message);
+        return null;
+      }
+    },
+    CACHE_TTL.MANGA_INFO
+  );
 }
 
 function buildResult(
@@ -145,7 +195,7 @@ async function fetchMangaDexList(
     throw new Error('[MangaDex] Browse fallback returned no results');
   }
 
-  const media = data.map(mapMangaDexToManga).filter((m): m is Manga => m !== null);
+  const media = await persistMangaDexResults(data);
   if (media.length === 0) {
     throw new Error('[MangaDex] Browse fallback returned no catalog-linked results');
   }
@@ -186,7 +236,7 @@ export async function searchMangaDexAsList(
   });
 
   const data = response.data?.data ?? [];
-  const media = data.map(mapMangaDexToManga).filter((m): m is Manga => m !== null);
+  const media = await persistMangaDexResults(data);
 
   return {
     data: {
@@ -202,4 +252,106 @@ export async function searchMangaDexAsList(
       },
     },
   };
+}
+
+/**
+ * Find a manga on MangaDex by MAL id (title search + link match).
+ */
+export async function getMangaDexByMalId(malId: string): Promise<Manga | null> {
+  const key = `mangadex:mal:${malId}`;
+
+  return getCached(
+    key,
+    async () => {
+      const { getStaleCache } = await import('@/lib/cache/stale-cache');
+      const cachedUuid = await getStaleCache<string>(`mangadex:uuid:${malId}`);
+      if (cachedUuid) {
+        const fromUuid = await getMangaDexMangaByUuid(cachedUuid);
+        if (fromUuid) return fromUuid;
+      }
+
+      const { getJikanMangaByMalId } = await import('./jikan-manga');
+      const jikan = await getJikanMangaByMalId(parseInt(malId, 10), malId);
+      const searchTitle = jikan?.title?.english || jikan?.title?.romaji;
+      if (!searchTitle) return null;
+
+      try {
+        const response = await axiosInstance.get<MangaDexListResponse>(`${MANGADEX_API}/manga`, {
+          params: {
+            title: searchTitle.slice(0, 100),
+            limit: 20,
+            'includes[]': 'cover_art',
+            'contentRating[]': ['safe', 'suggestive', 'erotica'],
+          },
+          timeout: FALLBACK_TIMEOUT,
+        });
+
+        const targetMal = parseInt(malId, 10);
+        for (const item of response.data?.data ?? []) {
+          if (extractMalId(item.attributes.links) === targetMal) {
+            const manga = mapMangaDexToManga(item);
+            if (manga) {
+              await saveStaleCache(`mangadex:uuid:${manga.id}`, item.id);
+              await saveStaleCache(`manga:detail:${manga.id}`, { data: { Media: manga } });
+              return manga;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[MangaDex] lookup by MAL id failed:', (err as Error).message);
+      }
+
+      return null;
+    },
+    CACHE_TTL.MANGA_INFO
+  );
+}
+
+/**
+ * Find a manga on MangaDex by AniList id (paginated scan of popular titles).
+ */
+export async function getMangaDexByAnilistId(anilistId: string): Promise<Manga | null> {
+  const key = `mangadex:al:${anilistId}`;
+
+  return getCached(
+    key,
+    async () => {
+      const { getStaleCache } = await import('@/lib/cache/stale-cache');
+      const cachedUuid = await getStaleCache<string>(`mangadex:uuid:${anilistId}`);
+      if (cachedUuid) {
+        const fromUuid = await getMangaDexMangaByUuid(cachedUuid);
+        if (fromUuid) return fromUuid;
+      }
+
+      for (let offset = 0; offset < 300; offset += 50) {
+        try {
+          const response = await axiosInstance.get<MangaDexListResponse>(`${MANGADEX_API}/manga`, {
+            params: {
+              limit: 50,
+              offset,
+              'order[followedCount]': 'desc',
+              'contentRating[]': ['safe', 'suggestive'],
+              'includes[]': 'cover_art',
+              hasAvailableChapters: true,
+            },
+            timeout: FALLBACK_TIMEOUT,
+          });
+
+          const data = response.data?.data ?? [];
+          for (const item of data) {
+            if (extractAnilistId(item.attributes.links) === anilistId) {
+              return mapMangaDexToManga(item);
+            }
+          }
+
+          if (data.length < 50) break;
+        } catch (err) {
+          console.warn('[MangaDex] lookup by AniList id failed:', (err as Error).message);
+          break;
+        }
+      }
+      return null;
+    },
+    CACHE_TTL.MANGA_INFO
+  );
 }

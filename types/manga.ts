@@ -46,6 +46,8 @@ export interface Manga {
     name: string;
     rank: number;
   }>;
+  /** MangaDex UUID when metadata came from MangaDex fallback */
+  mangadexId?: string;
 }
 
 /**

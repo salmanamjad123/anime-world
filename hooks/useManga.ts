@@ -33,14 +33,19 @@ async function fetchMangaDetail(id: string, provider?: string) {
   return res.json();
 }
 
-async function fetchMangaInfo(id: string) {
-  const res = await fetch(`/api/manga/${id}/info`);
+async function fetchMangaInfo(id: string, mangadexId?: string) {
+  const url = mangadexId
+    ? `/api/manga/${id}/info?md=${encodeURIComponent(mangadexId)}`
+    : `/api/manga/${id}/info`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch manga');
   return res.json();
 }
 
-async function fetchMangaChapters(id: string, provider: string) {
-  const res = await fetch(`/api/manga/${id}/chapters?provider=${encodeURIComponent(provider)}`);
+async function fetchMangaChapters(id: string, provider: string, mangadexId?: string) {
+  const params = new URLSearchParams({ provider });
+  if (mangadexId) params.set('md', mangadexId);
+  const res = await fetch(`/api/manga/${id}/chapters?${params.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch chapters');
   return res.json();
 }
@@ -89,20 +94,20 @@ export function useMangaById(id: string | null, provider = 'mangapill') {
 }
 
 /** Manga metadata only (fast - AniList with fallback) */
-export function useMangaInfo(id: string | null) {
+export function useMangaInfo(id: string | null, mangadexId?: string | null) {
   return useQuery({
-    queryKey: ['manga', 'info', id],
-    queryFn: () => fetchMangaInfo(id!),
+    queryKey: ['manga', 'info', id, mangadexId],
+    queryFn: () => fetchMangaInfo(id!, mangadexId ?? undefined),
     enabled: !!id,
     staleTime: CACHE_DURATIONS.MANGA_LIST * 1000,
   });
 }
 
 /** Chapters only (can be slow - Consumet/MangaDex) */
-export function useMangaChapters(id: string | null, provider = 'mangapill') {
+export function useMangaChapters(id: string | null, provider = 'mangapill', mangadexId?: string | null) {
   return useQuery({
-    queryKey: ['manga', 'chapters', id, provider],
-    queryFn: () => fetchMangaChapters(id!, provider),
+    queryKey: ['manga', 'chapters', id, provider, mangadexId],
+    queryFn: () => fetchMangaChapters(id!, provider, mangadexId ?? undefined),
     enabled: !!id,
     placeholderData: keepPreviousData,
   });

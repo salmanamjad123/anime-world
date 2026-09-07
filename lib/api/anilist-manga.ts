@@ -12,6 +12,7 @@ import {
   getJikanTrendingManga,
   getJikanPopularManga,
   isAnilistOutage,
+  indexMangaListResults,
 } from './anilist-manga-resilience';
 import { getMangaDexBrowseList, searchMangaDexAsList } from './mangadex-fallback';
 import { searchJikanManga } from './jikan-manga';
@@ -174,6 +175,7 @@ async function searchMangaOutageFallback(
     try {
       const result = await searchMangaDexAsList(textQuery, page, perPage);
       if (result.data.Page.media.length > 0) {
+        await indexMangaListResults(result.data.Page.media);
         return { ...result, _fallback: 'mangadex-search' as MangaSearchFallbackSource };
       }
     } catch {
@@ -182,6 +184,8 @@ async function searchMangaOutageFallback(
 
     console.warn('[AniList] Outage — Jikan manga search fallback');
     const result = await searchJikanManga(textQuery, page, perPage);
+    const media = result?.data?.Page?.media ?? [];
+    if (media.length) await indexMangaListResults(media);
     return { ...result, _fallback: 'mangadex-search' as MangaSearchFallbackSource };
   }
 
@@ -214,10 +218,15 @@ export async function getPopularManga(page = 1, perPage = 20): Promise<MangaSear
   );
 }
 
-export async function getMangaById(id: string | number): Promise<{ data: { Media: Manga } }> {
+export async function getMangaById(
+  id: string | number,
+  options?: { mangadexId?: string }
+): Promise<{ data: { Media: Manga } }> {
   const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-  return fetchAnilistMangaDetailWithFallback(numericId, () =>
-    executeQuery<{ data: { Media: Manga } }>(MANGA_BY_ID_QUERY, { id: numericId })
+  return fetchAnilistMangaDetailWithFallback(
+    numericId,
+    () => executeQuery<{ data: { Media: Manga } }>(MANGA_BY_ID_QUERY, { id: numericId }),
+    options?.mangadexId
   );
 }
 

@@ -75,6 +75,14 @@ export async function findMangaDexByAnilistId(
         });
         const data = res.data?.data;
         if (!Array.isArray(data) || data.length === 0) return null;
+        for (const item of data) {
+          const links = (item as MangaDexManga & { attributes: { links?: Record<string, string | null> } })
+            .attributes?.links;
+          const al = links?.al;
+          if (al != null && String(al) === anilistId) {
+            return item.id;
+          }
+        }
         return data[0].id;
       } catch (err) {
         console.warn('[MangaDex] find by title failed:', (err as Error).message);
@@ -88,6 +96,49 @@ export async function findMangaDexByAnilistId(
 /**
  * Get chapter feed for a MangaDex manga (cached 30 min)
  */
+async function fetchMangaDexChapterFeed(
+  mangaId: string,
+  lang?: string
+): Promise<MangaChapter[]> {
+  try {
+    const params: Record<string, string | number | string[]> = {
+      limit: 500,
+      'order[chapter]': 'asc',
+    };
+    if (lang) {
+      params['translatedLanguage[]'] = lang;
+    }
+
+    const res = await axiosInstance.get<{ data: MangaDexChapter[] }>(
+      `${MANGADEX_API}/manga/${mangaId}/feed`,
+      {
+        params,
+        timeout: 15000,
+      }
+    );
+    const data = res.data?.data;
+    if (!Array.isArray(data) || data.length === 0) return [];
+
+    return data.map((ch) => ({
+      id: ch.id,
+      chapter: ch.attributes?.chapter ?? '',
+      title: ch.attributes?.title ?? undefined,
+    }));
+  } catch (err) {
+    console.warn('[MangaDex] get chapters failed:', (err as Error).message);
+    return [];
+  }
+}
+
+function dedupeChaptersByNumber(chapters: MangaChapter[]): MangaChapter[] {
+  const byNumber = new Map<string, MangaChapter>();
+  for (const ch of chapters) {
+    const key = ch.chapter || ch.id;
+    if (!byNumber.has(key)) byNumber.set(key, ch);
+  }
+  return Array.from(byNumber.values());
+}
+
 export async function getMangaDexChapters(
   mangaId: string,
   lang = 'en'
@@ -96,30 +147,11 @@ export async function getMangaDexChapters(
   return getCached(
     key,
     async () => {
-      try {
-        const res = await axiosInstance.get<{ data: MangaDexChapter[] }>(
-          `${MANGADEX_API}/manga/${mangaId}/feed`,
-          {
-            params: {
-              limit: 500,
-              'translatedLanguage[]': lang,
-              'order[chapter]': 'asc',
-            },
-            timeout: 15000,
-          }
-        );
-        const data = res.data?.data;
-        if (!Array.isArray(data) || data.length === 0) return [];
-
-        return data.map((ch) => ({
-          id: ch.id,
-          chapter: ch.attributes?.chapter ?? '',
-          title: ch.attributes?.title ?? undefined,
-        }));
-      } catch (err) {
-        console.warn('[MangaDex] get chapters failed:', (err as Error).message);
-        return [];
+      let chapters = await fetchMangaDexChapterFeed(mangaId, lang);
+      if (chapters.length === 0 && lang === 'en') {
+        chapters = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
       }
+      return chapters;
     },
     CACHE_TTL.MANGA_CHAPTERS_LIST
   );

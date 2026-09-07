@@ -8,7 +8,7 @@
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
-import { useChapterPages, useMangaChapters } from '@/hooks/useManga';
+import { useChapterPages, useMangaChapters, useMangaInfo } from '@/hooks/useManga';
 import { ROUTES } from '@/constants/routes';
 import {
   ChevronLeft,
@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MangaChapter, MangaChapterPage } from '@/types';
+import { useReadingHistoryStore } from '@/store/useReadingHistoryStore';
+import { useUserStore } from '@/store/useUserStore';
+import { updateReadingProgress } from '@/lib/firebase/manga-firestore';
+import { getPreferredTitle } from '@/lib/utils';
 
 export default function MangaReadPage() {
   const params = useParams();
@@ -28,13 +32,21 @@ export default function MangaReadPage() {
   const mangaId = params.id as string;
   const chapterId = searchParams.get('chapterId');
   const provider = searchParams.get('provider') || 'mangapill';
+  const mangadexId = searchParams.get('md');
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pageViewOpen, setPageViewOpen] = useState(false);
   const [scrollViewPage, setScrollViewPage] = useState(1);
   const pageRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumedRef = useRef(false);
 
-  const { data: chaptersData } = useMangaChapters(mangaId, provider);
+  const { user } = useUserStore();
+  const { updateProgress, getProgress } = useReadingHistoryStore();
+  const { data: infoData } = useMangaInfo(mangaId, mangadexId);
+  const manga = infoData?.manga;
+  const resolvedMangadexId = mangadexId ?? manga?.mangadexId ?? null;
+  const { data: chaptersData } = useMangaChapters(mangaId, provider, resolvedMangadexId);
   const { data: chapterData, isLoading, isError, refetch } = useChapterPages(
     chapterId,
     provider
@@ -42,6 +54,7 @@ export default function MangaReadPage() {
 
   const chapters: MangaChapter[] = chaptersData?.chapters || [];
   const pages = chapterData?.pages || [];
+  const currentChapter = chapters.find((c) => c.id === chapterId);
 
   const currentIndex = chapters.findIndex((c) => c.id === chapterId);
   const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null;
@@ -50,7 +63,84 @@ export default function MangaReadPage() {
   useEffect(() => {
     setCurrentPageIndex(0);
     setScrollViewPage(1);
+    resumedRef.current = false;
   }, [chapterId]);
+
+  // Resume from saved page or ?page= query param
+  useEffect(() => {
+    if (pages.length === 0 || resumedRef.current) return;
+
+    const pageParam = searchParams.get('page');
+    const saved = getProgress(mangaId);
+    const targetPage =
+      pageParam && !Number.isNaN(Number(pageParam))
+        ? Math.min(Math.max(Number(pageParam), 1), pages.length)
+        : saved?.chapterId === chapterId && saved.pageIndex >= 0
+          ? Math.min(saved.pageIndex + 1, pages.length)
+          : 1;
+
+    if (targetPage > 1) {
+      setScrollViewPage(targetPage);
+      setCurrentPageIndex(targetPage - 1);
+      requestAnimationFrame(() => {
+        pageRefs.current.get(targetPage)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+    resumedRef.current = true;
+  }, [pages.length, chapterId, mangaId, searchParams, getProgress]);
+
+  // Save reading progress
+  useEffect(() => {
+    if (!chapterId || pages.length === 0 || !manga) return;
+
+    const pageIndex = pageViewOpen ? currentPageIndex : scrollViewPage - 1;
+    const mangaTitle = getPreferredTitle(manga.title);
+    const mangaImage = manga.coverImage?.large || manga.coverImage?.medium || '';
+
+    updateProgress(
+      mangaId,
+      chapterId,
+      currentChapter?.chapter,
+      pageIndex,
+      pages.length,
+      mangaTitle,
+      mangaImage,
+      currentChapter?.title,
+      provider
+    );
+
+    if (user?.uid) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveTimeoutRef.current = null;
+        const item = getProgress(mangaId);
+        if (item) {
+          updateReadingProgress(user.uid, item, item.mangaTitle, item.mangaImage, item.chapterTitle).catch(
+            (err) => console.error('[Manga Read] Failed to save progress:', err)
+          );
+        }
+      }, 3000);
+    }
+  }, [
+    scrollViewPage,
+    currentPageIndex,
+    pageViewOpen,
+    chapterId,
+    pages.length,
+    manga,
+    mangaId,
+    currentChapter,
+    provider,
+    user?.uid,
+    updateProgress,
+    getProgress,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   // Track which page is in view while scrolling (scroll view)
   useEffect(() => {
@@ -74,7 +164,7 @@ export default function MangaReadPage() {
     if (currentPageIndex > 0) {
       setCurrentPageIndex((i) => i - 1);
     } else if (prevChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider));
+      router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider, resolvedMangadexId ?? undefined));
     }
   }, [currentPageIndex, prevChapter, mangaId, provider, router]);
 
@@ -82,16 +172,16 @@ export default function MangaReadPage() {
     if (currentPageIndex < pages.length - 1) {
       setCurrentPageIndex((i) => i + 1);
     } else if (nextChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider));
+      router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider, resolvedMangadexId ?? undefined));
     }
   }, [currentPageIndex, pages.length, nextChapter, mangaId, provider, router]);
 
   const handlePrevChapter = () => {
-    if (prevChapter) router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider));
+    if (prevChapter) router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider, resolvedMangadexId ?? undefined));
   };
 
   const handleNextChapter = () => {
-    if (nextChapter) router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider));
+    if (nextChapter) router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider, resolvedMangadexId ?? undefined));
   };
 
   useEffect(() => {

@@ -49,6 +49,41 @@ export interface HistoryItem extends EpisodeProgress {
 }
 
 /**
+ * Manga list item (read list)
+ */
+export interface MangaListItem {
+  mangaId: string;
+  title: string;
+  image: string;
+  addedAt: Date;
+  status?: ListStatus;
+}
+
+/**
+ * Reading progress for manga chapters
+ */
+export interface ReadingProgress {
+  mangaId: string;
+  chapterId: string;
+  chapterNumber?: string;
+  pageIndex: number;
+  totalPages: number;
+  percentage: number;
+  completed: boolean;
+  lastRead: Date;
+  provider?: string;
+}
+
+/**
+ * Continue reading history item
+ */
+export interface ReadingHistoryItem extends ReadingProgress {
+  mangaTitle: string;
+  mangaImage: string;
+  chapterTitle?: string;
+}
+
+/**
  * User preferences
  */
 export interface UserPreferences {

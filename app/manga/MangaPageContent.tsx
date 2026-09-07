@@ -8,7 +8,6 @@ import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { MangaGrid } from '@/components/manga/MangaGrid';
 import { useTrendingManga, usePopularManga, useMangaByGenre } from '@/hooks/useManga';
-import { SearchFallbackBanner } from '@/components/search/SearchFallbackBanner';
 import { TrendingUp, Star, BookOpen } from 'lucide-react';
 
 export function MangaPageContent() {
@@ -41,7 +40,6 @@ export function MangaPageContent() {
             <p className="text-gray-400 text-sm sm:text-base max-w-2xl mb-6">
               Manga in {genres.join(', ')}. Read chapters free.
             </p>
-            <SearchFallbackBanner source={genreData?._fallback} />
             <MangaGrid manga={genreManga} isLoading={isGenreLoading} />
           </section>
         ) : (

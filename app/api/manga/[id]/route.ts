@@ -11,6 +11,7 @@ import {
   getMangaDexChapters,
 } from '@/lib/api/mangadex';
 import { getPreferredTitle } from '@/lib/utils';
+import { getStaleCache } from '@/lib/cache/stale-cache';
 
 export async function GET(
   request: NextRequest,
@@ -19,9 +20,10 @@ export async function GET(
   try {
     const { id: mangaId } = await params;
     const provider = request.nextUrl.searchParams.get('provider') || 'mangapill';
+    const mangadexId = request.nextUrl.searchParams.get('md') ?? undefined;
 
     const [anilistRes, consumetInfo] = await Promise.all([
-      getMangaById(mangaId),
+      getMangaById(mangaId, mangadexId ? { mangadexId } : undefined),
       getMangaInfo(mangaId, provider),
     ]);
 
@@ -46,13 +48,28 @@ export async function GET(
     }
 
     if (chapters.length === 0) {
-      const title = getPreferredTitle(manga.title);
-      const mdId = await findMangaDexByAnilistId(mangaId, title);
+      const mdId =
+        mangadexId ??
+        manga.mangadexId ??
+        (await getStaleCache<string>(`mangadex:uuid:${mangaId}`));
+
       if (mdId) {
         const mdChapters = await getMangaDexChapters(mdId);
         if (mdChapters.length > 0) {
           chapters = mdChapters;
           resolvedProvider = 'mangadex';
+        }
+      }
+
+      if (chapters.length === 0) {
+        const title = getPreferredTitle(manga.title);
+        const foundId = await findMangaDexByAnilistId(mangaId, title);
+        if (foundId && foundId !== mdId) {
+          const mdChapters = await getMangaDexChapters(foundId);
+          if (mdChapters.length > 0) {
+            chapters = mdChapters;
+            resolvedProvider = 'mangadex';
+          }
         }
       }
     }

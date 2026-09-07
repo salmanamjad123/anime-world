@@ -9,7 +9,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
-import { SearchFallbackBanner } from '@/components/search/SearchFallbackBanner';
 import { useSearchAnime } from '@/hooks/useAnime';
 import { slugToGenre } from '@/lib/utils/genre-slug';
 import { ROUTES } from '@/constants/routes';
@@ -77,8 +76,6 @@ export default function GenrePage() {
             Watch the best {genre.toLowerCase()} anime. {totalResults} series available with sub and dub.
           </p>
         </div>
-
-        <SearchFallbackBanner source={data?._fallback} />
 
         <AnimeGrid anime={results} isLoading={isLoading} />
       </div>

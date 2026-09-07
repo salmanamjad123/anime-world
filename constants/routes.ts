@@ -25,12 +25,19 @@ export const ROUTES = {
   ADMIN: '/admin',
   MANGA: '/manga',
   MANGA_GENRE: (genre: string) => `/manga?genres=${encodeURIComponent(genre)}`,
-  MANGA_DETAIL: (id: string) => `/manga/${id}`,
-  MANGA_READ: (mangaId: string, chapterId: string, provider?: string) => {
+  MANGA_DETAIL: (id: string, mangadexId?: string) => {
+    const base = `/manga/${id}`;
+    return mangadexId ? `${base}?md=${encodeURIComponent(mangadexId)}` : base;
+  },
+  MANGA_READ: (mangaId: string, chapterId: string, provider?: string, mangadexId?: string) => {
     const params = new URLSearchParams({ chapterId });
     if (provider) params.set('provider', provider);
+    if (mangadexId) params.set('md', mangadexId);
     return `/manga/${mangaId}/read?${params.toString()}`;
   },
+  MANGA_PROFILE: '/manga/profile',
+  MANGA_PROFILE_SECTION: (section: string, tab?: string) =>
+    tab ? `/manga/profile?section=${section}&tab=${tab}` : `/manga/profile?section=${section}`,
 } as const;
 
 export const AZ_LETTERS = [

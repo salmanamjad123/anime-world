@@ -7,12 +7,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMangaById } from '@/lib/api/anilist-manga';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: mangaId } = await params;
-    const res = await getMangaById(mangaId);
+    const mangadexId = request.nextUrl.searchParams.get('md') ?? undefined;
+    const res = await getMangaById(mangaId, mangadexId ? { mangadexId } : undefined);
     const manga = res?.data?.Media;
 
     if (!manga) {

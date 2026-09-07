@@ -108,8 +108,19 @@ class MemoryCache {
   }
 }
 
-// Singleton instance
-const memoryCache = new MemoryCache();
+// Singleton instance — use globalThis so Next.js route bundles share one cache
+const globalForMemoryCache = globalThis as unknown as {
+  memoryCache?: MemoryCache;
+};
+
+function getMemoryCache(): MemoryCache {
+  if (!globalForMemoryCache.memoryCache) {
+    globalForMemoryCache.memoryCache = new MemoryCache();
+  }
+  return globalForMemoryCache.memoryCache;
+}
+
+const memoryCache = getMemoryCache();
 
 /**
  * Cache TTL constants (in milliseconds)
