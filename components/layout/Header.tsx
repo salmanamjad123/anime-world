@@ -56,7 +56,8 @@ export function Header() {
   const { user } = useUserStore();
 
   const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
-  const isReaderPage = pathname.includes('/read') || pathname.startsWith('/watch/');
+  const isWatchPage = pathname.startsWith('/watch/');
+  const isReaderPage = pathname.includes('/read') || isWatchPage;
   const profileLinks =
     activeTab === 'manga'
       ? {
@@ -80,66 +81,75 @@ export function Header() {
     if (!debouncedQuery || debouncedQuery.length < 1) {
       setSearchResults([]);
       setIsFallback(false);
+      setIsSearching(false);
       return;
     }
     let cancelled = false;
     setIsSearching(true);
     setIsFallback(false);
 
-    if (activeTab === 'manga') {
-      fetch(`/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (cancelled) return;
-          const media = data?.data?.Page?.media ?? data?.Page?.media ?? [];
-          if (media.length === 0) {
-            return fetch('/api/manga?type=popular&page=1&perPage=20')
-              .then((r) => (r.ok ? r.json() : null))
-              .then((fallback) => {
-                if (cancelled) return;
-                const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
-                setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
-                setIsFallback(true);
-              });
-          }
-          setSearchResults(media);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            fetch('/api/manga?type=popular&page=1&perPage=20')
-              .then((r) => (r.ok ? r.json() : null))
-              .then((fallback) => {
-                if (cancelled) return;
-                const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
-                setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
-                setIsFallback(true);
-              });
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setIsSearching(false);
-        });
-      return () => { cancelled = true; };
-    }
-
-    const setTrendingFallback = () => {
+    const finish = (results: SearchResultItem[], fallback: boolean) => {
       if (cancelled) return;
-      return fetch('/api/anime?type=trending&page=1&perPage=20')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((fallback) => {
-          if (cancelled) return;
-          const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
-          setSearchResults(Array.isArray(fallbackMedia) ? fallbackMedia : []);
-          setIsFallback(true);
-        });
+      setSearchResults(results);
+      setIsFallback(fallback);
+      setIsSearching(false);
     };
 
-    fetch(`/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then(async (anilistData) => {
-        if (cancelled) return;
+    const loadAnimeTrendingFallback = async () => {
+      try {
+        const res = await fetch('/api/anime?type=trending&page=1&perPage=20');
+        const fallback = res.ok ? await res.json() : null;
+        const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
+        finish(Array.isArray(fallbackMedia) ? fallbackMedia : [], true);
+      } catch {
+        finish([], true);
+      }
+    };
+
+    const loadMangaPopularFallback = async () => {
+      try {
+        const res = await fetch('/api/manga?type=popular&page=1&perPage=20');
+        const fallback = res.ok ? await res.json() : null;
+        const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
+        finish(Array.isArray(fallbackMedia) ? fallbackMedia : [], true);
+      } catch {
+        finish([], true);
+      }
+    };
+
+    if (activeTab === 'manga') {
+      (async () => {
+        try {
+          const res = await fetch(
+            `/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`
+          );
+          const data = res.ok ? await res.json() : null;
+          const media = data?.data?.Page?.media ?? data?.Page?.media ?? [];
+          if (media.length === 0) {
+            await loadMangaPopularFallback();
+            return;
+          }
+          finish(media, false);
+        } catch {
+          await loadMangaPopularFallback();
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`
+        );
+        const anilistData = res.ok ? await res.json() : null;
         const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
-        if (media.length === 0) return setTrendingFallback();
+        if (media.length === 0) {
+          await loadAnimeTrendingFallback();
+          return;
+        }
 
         const first = media[0];
         const relationIds = new Set<string>();
@@ -178,27 +188,23 @@ export function Header() {
 
               const enriched: Anime[] = allRelations.map(relationToAnime);
               const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
-              setSearchResults([...enriched, ...rest]);
-              setIsFallback(false);
-              setIsSearching(false);
+              finish([...enriched, ...rest], false);
               return;
             }
           } catch {
-            /* fall through */
+            /* fall through to plain results */
           }
         }
 
-        setSearchResults(Array.isArray(media) ? media : []);
-        setIsFallback(false);
-        setIsSearching(false);
-      })
-      .catch(() => {
-        if (!cancelled) return setTrendingFallback();
-      })
-      .finally(() => {
-        if (!cancelled) setIsSearching(false);
-      });
-    return () => { cancelled = true; };
+        finish(Array.isArray(media) ? media : [], false);
+      } catch {
+        await loadAnimeTrendingFallback();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedQuery, activeTab]);
 
   // Sync --site-header-height on layout changes (resize, reader mode, search)
@@ -228,7 +234,16 @@ export function Header() {
     return () => window.removeEventListener('resize', syncHeaderHeight);
   }, [isReaderPage, mobileSearchOpen]);
 
-  // Mobile: tabs slide up into the top row — GPU transform + margin collapse (no height animation)
+  // Watch pages: no header bar — reset layout offset for full-bleed player
+  useEffect(() => {
+    if (!isWatchPage) return;
+    document.documentElement.style.setProperty('--site-header-height', '0px');
+    return () => {
+      document.documentElement.style.removeProperty('--site-header-height');
+    };
+  }, [isWatchPage]);
+
+  // Mobile: tabs slide up into the top row
   useEffect(() => {
     const syncSiteHeaderHeight = (progress: number) => {
       const visibleTab = MOBILE_TAB_ROW_HEIGHT * (1 - progress);
@@ -359,6 +374,20 @@ export function Header() {
   }, []);
 
   const showDropdown = searchOpen && (searchQuery.length >= 1 || searchResults.length > 0);
+
+  // Watch pages: no sticky header chrome — Megaplay embed is full-width (same idea as manga read)
+  if (isWatchPage) {
+    return (
+      <>
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
+        <AuthModal
+          isOpen={authModalOpen}
+          onClose={closeAuthModal}
+          defaultView={authModalDefaultView ?? 'login'}
+        />
+      </>
+    );
+  }
 
   const handleResultClick = (item: SearchResultItem) => {
     setSearchQuery('');
@@ -499,7 +528,7 @@ export function Header() {
             {/* Search results dropdown */}
             {showDropdown && (
               <div className="absolute top-full left-0 right-0 mt-0 rounded-lg bg-gray-800 border border-gray-700 shadow-2xl max-h-72 overflow-y-auto z-[110]">
-                {isSearching ? (
+                {isSearching && searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-400 text-sm">
@@ -685,7 +714,7 @@ export function Header() {
             {/* Search results dropdown */}
             {showDropdown && (
               <div className="relative z-[110] mt-1 rounded-lg bg-gray-800 border border-gray-700 shadow-2xl max-h-64 overflow-y-auto">
-                {isSearching ? (
+                {isSearching && searchResults.length === 0 ? (
                   <div className="p-3 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
                   <div className="p-3 text-center text-gray-400 text-sm">
