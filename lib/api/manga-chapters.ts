@@ -10,6 +10,7 @@ import {
   getMangaDexChapters,
 } from '@/lib/api/mangadex';
 import type { Manga, MangaChapter } from '@/types';
+import { getPreferredTitle } from '@/lib/utils';
 
 export const CHAPTER_SOURCES = ['mangadex', 'mangapill', 'mangareader'] as const;
 export type ChapterSource = (typeof CHAPTER_SOURCES)[number];
@@ -33,7 +34,8 @@ async function chaptersFromMangaDex(
   anilistId: string,
   manga: Manga
 ): Promise<{ chapters: MangaChapter[]; mangadexId: string | null }> {
-  const mangadexId = await findMangaDexByAnilistId(anilistId, manga);
+  const title = getPreferredTitle(manga.title);
+  const mangadexId = await findMangaDexByAnilistId(anilistId, title);
   if (!mangadexId) {
     return { chapters: [], mangadexId: null };
   }
