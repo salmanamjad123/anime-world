@@ -20,7 +20,7 @@ export async function fetchAnimeByRouteSegment(
     const result = await getAnimeById(target.anilistId);
     const media = result?.data?.Media;
     if (!media) return null;
-    return attachSlugToAnime(media, { allowLookup: true });
+    return attachSlugToAnime(media, { allowLookup: false });
   }
 
   try {

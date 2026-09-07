@@ -38,15 +38,20 @@ export function Header() {
   const [isSearching, setIsSearching] = useState(false);
   const { isOpen: authModalOpen, defaultView: authModalDefaultView, openAuthModal, closeAuthModal } = useAuthModalStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [mobileTabProgress, setMobileTabProgress] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const mobileTabRowRef = useRef<HTMLDivElement>(null);
+  const mobileTabInnerRef = useRef<HTMLDivElement>(null);
+  const mobileTabProgressRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
+  const scrollTickingRef = useRef(false);
 
   const MOBILE_TAB_SCROLL_RANGE = 72;
   const MOBILE_TAB_ROW_HEIGHT = 52;
+  const MOBILE_MAIN_ROW_HEIGHT = 56; // h-14
+  const HEADER_BORDER_PX = 1;
 
   const { user } = useUserStore();
 
@@ -196,12 +201,22 @@ export function Header() {
     return () => { cancelled = true; };
   }, [debouncedQuery, activeTab]);
 
-  // Sync --site-header-height to the actual rendered header height (for sticky sub-headers)
+  // Sync --site-header-height on layout changes (resize, reader mode, search)
   useEffect(() => {
-    const header = headerRef.current;
-    if (!header) return;
-
     const syncHeaderHeight = () => {
+      const header = headerRef.current;
+      if (!header) return;
+
+      if (window.innerWidth < 768 && !isReaderPage) {
+        const p = mobileTabProgressRef.current;
+        const visibleTab = MOBILE_TAB_ROW_HEIGHT * (1 - p);
+        document.documentElement.style.setProperty(
+          '--site-header-height',
+          `${MOBILE_MAIN_ROW_HEIGHT + visibleTab + HEADER_BORDER_PX}px`
+        );
+        return;
+      }
+
       document.documentElement.style.setProperty(
         '--site-header-height',
         `${header.getBoundingClientRect().height}px`
@@ -209,41 +224,120 @@ export function Header() {
     };
 
     syncHeaderHeight();
-    const observer = new ResizeObserver(syncHeaderHeight);
-    observer.observe(header);
     window.addEventListener('resize', syncHeaderHeight);
+    return () => window.removeEventListener('resize', syncHeaderHeight);
+  }, [isReaderPage, mobileSearchOpen]);
 
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', syncHeaderHeight);
-    };
-  }, [isReaderPage, mobileTabProgress, mobileSearchOpen]);
-
-  // Mobile: tabs slide up into the top row as the user scrolls
+  // Mobile: tabs slide up into the top row — GPU transform + margin collapse (no height animation)
   useEffect(() => {
-    const updateTabProgress = () => {
-      if (isReaderPage || window.innerWidth >= 768) {
-        setMobileTabProgress(0);
-        return;
+    const syncSiteHeaderHeight = (progress: number) => {
+      const visibleTab = MOBILE_TAB_ROW_HEIGHT * (1 - progress);
+      document.documentElement.style.setProperty(
+        '--site-header-height',
+        `${MOBILE_MAIN_ROW_HEIGHT + visibleTab + HEADER_BORDER_PX}px`
+      );
+    };
+
+    const resetTabStyles = () => {
+      const tabRow = mobileTabRowRef.current;
+      const tabInner = mobileTabInnerRef.current;
+      if (tabRow) {
+        tabRow.style.height = '';
+        tabRow.style.marginBottom = '';
       }
-      const progress = Math.min(Math.max(window.scrollY / MOBILE_TAB_SCROLL_RANGE, 0), 1);
-      setMobileTabProgress(progress);
+      if (tabInner) {
+        tabInner.style.transform = '';
+      }
+      if (headerRef.current) {
+        headerRef.current.style.removeProperty('--tab-scroll-progress');
+      }
+    };
+
+    const applyTabProgress = (progress: number) => {
+      const p = Math.min(Math.max(progress, 0), 1);
+      mobileTabProgressRef.current = p;
+      const shift = p * MOBILE_TAB_ROW_HEIGHT;
+
+      const tabRow = mobileTabRowRef.current;
+      const tabInner = mobileTabInnerRef.current;
+
+      if (tabRow) {
+        tabRow.style.height = `${MOBILE_TAB_ROW_HEIGHT}px`;
+        tabRow.style.marginBottom = `${-shift}px`;
+      }
+
+      if (tabInner) {
+        tabInner.style.transform = `translate3d(0, ${-shift}px, 0)`;
+      }
+
+      if (headerRef.current) {
+        headerRef.current.style.setProperty('--tab-scroll-progress', p.toFixed(4));
+      }
+
+      syncSiteHeaderHeight(p);
+    };
+
+    const readScrollProgress = () => {
+      if (isReaderPage || window.innerWidth >= 768) return 0;
+      return Math.min(Math.max(window.scrollY / MOBILE_TAB_SCROLL_RANGE, 0), 1);
+    };
+
+    let scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
+    let animating = false;
+
+    const stopLoop = () => {
+      animating = false;
+      scrollTickingRef.current = false;
+      if (scrollRafRef.current != null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+
+    const frame = () => {
+      applyTabProgress(readScrollProgress());
+      if (animating) {
+        scrollRafRef.current = requestAnimationFrame(frame);
+      }
+    };
+
+    const startLoop = () => {
+      if (animating) return;
+      animating = true;
+      scrollTickingRef.current = true;
+      scrollRafRef.current = requestAnimationFrame(frame);
+    };
+
+    const settleProgress = () => {
+      const progress = readScrollProgress();
+      if (progress <= 0.06) applyTabProgress(0);
+      else if (progress >= 0.94) applyTabProgress(1);
+      else applyTabProgress(progress);
+      stopLoop();
     };
 
     const onScroll = () => {
-      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
-      scrollRafRef.current = requestAnimationFrame(updateTabProgress);
+      startLoop();
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      scrollEndTimer = setTimeout(settleProgress, 100);
     };
 
-    const onResize = () => updateTabProgress();
+    const onResize = () => {
+      stopLoop();
+      applyTabProgress(readScrollProgress());
+    };
 
-    updateTabProgress();
+    applyTabProgress(readScrollProgress());
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
+
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
-      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      stopLoop();
+      resetTabStyles();
+      applyTabProgress(0);
     };
   }, [isReaderPage]);
 
@@ -541,15 +635,13 @@ export function Header() {
           {/* Mobile: tabs slide up behind logo/search row on scroll (hidden on reader pages) */}
           {!isReaderPage && (
           <div
-            className="md:hidden relative z-0 overflow-hidden"
-            style={{ height: `${MOBILE_TAB_ROW_HEIGHT * (1 - mobileTabProgress)}px` }}
+            ref={mobileTabRowRef}
+            className="md:hidden relative z-0 overflow-hidden [contain:layout_paint]"
+            style={{ height: MOBILE_TAB_ROW_HEIGHT }}
           >
             <div
-              className="max-w-xs mx-auto px-0 pb-3 pt-1 will-change-transform"
-              style={{
-                transform: `translateY(${-mobileTabProgress * MOBILE_TAB_ROW_HEIGHT}px)`,
-                opacity: 1 - mobileTabProgress * 0.35,
-              }}
+              ref={mobileTabInnerRef}
+              className="max-w-xs mx-auto px-0 pb-3 pt-1 [backface-visibility:hidden] [transform:translateZ(0)]"
             >
               {renderTabToggle()}
             </div>

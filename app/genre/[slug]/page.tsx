@@ -19,7 +19,7 @@ export default function GenrePage() {
   const slug = params.slug as string;
   const genre = slugToGenre(slug);
 
-  const { data, isLoading } = useSearchAnime(
+  const { data, isLoading, isError, error, refetch } = useSearchAnime(
     { genres: genre ? [genre] : [], sort: 'POPULARITY_DESC' },
     1,
     48
@@ -77,7 +77,13 @@ export default function GenrePage() {
           </p>
         </div>
 
-        <AnimeGrid anime={results} isLoading={isLoading} />
+        <AnimeGrid
+          anime={results}
+          isLoading={isLoading}
+          isError={isError}
+          errorMessage={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
       </div>
     </div>
   );

@@ -40,6 +40,34 @@ async function indexDetailMapping(media: Anime): Promise<void> {
   }
 }
 
+/** Prefer cached AniList ids when Jikan fallback used MAL ids as card ids. */
+async function resolveJikanListIds(result: AnimeSearchResult): Promise<AnimeSearchResult> {
+  const media = result?.data?.Page?.media;
+  if (!media?.length) return result;
+
+  const resolved = await Promise.all(
+    media.map(async (item) => {
+      if (!item.malId) return item;
+      const anilistId = await getStaleCache<string>(`anilist:malmap:${item.malId}`);
+      if (anilistId && anilistId !== String(item.id)) {
+        return { ...item, id: anilistId };
+      }
+      return item;
+    })
+  );
+
+  return {
+    ...result,
+    data: {
+      ...result.data,
+      Page: {
+        ...result.data.Page,
+        media: resolved,
+      },
+    },
+  };
+}
+
 /**
  * Fetch AniList list data with stale + Jikan fallback.
  * Normal path unchanged when AniList is healthy.
@@ -88,11 +116,12 @@ export async function fetchAnilistListWithFallback(
 
     console.warn(`[AniList] Outage — Jikan fallback for ${cacheKey}`);
     const jikanKey = `jikan:${cacheKey}`;
-    return getCached(
+    const jikanResult = await getCached(
       jikanKey,
       () => jikanFallback(page, perPage),
       CACHE_TTL.ANIME_LIST
     );
+    return resolveJikanListIds(jikanResult);
   }
 }
 
@@ -110,8 +139,19 @@ export async function fetchAnilistDetailWithFallback(
       cacheKey,
       async () => {
         const fresh = await fetchAnilist();
+        if (!fresh?.data?.Media) {
+          const malId =
+            (await getStaleCache<number>(`anilist:malfor:${anilistId}`)) ?? anilistId;
+          const fromJikan = await getJikanAnimeByMalId(malId, String(anilistId));
+          if (fromJikan) {
+            const wrapped = { data: { Media: fromJikan } };
+            await saveStaleCache(cacheKey, wrapped);
+            return wrapped;
+          }
+          throw new Error(`Anime not found: ${anilistId}`);
+        }
         await saveStaleCache(cacheKey, fresh);
-        if (fresh?.data?.Media) await indexDetailMapping(fresh.data.Media);
+        await indexDetailMapping(fresh.data.Media);
         return fresh;
       },
       CACHE_TTL.ANIME_INFO

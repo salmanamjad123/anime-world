@@ -18,7 +18,7 @@ import { setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlis
 import { AddToListDropdown } from '@/components/anime/AddToListDropdown';
 import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { Play, Plus, Star, Calendar, Tv, ChevronDown } from 'lucide-react';
+import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
@@ -33,8 +33,23 @@ export default function AnimeDetailPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [movies, setMovies] = useState<any[]>([]);
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
 
-  const { data: animeData, isLoading: isAnimeLoading } = useAnimeById(animeId);
+  const {
+    data: animeData,
+    isLoading: isAnimeLoading,
+    isFetching: isAnimeFetching,
+    isError: isAnimeError,
+    error: animeError,
+    refetch: refetchAnime,
+  } = useAnimeById(animeId);
+
+  useEffect(() => {
+    setSlowLoad(false);
+    if (!isAnimeLoading && !isAnimeFetching) return;
+    const timer = setTimeout(() => setSlowLoad(true), 8000);
+    return () => clearTimeout(timer);
+  }, [isAnimeLoading, isAnimeFetching, animeId]);
   const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
   const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
   const {
@@ -112,12 +127,49 @@ export default function AnimeDetailPage() {
   const popularAnimeFiltered = (popularData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
   );
-  if (isAnimeLoading) {
+  if (isAnimeLoading && !anime) {
     return (
       <div className="min-h-screen bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] px-4 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mb-6" />
+          <p className="text-gray-400 text-sm mb-2">Loading anime details…</p>
+          {slowLoad && (
+            <>
+              <p className="text-gray-500 text-xs max-w-sm mb-4">
+                This is taking longer than usual. The metadata API may be slow or rate-limited.
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => refetchAnime()} className="gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Retry
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isAnimeError && !anime) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] px-4 text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Couldn&apos;t load anime</h1>
+          <p className="text-gray-400 text-sm mb-6 max-w-md">
+            {animeError instanceof Error
+              ? animeError.message
+              : 'The catalog API may be slow or rate-limited. Please try again.'}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="primary" size="sm" onClick={() => refetchAnime()} className="gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+              Go Home
+            </Button>
+          </div>
         </div>
       </div>
     );

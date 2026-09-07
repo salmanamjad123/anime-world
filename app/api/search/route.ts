@@ -30,13 +30,9 @@ export async function GET(request: NextRequest) {
 
     const result = await searchAnime(filters, page, perPage);
     const enriched = await attachSlugsToSearchResult(result, {
-      allowLookup: true,
-      maxLookups: perPage,
-      lookupConcurrency: 5,
+      allowLookup: false,
     });
-    if (page > 1) {
-      warmAnimeSlugsInBackground(enriched.data.Page.media);
-    }
+    warmAnimeSlugsInBackground(enriched.data?.Page?.media ?? []);
 
     return NextResponse.json(enriched);
   } catch (error) {

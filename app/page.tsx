@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
@@ -8,9 +9,40 @@ import { ScheduleSection } from '@/components/schedule/ScheduleSection';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
 
+function useSlowLoad(isLoading: boolean, isFetching: boolean, resetKey?: string) {
+  const [slowLoad, setSlowLoad] = useState(false);
+
+  useEffect(() => {
+    setSlowLoad(false);
+    if (!isLoading && !isFetching) return;
+
+    const timer = setTimeout(() => setSlowLoad(true), 8000);
+    return () => clearTimeout(timer);
+  }, [isLoading, isFetching, resetKey]);
+
+  return slowLoad;
+}
+
 export default function Home() {
-  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
-  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
+  const {
+    data: trendingData,
+    isLoading: isTrendingLoading,
+    isFetching: isTrendingFetching,
+    isError: isTrendingError,
+    error: trendingError,
+    refetch: refetchTrending,
+  } = useTrendingAnime(1, 18);
+  const {
+    data: popularData,
+    isLoading: isPopularLoading,
+    isFetching: isPopularFetching,
+    isError: isPopularError,
+    error: popularError,
+    refetch: refetchPopular,
+  } = usePopularAnime(1, 18);
+
+  const trendingSlow = useSlowLoad(isTrendingLoading, isTrendingFetching, 'trending');
+  const popularSlow = useSlowLoad(isPopularLoading, isPopularFetching, 'popular');
 
   const trendingAnime = trendingData?.data?.Page?.media || [];
   const popularAnime = popularData?.data?.Page?.media || [];
@@ -18,7 +50,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-900">
       <Header />
-      
+
       <main className="container mx-auto px-4 py-4">
         <section className="mb-4 sm:mb-6">
           <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
@@ -28,52 +60,50 @@ export default function Home() {
             Anime Village is a free place to watch anime online. Stream thousands of series in English sub and dub.
           </p>
         </section>
-        {/* Spotlight Slider (first section) */}
+
         <SpotlightSlider
           anime={trendingAnime.slice(0, 8)}
-          isLoading={isTrendingLoading}
+          isLoading={isTrendingLoading && trendingAnime.length === 0}
           autoPlayInterval={8000}
         />
 
-        {/* Hero Section */}
-        {/* <section className="mb-12">
-          <div className="text-center max-w-3xl mx-auto">
-            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-              Welcome to Anime Village
-            </h1>
-            <p className="text-gray-400 text-lg">
-              Stream thousands of anime series with subtitles and dubs. Your ultimate anime streaming platform.
-            </p>
-          </div>
-        </section> */}
-
-        {/* Trending Section */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-6">
             <TrendingUp className="w-6 h-6 text-blue-500" />
             <h2 className="text-2xl font-bold text-white">Trending Now</h2>
           </div>
-          <AnimeGrid anime={trendingAnime} isLoading={isTrendingLoading} />
+          <AnimeGrid
+            anime={trendingAnime}
+            isLoading={isTrendingLoading}
+            isError={isTrendingError}
+            errorMessage={trendingError instanceof Error ? trendingError.message : undefined}
+            onRetry={() => refetchTrending()}
+            slowLoad={trendingSlow}
+          />
         </section>
 
-        {/* Popular Section */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-6">
             <Star className="w-6 h-6 text-yellow-500" />
             <h2 className="text-2xl font-bold text-white">Popular Anime</h2>
           </div>
-          <AnimeGrid anime={popularAnime} isLoading={isPopularLoading} />
+          <AnimeGrid
+            anime={popularAnime}
+            isLoading={isPopularLoading}
+            isError={isPopularError}
+            errorMessage={popularError instanceof Error ? popularError.message : undefined}
+            onRetry={() => refetchPopular()}
+            slowLoad={popularSlow}
+          />
         </section>
 
-        {/* Recommended for you (trending) */}
         <RecommendedAnimeRow
           title="Recommended for you"
           anime={trendingAnime.slice(0, 12)}
-          isLoading={isTrendingLoading}
+          isLoading={isTrendingLoading && trendingAnime.length === 0}
           className="mb-12"
         />
 
-        {/* Estimated Schedule - last section before footer */}
         <ScheduleSection />
       </main>
     </div>

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAnimeByRouteSegment } from '@/lib/seo/anime-route';
+import { warmAnimeSlugsInBackground } from '@/lib/seo/enrich-slugs';
 import { ANIME_PLACEHOLDER, resolveAnimeImageUrl } from '@/lib/utils/image-url';
 import type { Anime, AnimeStatus } from '@/types';
 import type { HiAnimeInfo } from '@/lib/api/hianime';
@@ -98,6 +99,8 @@ export async function GET(
     if (!media) {
       return NextResponse.json({ error: 'Anime not found' }, { status: 404 });
     }
+
+    warmAnimeSlugsInBackground([media], 1);
 
     return NextResponse.json({ data: { Media: media } });
   } catch (error) {

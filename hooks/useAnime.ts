@@ -7,18 +7,40 @@ import { useQuery } from '@tanstack/react-query';
 import type { Anime, AnimeSearchResult, AnimeFilters } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
 
+const CLIENT_FETCH_TIMEOUT_MS = 25_000;
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs = CLIENT_FETCH_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+    return response.json() as Promise<T>;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out — please try again');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Get trending anime
  */
 export function useTrendingAnime(page = 1, perPage = 20) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['trending-anime', page, perPage],
-    queryFn: async () => {
-      const response = await fetch(`/api/anime?type=trending&page=${page}&perPage=${perPage}`);
-      if (!response.ok) throw new Error('Failed to fetch trending anime');
-      return response.json();
-    },
+    queryFn: () =>
+      fetchJsonWithTimeout<AnimeSearchResult>(
+        `/api/anime?type=trending&page=${page}&perPage=${perPage}`
+      ),
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -28,12 +50,12 @@ export function useTrendingAnime(page = 1, perPage = 20) {
 export function usePopularAnime(page = 1, perPage = 20) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['popular-anime', page, perPage],
-    queryFn: async () => {
-      const response = await fetch(`/api/anime?type=popular&page=${page}&perPage=${perPage}`);
-      if (!response.ok) throw new Error('Failed to fetch popular anime');
-      return response.json();
-    },
+    queryFn: () =>
+      fetchJsonWithTimeout<AnimeSearchResult>(
+        `/api/anime?type=popular&page=${page}&perPage=${perPage}`
+      ),
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -43,12 +65,12 @@ export function usePopularAnime(page = 1, perPage = 20) {
 export function useTopRatedAnime(page = 1, perPage = 20) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['top-rated-anime', page, perPage],
-    queryFn: async () => {
-      const response = await fetch(`/api/anime?type=top-rated&page=${page}&perPage=${perPage}`);
-      if (!response.ok) throw new Error('Failed to fetch top rated anime');
-      return response.json();
-    },
+    queryFn: () =>
+      fetchJsonWithTimeout<AnimeSearchResult>(
+        `/api/anime?type=top-rated&page=${page}&perPage=${perPage}`
+      ),
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -58,14 +80,14 @@ export function useTopRatedAnime(page = 1, perPage = 20) {
 export function useAnimeById(id: string | null) {
   return useQuery<{ data: { Media: Anime } }>({
     queryKey: ['anime', id],
-    queryFn: async () => {
+    queryFn: () => {
       if (!id) throw new Error('Anime ID is required');
-      const response = await fetch(`/api/anime/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch anime details');
-      return response.json();
+      return fetchJsonWithTimeout<{ data: { Media: Anime } }>(`/api/anime/${encodeURIComponent(id)}`);
     },
     enabled: !!id,
     staleTime: CACHE_DURATIONS.ANIME_DETAIL * 1000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
 }
 
@@ -74,7 +96,7 @@ export function useAnimeById(id: string | null) {
  */
 export function useSearchAnime(filters: AnimeFilters, page = 1, perPage = 20) {
   const searchParams = new URLSearchParams();
-  
+
   if (filters.search) searchParams.set('search', filters.search);
   if (filters.genres?.length) searchParams.set('genres', filters.genres.join(','));
   if (filters.year) searchParams.set('year', filters.year.toString());
@@ -85,15 +107,14 @@ export function useSearchAnime(filters: AnimeFilters, page = 1, perPage = 20) {
   searchParams.set('page', page.toString());
   searchParams.set('perPage', perPage.toString());
 
+  const queryString = searchParams.toString();
+
   return useQuery<AnimeSearchResult>({
     queryKey: ['search-anime', filters, page, perPage],
-    queryFn: async () => {
-      const response = await fetch(`/api/search?${searchParams.toString()}`);
-      if (!response.ok) throw new Error('Failed to search anime');
-      return response.json();
-    },
+    queryFn: () => fetchJsonWithTimeout<AnimeSearchResult>(`/api/search?${queryString}`),
     enabled: true,
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -103,13 +124,11 @@ export function useSearchAnime(filters: AnimeFilters, page = 1, perPage = 20) {
 export function useAnimeBySeason(season: string, year: number, page = 1, perPage = 20) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['anime-season', season, year, page, perPage],
-    queryFn: async () => {
-      const response = await fetch(
+    queryFn: () =>
+      fetchJsonWithTimeout<AnimeSearchResult>(
         `/api/anime?type=season&season=${season}&year=${year}&page=${page}&perPage=${perPage}`
-      );
-      if (!response.ok) throw new Error('Failed to fetch seasonal anime');
-      return response.json();
-    },
+      ),
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
+    placeholderData: (previous) => previous,
   });
 }

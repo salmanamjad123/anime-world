@@ -22,7 +22,8 @@ import type {
   AnimeFilters,
 } from '@/types';
 
-const RATE_LIMIT_RETRY_MS = 60_000; // wait 1 min on 429 then retry
+const RATE_LIMIT_RETRY_MS = 8_000; // cap wait on 429 before retry
+const RATE_LIMIT_MAX_WAIT_MS = 15_000;
 
 /**
  * GraphQL Queries
@@ -153,7 +154,7 @@ const ANIME_BY_ID_QUERY = `
 `;
 
 /**
- * Execute GraphQL query. Retries once after 1 min on 429 (rate limit).
+ * Execute GraphQL query. On 429, fail fast to stale/Jikan/HiAnime fallbacks (no long blocking wait).
  */
 async function executeQuery<T>(query: string, variables: Record<string, any> = {}, retryCount = 0): Promise<T> {
   try {
@@ -164,13 +165,17 @@ async function executeQuery<T>(query: string, variables: Record<string, any> = {
     return response.data;
   } catch (error: unknown) {
     const status = (error as { response?: { status?: number; headers?: { 'retry-after'?: string } } })?.response?.status;
-    if (status === 429 && retryCount < 1) {
-      const retryAfter =
-        (error as { response?: { headers?: { 'retry-after'?: string } } })?.response?.headers?.['retry-after'];
-      const waitMs = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, 120_000) : RATE_LIMIT_RETRY_MS;
-      console.warn(`[AniList] 429 rate limit - waiting ${waitMs / 1000}s before retry`);
-      await new Promise((r) => setTimeout(r, waitMs));
-      return executeQuery<T>(query, variables, retryCount + 1);
+    if (status === 429) {
+      if (retryCount < 1) {
+        const retryAfter =
+          (error as { response?: { headers?: { 'retry-after'?: string } } })?.response?.headers?.['retry-after'];
+        const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : RATE_LIMIT_RETRY_MS;
+        const waitMs = Math.min(Number.isNaN(parsed) ? RATE_LIMIT_RETRY_MS : parsed, RATE_LIMIT_MAX_WAIT_MS);
+        console.warn(`[AniList] 429 rate limit - brief wait ${waitMs / 1000}s then retry`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        return executeQuery<T>(query, variables, retryCount + 1);
+      }
+      console.warn('[AniList] 429 rate limit - failing over to cached/fallback sources');
     }
     console.error('[AniList API Error]', error);
     throw error;

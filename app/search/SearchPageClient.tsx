@@ -55,7 +55,7 @@ export function SearchPageContent({ initialFilters }: { initialFilters: AnimeFil
     }));
   }, [searchParams]);
 
-  const { data, isLoading } = useSearchAnime(filters, 1, 30);
+  const { data, isLoading, isError, error, refetch } = useSearchAnime(filters, 1, 30);
 
   // Filter out hentai results for safer search listings
   const allResults = data?.data?.Page?.media || [];
@@ -158,7 +158,13 @@ export function SearchPageContent({ initialFilters }: { initialFilters: AnimeFil
           )}
         </div>
 
-        <AnimeGrid anime={results} isLoading={isLoading} />
+        <AnimeGrid
+          anime={results}
+          isLoading={isLoading}
+          isError={isError}
+          errorMessage={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
       </div>
     </div>
   );
