@@ -132,9 +132,15 @@ export default function WatchPage() {
     (ep) => ep.id === episodeId || (isFallbackEpisode && fallbackEpisodeNum != null && ep.number === fallbackEpisodeNum)
   );
   const currentEpisode = episodes[currentEpisodeIndex];
-  const videoSource = streamData?.sources?.[0]?.url;
-  const hasPlayback = Boolean(videoSource || streamData?.embedUrl);
   const resolvingFallback = isFallbackEpisode && resolvedEpisodeId === undefined;
+  const videoSource = streamData?.sources?.[0]?.url;
+  const hasM3u8 = streamData?.sources?.some((s) => s.url?.includes('.m3u8'));
+  const streamReady = Boolean(streamData && (hasM3u8 || streamData.embedUrl));
+  const showPlayerLoading =
+    resolvingFallback ||
+    isEpisodesLoading ||
+    ((isStreamLoading || isStreamFetching) && !streamReady);
+  const hasPlayback = Boolean(videoSource || streamData?.embedUrl);
   const showStreamDown =
     (isFallbackEpisode && resolvedEpisodeId === null) ||
     streamError ||
@@ -320,7 +326,7 @@ export default function WatchPage() {
             </div>
 
             {/* Video Player - wait for stream + episodes so initialTime is stable (no mid-playback seek) */}
-            {isStreamLoading || isStreamFetching || resolvingFallback || isEpisodesLoading ? (
+            {showPlayerLoading ? (
               <div className="w-full aspect-video bg-gray-800 rounded-lg flex items-center justify-center min-h-[200px]">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
@@ -390,7 +396,7 @@ export default function WatchPage() {
             ) : (
               <div className="w-full overflow-visible rounded-lg relative">
                 <VideoPlayer
-                  key={`${streamEpisodeId}-${streamRefreshNonce}-${videoSource ?? ''}`}
+                  key={`${streamEpisodeId}-${streamRefreshNonce}-${hasM3u8 ? videoSource : streamData?.embedUrl ?? 'embed'}`}
                   src={videoSource ?? ''}
                   sources={streamData?.sources}
                   subtitles={allSubtitles}

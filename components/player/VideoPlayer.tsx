@@ -665,7 +665,7 @@ export function VideoPlayer({
     Boolean(src?.includes('.m3u8')) ||
     (sources?.some((s) => s?.isM3U8 || s?.url?.includes('.m3u8')) ?? false);
 
-  // Embed mode only when we have no HLS source
+  // Embed mode only when we have no HLS source — Megaplay has its own loader; no overlay spinner.
   if (embedUrl && !hasNativeSource) {
     return (
       <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
@@ -676,13 +676,7 @@ export function VideoPlayer({
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           referrerPolicy="strict-origin-when-cross-origin"
           title="Anime player"
-          onLoad={() => setIsLoading(false)}
         />
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500" />
-          </div>
-        )}
       </div>
     );
   }
