@@ -9,19 +9,22 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, BookOpen } from 'lucide-react';
+import { ChevronLeft, BookOpen, Swords } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 import { GENRES } from '@/constants/genres';
+
+export type SidebarTab = 'anime' | 'manga' | 'game';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  activeTab?: 'anime' | 'manga';
+  activeTab?: SidebarTab;
 };
 
 const ANIME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
   { label: 'Home', href: ROUTES.HOME },
   { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
+  { label: 'Game', href: ROUTES.GAME, icon: Swords },
   { label: 'Most Popular', href: `${ROUTES.SEARCH}?sort=POPULARITY_DESC` },
   { label: 'Movies', href: `${ROUTES.SEARCH}?format=MOVIE` },
   { label: 'TV Series', href: `${ROUTES.SEARCH}?format=TV` },
@@ -34,12 +37,20 @@ const ANIME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.Compone
 const MANGA_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
   { label: 'Home', href: ROUTES.HOME },
   { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
+  { label: 'Game', href: ROUTES.GAME, icon: Swords },
   { label: 'Most Popular', href: ROUTES.MANGA },
   { label: 'Filter Manga', href: ROUTES.MANGA },
 ];
 
+const GAME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
+  { label: 'Arena', href: ROUTES.GAME, icon: Swords },
+  { label: 'Anime', href: ROUTES.HOME },
+  { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
+];
+
 export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
-  const navItems = activeTab === 'manga' ? MANGA_NAV_ITEMS : ANIME_NAV_ITEMS;
+  const navItems =
+    activeTab === 'manga' ? MANGA_NAV_ITEMS : activeTab === 'game' ? GAME_NAV_ITEMS : ANIME_NAV_ITEMS;
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -97,14 +108,18 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isMangaLink = item.href === ROUTES.MANGA;
-                  const isActive = isMangaLink && activeTab === 'manga';
+                  const isGameLink = item.href === ROUTES.GAME;
+                  const isActive =
+                    (isMangaLink && activeTab === 'manga') || (isGameLink && activeTab === 'game');
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
                       className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors ${
-                        isMangaLink || isActive
+                        isGameLink
+                          ? 'text-orange-400 hover:bg-gray-800 hover:text-orange-300'
+                          : isMangaLink || isActive
                           ? 'text-amber-400 hover:bg-gray-800 hover:text-amber-300'
                           : 'text-gray-200 hover:bg-gray-800 hover:text-white'
                       }`}
@@ -117,6 +132,7 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
               </nav>
 
               {/* Genre section - anime genres or manga genres based on context */}
+              {activeTab !== 'game' && (
               <div className="mt-6">
                 <h3 className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Genre
@@ -147,6 +163,7 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
                   </Link>
                 )}
               </div>
+              )}
             </div>
           </motion.aside>
         </>

@@ -22,9 +22,10 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Anime, Manga } from '@/types';
-import { Sidebar } from './Sidebar';
+import { Sidebar, type SidebarTab } from './Sidebar';
 
 type SearchResultItem = (Anime | Manga) & { id: string };
+type ActiveTab = SidebarTab;
 
 export function Header() {
   const pathname = usePathname();
@@ -55,9 +56,16 @@ export function Header() {
 
   const { user } = useUserStore();
 
-  const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
+  const activeTab: ActiveTab = pathname.startsWith('/game')
+    ? 'game'
+    : pathname.startsWith('/manga')
+      ? 'manga'
+      : 'anime';
   const isWatchPage = pathname.startsWith('/watch/');
-  const isReaderPage = pathname.includes('/read') || isWatchPage;
+  const isGameBattlePage = pathname.startsWith('/game/battle');
+  const hideChrome = isWatchPage || isGameBattlePage;
+  const isReaderPage = pathname.includes('/read') || hideChrome;
+  const hideSearch = activeTab === 'game';
   const profileLinks =
     activeTab === 'manga'
       ? {
@@ -234,14 +242,14 @@ export function Header() {
     return () => window.removeEventListener('resize', syncHeaderHeight);
   }, [isReaderPage, mobileSearchOpen]);
 
-  // Watch pages: no header bar — reset layout offset for full-bleed player
+  // Watch + battle: no header bar — reset layout offset
   useEffect(() => {
-    if (!isWatchPage) return;
+    if (!hideChrome) return;
     document.documentElement.style.setProperty('--site-header-height', '0px');
     return () => {
       document.documentElement.style.removeProperty('--site-header-height');
     };
-  }, [isWatchPage]);
+  }, [hideChrome]);
 
   // Mobile: tabs slide up into the top row
   useEffect(() => {
@@ -375,8 +383,13 @@ export function Header() {
 
   const showDropdown = searchOpen && (searchQuery.length >= 1 || searchResults.length > 0);
 
-  // Watch pages: no sticky header chrome — Megaplay embed is full-width (same idea as manga read)
-  if (isWatchPage) {
+  const closeMobileSearch = useCallback(() => {
+    setMobileSearchOpen(false);
+    setSearchOpen(false);
+  }, []);
+
+  // Watch / battle: no sticky header chrome
+  if (hideChrome) {
     return (
       <>
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
@@ -413,17 +426,12 @@ export function Header() {
     });
   };
 
-  const closeMobileSearch = useCallback(() => {
-    setMobileSearchOpen(false);
-    setSearchOpen(false);
-  }, []);
-
   const renderTabToggle = () => (
     <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 w-full md:w-auto">
       <Link
         href={ROUTES.HOME}
         className={cn(
-          'flex-1 md:flex-none text-center px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
           activeTab === 'anime'
             ? 'bg-blue-600 text-white'
             : 'text-gray-400 hover:text-white'
@@ -434,13 +442,24 @@ export function Header() {
       <Link
         href={ROUTES.MANGA}
         className={cn(
-          'flex-1 md:flex-none text-center px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
           activeTab === 'manga'
             ? 'bg-amber-600 text-white'
             : 'text-gray-400 hover:text-white'
         )}
       >
         Manga
+      </Link>
+      <Link
+        href={ROUTES.GAME}
+        className={cn(
+          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          activeTab === 'game'
+            ? 'bg-orange-600 text-white'
+            : 'text-gray-400 hover:text-white'
+        )}
+      >
+        Game
       </Link>
     </div>
   );
@@ -463,13 +482,24 @@ export function Header() {
                 <Menu className="w-6 h-6" />
               </button>
               <Link
-                href={activeTab === 'manga' ? ROUTES.MANGA : ROUTES.HOME}
+                href={
+                  activeTab === 'manga'
+                    ? ROUTES.MANGA
+                    : activeTab === 'game'
+                      ? ROUTES.GAME
+                      : ROUTES.HOME
+                }
                 className="flex-shrink-0 flex items-center"
               >
                 <div className="text-lg sm:text-xl md:text-2xl font-bold whitespace-nowrap">
                   {activeTab === 'manga' ? (
                     <>
                       <span className="text-amber-500">Manga</span>
+                      <span className="text-white">Village</span>
+                    </>
+                  ) : activeTab === 'game' ? (
+                    <>
+                      <span className="text-orange-500">Game</span>
                       <span className="text-white">Village</span>
                     </>
                   ) : (
@@ -486,6 +516,7 @@ export function Header() {
             {/* Search + Auth */}
             <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 justify-end">
             {/* Mobile: Search icon only - tap to open/close */}
+            {!hideSearch && (
             <button
               ref={searchToggleRef}
               type="button"
@@ -496,8 +527,10 @@ export function Header() {
             >
               <Search className="w-5 h-5" />
             </button>
+            )}
 
             {/* Desktop: Filter (anime only) + Search bar */}
+            {!hideSearch && (
             <div ref={searchRef} className="relative z-50 hidden md:flex items-center gap-2 w-full max-w-[400px] flex-none">
             {showFilter && (
               <Link
@@ -577,6 +610,7 @@ export function Header() {
             )}
             </div>
             </div>
+            )}
 
             {/* Auth: Login button or User menu */}
             <div ref={userMenuRef} className="relative shrink-0 ml-2">
@@ -670,7 +704,7 @@ export function Header() {
           >
             <div
               ref={mobileTabInnerRef}
-              className="max-w-xs mx-auto px-0 pb-3 pt-1 [backface-visibility:hidden] [transform:translateZ(0)]"
+              className="max-w-md mx-auto px-2 pb-3 pt-1 [backface-visibility:hidden] [transform:translateZ(0)]"
             >
               {renderTabToggle()}
             </div>
@@ -679,7 +713,7 @@ export function Header() {
         </div>
 
         {/* Mobile Search Bar - absolute overlay below header, takes extra space */}
-        {mobileSearchOpen && (
+        {mobileSearchOpen && !hideSearch && (
           <div
             ref={searchRef}
             className="md:hidden absolute top-full left-0 right-0 z-[110] w-full px-4 py-3 border-t border-gray-800 bg-gray-900 shadow-2xl"

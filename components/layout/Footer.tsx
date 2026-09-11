@@ -25,6 +25,7 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export function Footer() {
   const pathname = usePathname();
+  if (pathname.startsWith('/game')) return null;
   const isManga = pathname.startsWith('/manga');
   const match = pathname.match(/^\/anime\/az\/([^/]+)$/);
   const activeLetter = match ? decodeURIComponent(match[1]).toLowerCase() : null;

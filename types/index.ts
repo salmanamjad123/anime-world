@@ -8,3 +8,4 @@ export * from './episode';
 export * from './stream';
 export * from './user';
 export * from './manga';
+export * from './game';

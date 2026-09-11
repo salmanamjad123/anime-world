@@ -38,6 +38,9 @@ export const ROUTES = {
   MANGA_PROFILE: '/manga/profile',
   MANGA_PROFILE_SECTION: (section: string, tab?: string) =>
     tab ? `/manga/profile?section=${section}&tab=${tab}` : `/manga/profile?section=${section}`,
+  GAME: '/game',
+  GAME_BATTLE: '/game/battle',
+  GAME_BATTLE_ROOM: (code: string) => `/game/battle?room=${encodeURIComponent(code)}`,
 } as const;
 
 export const AZ_LETTERS = [

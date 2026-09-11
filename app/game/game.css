@@ -1,0 +1,71 @@
+.game-ember-wash {
+  background:
+    radial-gradient(circle at 18% 40%, rgba(249, 115, 22, 0.45), transparent 42%),
+    radial-gradient(circle at 78% 30%, rgba(220, 38, 38, 0.28), transparent 38%),
+    linear-gradient(180deg, #2a1208 0%, #140e0a 100%);
+}
+
+.game-parchment {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 228, 0.96), rgba(232, 204, 150, 0.94));
+  border: 1px solid #8a6a3b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.game-orb {
+  animation: game-float 5.5s ease-in-out infinite;
+}
+
+.game-select-flash {
+  animation: game-select-burst 0.55s ease-out;
+}
+
+.game-select-ring {
+  animation: game-ring-pop 0.45s ease-out;
+}
+
+@keyframes game-select-burst {
+  0% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  35% {
+    filter: brightness(1.35) saturate(1.2);
+    transform: scale(1.04);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes game-ring-pop {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes game-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(8px, -18px, 0);
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-orb {
+    animation: none;
+  }
+  .game-select-flash,
+  .game-select-ring {
+    animation: none;
+  }
+}
