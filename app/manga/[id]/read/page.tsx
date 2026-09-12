@@ -30,7 +30,7 @@ export default function MangaReadPage() {
   const router = useRouter();
   const mangaId = params.id as string;
   const chapterId = searchParams.get('chapterId');
-  const provider = searchParams.get('provider') || 'mangapill';
+  const provider = searchParams.get('provider') || 'mangadex';
   const mangadexId = searchParams.get('md');
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);

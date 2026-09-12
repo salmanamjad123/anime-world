@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
@@ -21,6 +21,8 @@ import { updateWatchProgress } from '@/lib/firebase/firestore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { isAniListNumericId } from '@/lib/seo/anime-path';
+import { isFragileCdnHost } from '@/lib/hls-proxy';
+import { WatchCanonicalUrlSync } from '@/components/anime/WatchCanonicalUrlSync';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
@@ -29,7 +31,6 @@ import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 export default function WatchPage() {
   const params = useParams();
   const router = useRouter();
-  const pathname = usePathname();
   const animeId = params.animeId as string;
   const episodeId = decodeURIComponent(params.episodeId as string);
 
@@ -112,6 +113,15 @@ export default function WatchPage() {
     setStreamRefreshNonce(0);
   }, [episodeId, selectedServer, selectedLanguage]);
 
+  // nexabloom / blocked CDNs rarely play — bust cache once for a fresh Megaplay URL
+  useEffect(() => {
+    const url = streamData?.sources?.[0]?.url;
+    if (!url || streamRefreshNonce > 0) return;
+    if (isFragileCdnHost(url)) {
+      setStreamRefreshNonce(1);
+    }
+  }, [streamData, streamRefreshNonce]);
+
   const { updateProgress, getProgress } = useHistoryStore();
   const { user } = useUserStore();
   const { autoNext } = usePlayerStore();
@@ -120,13 +130,6 @@ export default function WatchPage() {
   const watchTarget = { id: episodesAnimeId, slug: anime?.slug };
   const animeDetailPath = ROUTES.ANIME_DETAIL(watchTarget);
 
-  // Fix broken watch URLs that used a HiAnime special slug instead of the AniList id
-  useEffect(() => {
-    if (!anime || !isAniListNumericId(String(anime.id))) return;
-    if (animeId === String(anime.id)) return;
-    const canonical = ROUTES.WATCH(String(anime.id), episodeId);
-    if (pathname !== canonical) router.replace(canonical);
-  }, [anime, animeId, episodeId, pathname, router]);
   const episodes = episodesData?.episodes || [];
   const currentEpisodeIndex = episodes.findIndex(
     (ep) => ep.id === episodeId || (isFallbackEpisode && fallbackEpisodeNum != null && ep.number === fallbackEpisodeNum)
@@ -293,6 +296,11 @@ export default function WatchPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <WatchCanonicalUrlSync
+        routeAnimeId={animeId}
+        anilistId={anime && isAniListNumericId(String(anime.id)) ? anime.id : null}
+        episodeId={episodeId}
+      />
       <Header />
 
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6">

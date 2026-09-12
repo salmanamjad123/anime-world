@@ -38,6 +38,19 @@ const HEADER_SETS = [
     Referer: 'https://hianime.to/',
     Origin: 'https://hianime.to',
   },
+  // Rotating Megaplay edge CDNs (norami / shiora / mikora / imgnex)
+  {
+    Referer: 'https://megap.norami.top/',
+    Origin: 'https://megap.norami.top',
+  },
+  {
+    Referer: 'https://ncdn.imgnex.top/',
+    Origin: 'https://ncdn.imgnex.top',
+  },
+  {
+    Referer: 'https://bb.akirax.buzz/',
+    Origin: 'https://bb.akirax.buzz',
+  },
   {},
 ];
 
@@ -49,6 +62,8 @@ function withUa(headers) {
     'User-Agent': UA,
   };
 }
+
+const RETRY_STATUSES = new Set([403, 429, 500, 502, 503]);
 
 async function fetchUpstream(targetUrl, rangeHeader) {
   let last = null;
@@ -63,7 +78,7 @@ async function fetchUpstream(targetUrl, rangeHeader) {
       });
       last = res;
       if (res.ok || res.status === 206) return res;
-      if (res.status !== 403) return res;
+      if (!RETRY_STATUSES.has(res.status)) return res;
     } catch (e) {
       last = e;
     }

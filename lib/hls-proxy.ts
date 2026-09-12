@@ -1,32 +1,43 @@
 /**
- * HLS proxy helpers.
+ * HLS proxy helpers — Megaplay CDNs require Referer injection via proxy.
  *
- * - nexabloom: often 403 in browser AND on proxies → prefer other CDNs upstream
- * - imgnex / most hosts: need Megaplay Referer → must go through proxy
+ * Prefer Railway streaming-api /api/v2/proxy in production (CF worker often 502s
+ * on rotating megap.* / nexabloom hosts). Localhost uses local streaming-api.
  */
 
-/** Hosts that bot-block most server proxies AND reject our page Origin — avoid direct */
+/** Hosts that must go through proxy (browser Origin is blocked) */
 const PROXY_REQUIRED_HOST_RE =
-  /imgnex\.|nexabloom\.|megaplay\.|megacloud\./i;
+  /imgnex\.|nexabloom\.|megaplay\.|megacloud\.|norami\.|shiora\.|mikora\.|akirax\.|^megap\./i;
 
-/** Prefer skipping broken CF worker in local/dev when HIANIME is localhost */
+function railwayProxyFromHianime(hianimeUrl: string): string | null {
+  if (!hianimeUrl.includes('railway.app')) return null;
+  return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
+}
+
+/**
+ * Resolve proxy base URL for HLS.
+ * Order: localhost streaming-api → Railway (when HIANIME is Railway) → explicit env → /api/proxy
+ */
 export function getHlsProxyBase(): string {
   const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
-  const explicit = process.env.NEXT_PUBLIC_PROXY_URL;
+  const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
 
-  // Local streaming-api: always use its proxy (injects Megaplay Referer)
   if (hianimeUrl.includes('localhost') || hianimeUrl.includes('127.0.0.1')) {
-    return (
-      explicit ||
-      `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`
-    );
+    if (explicit.includes('localhost') || explicit.includes('127.0.0.1')) {
+      return explicit;
+    }
+    return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
+  }
+
+  // Production: prefer Railway proxy over CF worker (more reliable Megaplay Referer)
+  const railwayProxy = railwayProxyFromHianime(hianimeUrl);
+  if (railwayProxy) {
+    // Allow explicit Railway override; ignore CF worker when HIANIME is Railway
+    if (explicit.includes('railway.app')) return explicit;
+    return railwayProxy;
   }
 
   if (explicit) return explicit;
-
-  if (hianimeUrl.includes('railway')) {
-    return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
-  }
 
   return '/api/proxy';
 }
@@ -37,18 +48,28 @@ export function wrapHlsUrl(streamUrl: string, viaProxy: boolean): string {
   return `${base}?url=${encodeURIComponent(streamUrl)}`;
 }
 
-/**
- * When USE_PROXY is on, almost always proxy — CDN needs Megaplay Referer.
- * Only skip proxy if explicitly disabled.
- */
 export function initialHlsViaProxy(_streamUrl: string): boolean {
   return process.env.NEXT_PUBLIC_USE_PROXY === 'true';
 }
 
 export function shouldPreferDirectHls(streamUrl: string): boolean {
-  // Direct from our origin fails (no Megaplay Referer) for these CDNs
   try {
     return !PROXY_REQUIRED_HOST_RE.test(new URL(streamUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** CDN hosts known to fail playback / proxy often — trigger refresh or embed */
+export function isFragileCdnHost(streamUrl: string): boolean {
+  try {
+    const host = new URL(streamUrl).hostname.toLowerCase();
+    return (
+      host.includes('nexabloom') ||
+      host.includes('pages.dev') || // CF Pages mirrors used as dead ends
+      // bare cloudflarestream / r2 public often 403 without signed cookies
+      host.endsWith('cloudflarestream.com')
+    );
   } catch {
     return false;
   }

@@ -1,11 +1,11 @@
 /**
  * MangaDex API Client
- * Fallback when Consumet returns no chapters - MangaDex has public API
+ * Primary chapter source for manga (official API). Filters external-only chapters.
  */
 
 import { axiosInstance } from './axios';
 import { getChapterCached } from './chapter-cache';
-import { getCached, CACHE_TTL } from '@/lib/cache';
+import { getCached, getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import type { MangaChapter } from '@/types';
 
 const MANGADEX_API = 'https://api.mangadex.org';
@@ -15,6 +15,7 @@ export interface MangaDexManga {
   attributes: {
     title: Record<string, string>;
     altTitles?: Array<Record<string, string>>;
+    links?: Record<string, string | null>;
   };
 }
 
@@ -24,12 +25,23 @@ export interface MangaDexChapter {
     chapter?: string;
     title?: string;
     translatedLanguage?: string;
+    pages?: number;
+    externalUrl?: string | null;
   };
   relationships?: Array<{
     type: string;
     id: string;
     attributes?: { name?: string };
   }>;
+}
+
+function isReadableMangaDexChapter(ch: MangaDexChapter): boolean {
+  const pages = ch.attributes?.pages ?? 0;
+  const external = ch.attributes?.externalUrl;
+  // Official/external hosts (Kodansha, etc.) have no at-home images
+  if (external && String(external).trim()) return false;
+  if (pages <= 0) return false;
+  return true;
 }
 
 /**
@@ -41,7 +53,7 @@ export async function searchMangaDexByTitle(title: string): Promise<string | nul
       params: {
         title: title.slice(0, 100),
         limit: 5,
-        contentRating: ['safe', 'suggestive'],
+        contentRating: ['safe', 'suggestive', 'erotica'],
       },
       timeout: 10000,
     });
@@ -55,13 +67,14 @@ export async function searchMangaDexByTitle(title: string): Promise<string | nul
 }
 
 /**
- * Find MangaDex manga ID by searching title (cached 1h)
+ * Find MangaDex manga ID by AniList id + title (cached 1h).
+ * Prefers exact links.al match; otherwise best title candidate.
  */
 export async function findMangaDexByAnilistId(
   anilistId: string,
   title: string
 ): Promise<string | null> {
-  const key = `mangadex:anilist:${anilistId}`;
+  const key = `mangadex:anilist:v2:${anilistId}`;
   return getCached(
     key,
     async () => {
@@ -69,20 +82,39 @@ export async function findMangaDexByAnilistId(
         const res = await axiosInstance.get<{ data: MangaDexManga[] }>(`${MANGADEX_API}/manga`, {
           params: {
             title: title.slice(0, 80),
-            limit: 10,
+            limit: 15,
+            contentRating: ['safe', 'suggestive', 'erotica'],
+            'order[relevance]': 'desc',
           },
           timeout: 10000,
         });
         const data = res.data?.data;
         if (!Array.isArray(data) || data.length === 0) return null;
+
         for (const item of data) {
-          const links = (item as MangaDexManga & { attributes: { links?: Record<string, string | null> } })
-            .attributes?.links;
-          const al = links?.al;
-          if (al != null && String(al) === anilistId) {
+          const al = item.attributes?.links?.al;
+          if (al != null && String(al) === String(anilistId)) {
             return item.id;
           }
         }
+
+        const needle = title.toLowerCase().replace(/[^\w\s]/g, '').trim();
+        const scored = data.map((item) => {
+          const titles = [
+            ...Object.values(item.attributes?.title || {}),
+            ...(item.attributes?.altTitles || []).flatMap((t) => Object.values(t)),
+          ]
+            .filter(Boolean)
+            .map((t) => String(t).toLowerCase().replace(/[^\w\s]/g, '').trim());
+          const exact = titles.some((t) => t === needle);
+          const starts = titles.some((t) => t.startsWith(needle) || needle.startsWith(t));
+          const includes = titles.some((t) => t.includes(needle) || needle.includes(t));
+          const score = exact ? 3 : starts ? 2 : includes ? 1 : 0;
+          return { id: item.id, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        if (scored[0]?.score > 0) return scored[0].id;
+
         return data[0].id;
       } catch (err) {
         console.warn('[MangaDex] find by title failed:', (err as Error).message);
@@ -94,32 +126,50 @@ export async function findMangaDexByAnilistId(
 }
 
 /**
- * Get chapter feed for a MangaDex manga (cached 30 min)
+ * Get chapter feed for a MangaDex manga — only chapters with readable pages.
  */
 async function fetchMangaDexChapterFeed(
   mangaId: string,
   lang?: string
 ): Promise<MangaChapter[]> {
   try {
-    const params: Record<string, string | number | string[]> = {
-      limit: 500,
-      'order[chapter]': 'asc',
-    };
-    if (lang) {
-      params['translatedLanguage[]'] = lang;
+    const all: MangaDexChapter[] = [];
+    let offset = 0;
+    const limit = 500;
+
+    for (let page = 0; page < 4; page++) {
+      const params: Record<string, string | number | string[]> = {
+        limit,
+        offset,
+        'order[chapter]': 'asc',
+        'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
+        includeEmptyPages: 0,
+        includeFuturePublishAt: 0,
+        includeExternalUrl: 0,
+      };
+      if (lang) {
+        params['translatedLanguage[]'] = lang;
+      }
+
+      const res = await axiosInstance.get<{ data: MangaDexChapter[]; total?: number }>(
+        `${MANGADEX_API}/manga/${mangaId}/feed`,
+        {
+          params,
+          timeout: 20000,
+        }
+      );
+      const data = res.data?.data;
+      if (!Array.isArray(data) || data.length === 0) break;
+      all.push(...data);
+      offset += data.length;
+      const total = res.data?.total ?? all.length;
+      if (offset >= total || data.length < limit) break;
     }
 
-    const res = await axiosInstance.get<{ data: MangaDexChapter[] }>(
-      `${MANGADEX_API}/manga/${mangaId}/feed`,
-      {
-        params,
-        timeout: 15000,
-      }
-    );
-    const data = res.data?.data;
-    if (!Array.isArray(data) || data.length === 0) return [];
+    if (all.length === 0) return [];
 
-    return data.map((ch) => ({
+    const readable = all.filter(isReadableMangaDexChapter);
+    return readable.map((ch) => ({
       id: ch.id,
       chapter: ch.attributes?.chapter ?? '',
       title: ch.attributes?.title ?? undefined,
@@ -143,17 +193,26 @@ export async function getMangaDexChapters(
   mangaId: string,
   lang = 'en'
 ): Promise<MangaChapter[]> {
-  const key = `mangadex:chapters:${mangaId}:${lang}`;
-  return getCached(
+  const key = `mangadex:chapters:v3:${mangaId}:${lang}`;
+  return getCachedWhen(
     key,
     async () => {
       let chapters = await fetchMangaDexChapterFeed(mangaId, lang);
-      if (chapters.length === 0 && lang === 'en') {
-        chapters = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
+      // Merge other languages when EN is sparse (licensed titles often have few EN uploads)
+      if (lang === 'en') {
+        const anyLang = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
+        if (anyLang.length > chapters.length) {
+          chapters = anyLang;
+        } else {
+          chapters = dedupeChaptersByNumber(chapters);
+        }
+      } else {
+        chapters = dedupeChaptersByNumber(chapters);
       }
       return chapters;
     },
-    CACHE_TTL.MANGA_CHAPTERS_LIST
+    CACHE_TTL.MANGA_CHAPTERS_LIST,
+    (chs) => chs.length > 0
   );
 }
 
@@ -171,9 +230,6 @@ export interface MangaDexAtHomeResponse {
   };
 }
 
-/**
- * Fetch chapter pages from MangaDex at-home server (with retry)
- */
 async function fetchMangaDexChapterPages(
   chapterId: string
 ): Promise<Array<{ img: string; page: number }>> {
@@ -208,7 +264,11 @@ async function fetchMangaDexChapterPages(
       lastError = err as Error;
       const msg = lastError.message;
       const status = (err as { response?: { status?: number } })?.response?.status;
-      console.warn(`[MangaDex] get chapter pages attempt ${attempt}/${maxRetries}:`, msg, status ? `(HTTP ${status})` : '');
+      console.warn(
+        `[MangaDex] get chapter pages attempt ${attempt}/${maxRetries}:`,
+        msg,
+        status ? `(HTTP ${status})` : ''
+      );
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, 500 * attempt));
       }
@@ -221,18 +281,12 @@ async function fetchMangaDexChapterPages(
   return [];
 }
 
-/**
- * Get chapter pages - raw fetch (no cache)
- */
 export async function getMangaDexChapterPages(
   chapterId: string
 ): Promise<Array<{ img: string; page: number }>> {
   return fetchMangaDexChapterPages(chapterId);
 }
 
-/**
- * Get chapter pages with cache (Redis → memory only; MangaDex baseUrl expires in ~15 min)
- */
 export async function getMangaDexChapterPagesCached(
   chapterId: string,
   forceRefresh = false

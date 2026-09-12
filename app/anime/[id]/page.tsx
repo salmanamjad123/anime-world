@@ -18,6 +18,7 @@ import { setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlis
 import { AddToListDropdown } from '@/components/anime/AddToListDropdown';
 import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
+import { isAniListNumericId } from '@/lib/seo/anime-path';
 import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
@@ -215,9 +216,9 @@ export default function AnimeDetailPage() {
   };
 
   const handlePlayFirst = () => {
-    if (episodes.length > 0) {
+    if (episodes.length > 0 && anime?.id != null) {
       router.push(
-        ROUTES.WATCH({ id: animeId, slug: anime?.slug }, episodes[0].id)
+        ROUTES.WATCH(String(anime.id), episodes[0].id)
       );
     }
   };
@@ -470,7 +471,12 @@ export default function AnimeDetailPage() {
                         onClick={() =>
                           router.push(
                             ROUTES.WATCH(
-                              { id: selectedSeasonId, slug: anime?.slug },
+                              // Always AniList numeric id — never SEO slug from route params
+                              String(
+                                isAniListNumericId(String(selectedSeasonId))
+                                  ? selectedSeasonId
+                                  : anime.id
+                              ),
                               episode.id
                             )
                           )

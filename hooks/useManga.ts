@@ -84,7 +84,7 @@ export function useMangaByGenre(genres: string[], page = 1, perPage = 20, sort =
   });
 }
 
-export function useMangaById(id: string | null, provider = 'mangapill') {
+export function useMangaById(id: string | null, provider = 'mangadex') {
   return useQuery({
     queryKey: ['manga', 'detail', id, provider],
     queryFn: () => fetchMangaDetail(id!, provider),
@@ -103,8 +103,8 @@ export function useMangaInfo(id: string | null, mangadexId?: string | null) {
   });
 }
 
-/** Chapters only (can be slow - Consumet/MangaDex) */
-export function useMangaChapters(id: string | null, provider = 'mangapill', mangadexId?: string | null) {
+/** Chapters only (MangaDex readable first → Consumet) */
+export function useMangaChapters(id: string | null, provider = 'mangadex', mangadexId?: string | null) {
   return useQuery({
     queryKey: ['manga', 'chapters', id, provider, mangadexId],
     queryFn: () => fetchMangaChapters(id!, provider, mangadexId ?? undefined),
@@ -115,7 +115,7 @@ export function useMangaChapters(id: string | null, provider = 'mangapill', mang
 
 export function useChapterPages(
   chapterId: string | null,
-  provider = 'mangapill',
+  provider = 'mangadex',
   options?: { refresh?: boolean }
 ) {
   return useQuery({
