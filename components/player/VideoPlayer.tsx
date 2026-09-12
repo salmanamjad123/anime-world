@@ -9,12 +9,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Check, RotateCcw, RotateCw, SkipForward } from 'lucide-react';
 import { HlsSafeLoader } from '@/lib/hls-safe-loader';
+import {
+  initialHlsViaProxy,
+  shouldPreferDirectHls,
+  wrapHlsUrl,
+} from '@/lib/hls-proxy';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { VideoSource, Subtitle } from '@/types/stream';
 
+type HlsTransport = 'direct' | 'proxy';
 interface VideoPlayerProps {
   src: string;
   sources?: VideoSource[]; // All quality sources
@@ -55,6 +61,9 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hlsFatalRetriesRef = useRef(0);
+  const hlsTransportRef = useRef<HlsTransport>('direct');
+  const triedProxyRef = useRef(false);
+  const triedDirectRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -73,6 +82,8 @@ export function VideoPlayer({
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('off');
   const [autoQuality, setAutoQuality] = useState(true);
+  /** Native HLS failed (e.g. CDN blocks proxy) — use Megaplay iframe */
+  const [forceEmbed, setForceEmbed] = useState(false);
   
   const { volume, playbackSpeed, setVolume, subtitlePosition, setSubtitlePosition } = usePlayerStore();
   const isMobile = useIsMobile();
@@ -177,26 +188,55 @@ export function VideoPlayer({
     }
   };
 
+  // Reset embed fallback when the stream URL changes
+  useEffect(() => {
+    setForceEmbed(false);
+    triedProxyRef.current = false;
+    triedDirectRef.current = false;
+  }, [src]);
+
   // Initialize HLS
   useEffect(() => {
     const video = videoRef.current;
     const currentSrc = getCurrentSource();
-    if (!video || !currentSrc) return;
+    if (!video || !currentSrc || forceEmbed) return;
 
     setIsLoading(true);
     hlsFatalRetriesRef.current = 0;
 
+    const proxyEnabled = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
+    const startViaProxy = initialHlsViaProxy(currentSrc);
+    hlsTransportRef.current = startViaProxy ? 'proxy' : 'direct';
+    if (startViaProxy) triedProxyRef.current = true;
+    else triedDirectRef.current = true;
+
+    const failOrFallback = () => {
+      setIsLoading(false);
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      if (embedUrl) {
+        setForceEmbed(true);
+        return;
+      }
+      onPlaybackError?.();
+    };
+
+    const switchTransport = (next: HlsTransport) => {
+      hlsTransportRef.current = next;
+      if (next === 'proxy') triedProxyRef.current = true;
+      else triedDirectRef.current = true;
+      hlsFatalRetriesRef.current = 0;
+      const hls = hlsRef.current;
+      if (!hls) return false;
+      hls.loadSource(wrapHlsUrl(currentSrc, next === 'proxy'));
+      return true;
+    };
+
     // Check if HLS is supported
     if (currentSrc.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        // Use proxy when NEXT_PUBLIC_USE_PROXY=true (Railway or Next.js /api/proxy)
-        const useProxy = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
-        const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
-        const defaultProxy = hianimeUrl.includes('railway') 
-          ? `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy` 
-          : '/api/proxy';
-        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || defaultProxy;
-
         const hls = new Hls({
           loader: HlsSafeLoader,
           enableWorker: true,
@@ -209,9 +249,10 @@ export function VideoPlayer({
 
         hlsRef.current = hls;
 
-        const finalSrc = useProxy
-          ? `${proxyUrl}?url=${encodeURIComponent(currentSrc)}`
-          : currentSrc;
+        const finalSrc = wrapHlsUrl(
+          currentSrc,
+          hlsTransportRef.current === 'proxy'
+        );
         hls.loadSource(finalSrc);
         hls.attachMedia(video);
 
@@ -223,33 +264,47 @@ export function VideoPlayer({
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hlsFatalRetriesRef.current += 1;
-                if (hlsFatalRetriesRef.current >= 3) {
-                  setIsLoading(false);
-                  hls.destroy();
-                  hlsRef.current = null;
-                  onPlaybackError?.();
-                } else {
-                  hls.startLoad();
-                }
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hlsFatalRetriesRef.current += 1;
-                if (hlsFatalRetriesRef.current >= 2) {
-                  setIsLoading(false);
-                  onPlaybackError?.();
-                } else {
-                  hls.recoverMediaError();
-                }
-                break;
-              default:
-                setIsLoading(false);
-                onPlaybackError?.();
-                break;
+          if (!data.fatal) return;
+
+          // Alternate transport before giving up (direct ↔ proxy)
+          if (
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            proxyEnabled
+          ) {
+            const current = hlsTransportRef.current;
+            if (current === 'direct' && !triedProxyRef.current) {
+              if (switchTransport('proxy')) return;
             }
+            // Skip direct retry for CDNs that reject our Origin (imgnex/nexabloom)
+            if (
+              current === 'proxy' &&
+              !triedDirectRef.current &&
+              shouldPreferDirectHls(currentSrc)
+            ) {
+              if (switchTransport('direct')) return;
+            }
+          }
+
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hlsFatalRetriesRef.current += 1;
+              if (hlsFatalRetriesRef.current >= 3) {
+                failOrFallback();
+              } else {
+                hls.startLoad();
+              }
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hlsFatalRetriesRef.current += 1;
+              if (hlsFatalRetriesRef.current >= 2) {
+                failOrFallback();
+              } else {
+                hls.recoverMediaError();
+              }
+              break;
+            default:
+              failOrFallback();
+              break;
           }
         });
 
@@ -258,8 +313,9 @@ export function VideoPlayer({
           hlsRef.current = null;
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari) - always direct, no proxy needed
+        // Native HLS (Safari) — always direct
         video.src = currentSrc;
+        video.onerror = () => failOrFallback();
         if (!(initialTime && initialTime > 0)) {
           setIsLoading(false);
           if (autoPlay) video.play().catch(console.error);
@@ -273,7 +329,16 @@ export function VideoPlayer({
         if (autoPlay) video.play().catch(console.error);
       }
     }
-  }, [src, autoPlay, currentQuality, autoQuality, initialTime, onPlaybackError]);
+  }, [
+    src,
+    autoPlay,
+    currentQuality,
+    autoQuality,
+    initialTime,
+    onPlaybackError,
+    embedUrl,
+    forceEmbed,
+  ]);
 
   // Seek to initialTime when video can play (Continue Watching from ?t=)
   // Keeps loading until seek completes so progress bar doesn't jump
@@ -665,8 +730,8 @@ export function VideoPlayer({
     Boolean(src?.includes('.m3u8')) ||
     (sources?.some((s) => s?.isM3U8 || s?.url?.includes('.m3u8')) ?? false);
 
-  // Embed mode only when we have no HLS source
-  if (embedUrl && !hasNativeSource) {
+  // Embed: no HLS, or native HLS exhausted (CDN/proxy failures)
+  if (embedUrl && (!hasNativeSource || forceEmbed)) {
     return (
       <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
         <iframe

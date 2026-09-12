@@ -24,6 +24,9 @@ const HEADER_SETS = [
     Origin: 'https://megaplay.buzz',
   },
   {
+    Referer: 'https://megaplay.buzz/',
+  },
+  {
     Referer: 'https://megacloud.blog/',
     Origin: 'https://megacloud.blog',
   },
@@ -35,6 +38,7 @@ const HEADER_SETS = [
     Referer: 'https://hianime.to/',
     Origin: 'https://hianime.to',
   },
+  {},
 ];
 
 function withUa(headers) {

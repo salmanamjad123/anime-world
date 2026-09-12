@@ -14,7 +14,7 @@ import {
   toStreamCacheDocId,
   type StreamCacheDocument,
 } from '@/lib/firebase/stream-cache-schema';
-import { deleteCacheKey, getCached } from '@/lib/cache';
+import { deleteCacheKey, getCachedWhen } from '@/lib/cache';
 import type { StreamSourcesResponse } from '@/types';
 
 /** Megaplay/CDN m3u8 links expire quickly — align with streaming-api megaplay cache (~8 min) */
@@ -199,7 +199,11 @@ export async function getStreamCached(
     await invalidateStreamCache(episodeId, altServer, category);
 
     const fresh = await fetchFn();
-    if (isFirebaseAdminConfigured()) {
+    // Only persist real HLS — embed-only must not stick in Firestore
+    if (
+      fresh?.sources?.some((s) => s?.url?.includes('.m3u8')) &&
+      isFirebaseAdminConfigured()
+    ) {
       await saveStreamToFirestore(episodeId, server, category, fresh);
     }
     deleteCacheKey(toRedisKey(episodeId, server, category));
@@ -207,8 +211,10 @@ export async function getStreamCached(
   }
 
   const redisKey = toRedisKey(episodeId, server, category);
+  const hasHls = (data: StreamSourcesResponse) =>
+    Boolean(data?.sources?.some((s) => s?.url?.includes('.m3u8')));
 
-  return getCached(
+  return getCachedWhen(
     redisKey,
     async () => {
       if (isFirebaseAdminConfigured()) {
@@ -221,11 +227,14 @@ export async function getStreamCached(
       }
 
       const fresh = await fetchFn();
-      if (isFirebaseAdminConfigured()) {
+      // Only persist real HLS — embed-only fallbacks must not stick in cache
+      if (hasHls(fresh) && isFirebaseAdminConfigured()) {
         await saveStreamToFirestore(episodeId, server, category, fresh);
       }
       return fresh;
     },
-    STREAM_CACHE_TTL_MS
+    STREAM_CACHE_TTL_MS,
+    hasHls
+    // embed-only: do not cache (emptyTtl omitted) so next request retries HLS
   );
 }
