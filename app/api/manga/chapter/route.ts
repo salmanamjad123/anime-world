@@ -1,6 +1,6 @@
 /**
  * Manga Chapter API Route
- * GET /api/manga/chapter?chapterId=xxx&provider=mangapill
+ * GET /api/manga/chapter?chapterId=xxx&provider=mangadex
  * Returns chapter page images - MangaDex or Consumet (both use Redis → Firestore → API cache)
  */
 
@@ -14,7 +14,7 @@ import {
 export async function GET(request: NextRequest) {
   try {
     const chapterId = request.nextUrl.searchParams.get('chapterId');
-    const provider = request.nextUrl.searchParams.get('provider') || 'mangapill';
+    const provider = request.nextUrl.searchParams.get('provider') || 'mangadex';
     const refresh = request.nextUrl.searchParams.get('refresh') === 'true';
 
     if (!chapterId) {
@@ -28,6 +28,10 @@ export async function GET(request: NextRequest) {
 
     if (isMangaDexChapterId(chapterId) || provider === 'mangadex') {
       pages = await getMangaDexChapterPagesCached(chapterId, refresh);
+      // UUID chapter with empty MD pages: try Consumet only if provider was a scraper
+      if ((!pages || pages.length === 0) && provider !== 'mangadex' && !isMangaDexChapterId(chapterId)) {
+        pages = await getChapterPages(chapterId, provider, refresh);
+      }
     } else {
       pages = await getChapterPages(chapterId, provider, refresh);
     }

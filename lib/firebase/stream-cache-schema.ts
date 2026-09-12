@@ -13,7 +13,7 @@
 import { createHash } from 'crypto';
 
 export const STREAM_CACHE_COLLECTION = 'stream_cache';
-export const STREAM_CACHE_SCHEMA_VERSION = '1.0';
+export const STREAM_CACHE_SCHEMA_VERSION = '1.1';
 
 /** Generate deterministic document ID from lookup key */
 export function toStreamCacheDocId(

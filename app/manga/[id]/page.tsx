@@ -27,7 +27,7 @@ export default function MangaDetailPage() {
   const searchParams = useSearchParams();
   const mangaId = params.id as string;
   const mangadexId = searchParams.get('md');
-  const [provider, setProvider] = useState('mangapill');
+  const [provider, setProvider] = useState('mangadex');
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
 
   const { data: infoData, isLoading: isInfoLoading, isError: isInfoError } = useMangaInfo(mangaId, mangadexId);
@@ -247,7 +247,7 @@ export default function MangaDetailPage() {
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                 <h2 className="text-xl md:text-2xl font-bold text-white">Chapters</h2>
                 <div className="flex gap-2">
-                  {['mangapill', 'mangadex', 'mangareader'].map((p) => (
+                  {['mangadex', 'mangapill', 'mangareader'].map((p) => (
                     <Button
                       key={p}
                       variant={provider === p ? 'primary' : 'ghost'}
@@ -290,7 +290,8 @@ export default function MangaDetailPage() {
                 <div className="text-center py-12">
                   <p className="text-gray-400 mb-2">No chapters available for this provider.</p>
                   <p className="text-gray-500 text-sm mb-2">
-                    Try switching to another provider above. We also try MangaDex automatically.
+                    Try MangaDex or another provider above. Licensed series often need Consumet
+                    scrapers — run docker-compose.consumet.yaml if chapter lists stay empty.
                   </p>
                 </div>
               )}

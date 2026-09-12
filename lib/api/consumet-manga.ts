@@ -102,7 +102,7 @@ export async function getMangaInfo(
         const url = `${CONSUMET_API_URL}/meta/anilist-manga/info/${anilistId}`;
         const response = await axiosInstance.get(url, {
           params: { provider },
-          timeout: 15000,
+          timeout: 6000,
         });
         const data = response.data;
         if (!data) return null;

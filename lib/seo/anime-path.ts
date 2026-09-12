@@ -20,8 +20,20 @@ export function getAnimeDetailPath(
   return `/anime/${getPublicAnimeSegment(String(anime.id), anime.slug)}`;
 }
 
-/** Use AniList id for /watch/{id}/… — episodes API maps to HiAnime reliably from numeric ids */
-export function getWatchAnimeId(anime: { id: string; slug?: string | null } | string): string {
-  if (typeof anime === 'string') return anime;
+/**
+ * AniList numeric id for /watch/{id}/…
+ * Never use HiAnime SEO slugs here — that causes watch remounts and broken episode fetches.
+ */
+export function getWatchAnimeId(
+  anime: { id: string | number; slug?: string | null } | string | number
+): string {
+  if (typeof anime === 'string' || typeof anime === 'number') {
+    return String(anime);
+  }
   return String(anime.id);
+}
+
+/** True when segment is safe for watch routes (AniList numeric id). */
+export function isWatchAnimeId(id: string): boolean {
+  return isAniListNumericId(id);
 }

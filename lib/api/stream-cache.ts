@@ -15,6 +15,7 @@ import {
   type StreamCacheDocument,
 } from '@/lib/firebase/stream-cache-schema';
 import { deleteCacheKey, getCachedWhen } from '@/lib/cache';
+import { isFragileCdnHost } from '@/lib/hls-proxy';
 import type { StreamSourcesResponse } from '@/types';
 
 /** Megaplay/CDN m3u8 links expire quickly — align with streaming-api megaplay cache (~8 min) */
@@ -26,7 +27,7 @@ function toRedisKey(
   server: string,
   category: string
 ): string {
-  return `stream:${episodeId}:${server}:${category}`;
+  return `stream:v2:${episodeId}:${server}:${category}`;
 }
 
 function isCacheExpired(doc: StreamCacheDocument): boolean {
@@ -123,7 +124,13 @@ export async function getStreamFromFirestore(
     if (!doc.exists) return null;
 
     const data = doc.data() as StreamCacheDocument;
-    if (!data?.sources?.length) return null;
+    // Ignore pre-ad-probe cache entries (schema 1.0 stored poisoned megap HLS)
+    if (data?.schemaVersion !== STREAM_CACHE_SCHEMA_VERSION) {
+      await docRef.delete().catch(() => {});
+      return null;
+    }
+    // Embed-only is valid; HLS-only empty was previously required
+    if (!data?.sources?.length && !data?.embedUrl) return null;
 
     if (isCacheExpired(data)) {
       await docRef.delete().catch(() => {});
@@ -199,9 +206,11 @@ export async function getStreamCached(
     await invalidateStreamCache(episodeId, altServer, category);
 
     const fresh = await fetchFn();
-    // Only persist real HLS — embed-only must not stick in Firestore
+    // Only persist real HLS — embed-only / fragile CDNs must not stick in Firestore
     if (
-      fresh?.sources?.some((s) => s?.url?.includes('.m3u8')) &&
+      fresh?.sources?.some(
+        (s) => s?.url?.includes('.m3u8') && !isFragileCdnHost(s.url)
+      ) &&
       isFirebaseAdminConfigured()
     ) {
       await saveStreamToFirestore(episodeId, server, category, fresh);
@@ -211,8 +220,12 @@ export async function getStreamCached(
   }
 
   const redisKey = toRedisKey(episodeId, server, category);
-  const hasHls = (data: StreamSourcesResponse) =>
-    Boolean(data?.sources?.some((s) => s?.url?.includes('.m3u8')));
+  const hasStableHls = (data: StreamSourcesResponse) =>
+    Boolean(
+      data?.sources?.some(
+        (s) => s?.url?.includes('.m3u8') && !isFragileCdnHost(s.url)
+      )
+    );
 
   return getCachedWhen(
     redisKey,
@@ -223,18 +236,19 @@ export async function getStreamCached(
           server,
           category
         );
-        if (fromFirestore) return fromFirestore;
+        // Skip stale fragile CDN links stuck in Firestore
+        if (fromFirestore && hasStableHls(fromFirestore)) return fromFirestore;
       }
 
       const fresh = await fetchFn();
-      // Only persist real HLS — embed-only fallbacks must not stick in cache
-      if (hasHls(fresh) && isFirebaseAdminConfigured()) {
+      // Only persist real HLS — embed-only / fragile CDN fallbacks must not stick
+      if (hasStableHls(fresh) && isFirebaseAdminConfigured()) {
         await saveStreamToFirestore(episodeId, server, category, fresh);
       }
       return fresh;
     },
     STREAM_CACHE_TTL_MS,
-    hasHls
-    // embed-only: do not cache (emptyTtl omitted) so next request retries HLS
+    hasStableHls
+    // embed-only / fragile: do not cache so next request retries HLS
   );
 }

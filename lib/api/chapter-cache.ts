@@ -15,7 +15,7 @@ import {
   toChapterCacheDocId,
   type ChapterCacheDocument,
 } from '@/lib/firebase/chapter-cache-schema';
-import { getCached } from '@/lib/cache';
+import { getCachedWhen } from '@/lib/cache';
 import { CACHE_TTL } from '@/lib/cache';
 import type { MangaChapterPage } from '@/types';
 
@@ -111,7 +111,7 @@ export async function getChapterCached(
     return fresh;
   }
 
-  return getCached(
+  return getCachedWhen(
     redisKey,
     async () => {
       if (useFirestore && isFirebaseAdminConfigured()) {
@@ -125,6 +125,7 @@ export async function getChapterCached(
       }
       return fresh;
     },
-    ttl
+    ttl,
+    (pages) => pages.length > 0
   );
 }
