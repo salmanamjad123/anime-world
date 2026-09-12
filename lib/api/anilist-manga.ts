@@ -18,7 +18,8 @@ import { getMangaDexBrowseList, searchMangaDexAsList } from './mangadex-fallback
 import { searchJikanManga } from './jikan-manga';
 import type { Manga, MangaSearchResult, MangaSearchFallbackSource } from '@/types';
 
-const RATE_LIMIT_RETRY_MS = 60_000;
+const RATE_LIMIT_RETRY_MS = 8_000;
+const RATE_LIMIT_MAX_WAIT_MS = 15_000;
 
 const MANGA_FIELDS = `
   id
@@ -152,8 +153,12 @@ async function executeQuery<T>(
     if (status === 429 && retryCount < 1) {
       const retryAfter = (error as { response?: { headers?: { 'retry-after'?: string } } })
         ?.response?.headers?.['retry-after'];
-      const waitMs = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, 120_000) : RATE_LIMIT_RETRY_MS;
-      console.warn(`[AniList Manga] 429 rate limit - waiting ${waitMs / 1000}s before retry`);
+      const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : RATE_LIMIT_RETRY_MS;
+      const waitMs = Math.min(
+        Number.isNaN(parsed) ? RATE_LIMIT_RETRY_MS : parsed,
+        RATE_LIMIT_MAX_WAIT_MS
+      );
+      console.warn(`[AniList Manga] 429 rate limit - brief wait ${waitMs / 1000}s then retry`);
       await new Promise((r) => setTimeout(r, waitMs));
       return executeQuery<T>(query, variables, retryCount + 1);
     }
