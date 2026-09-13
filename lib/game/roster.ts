@@ -1,6 +1,6 @@
 import type { Art, EnergyId, FactionId, FactionMeta, Fighter } from '@/types/game';
 
-export const RULESET_VERSION = 'v0.9';
+export const RULESET_VERSION = 'v1.1';
 
 export function fighterPortrait(id: string): string {
   return `/game/fighters/${id}.png`;
@@ -66,20 +66,34 @@ function art(
   energy: Art['energy'],
   target: Art['target'],
   effects: Art['effects'],
-  universal?: boolean
+  universalOrOpts?: boolean | { universal?: boolean; persistence?: Art['persistence'] }
 ): Art {
-  return { id, name, description, cooldown, energy, target, effects, universal };
+  const opts =
+    typeof universalOrOpts === 'boolean'
+      ? { universal: universalOrOpts }
+      : universalOrOpts ?? {};
+  return {
+    id,
+    name,
+    description,
+    cooldown,
+    energy,
+    target,
+    effects,
+    universal: opts.universal,
+    persistence: opts.persistence,
+  };
 }
 
 /**
- * Kit pattern (Naruto-Arena inspired) — every fighter gets a *mix*:
- * 1) 1-cost chip attack
- * 2) signature mid (mark / aoe / heal / drain / stun — character flavor)
- * 3) defensive or control tool (dodge / veil / stun / tidebind / shield)
- * 4) expensive finisher
- * Never 4 pure damage buttons — strategy should differ per character.
+ * Kit pattern (Naruto-Arena):
+ * 1) 1-cost chip — CD 0
+ * 2) signature mid — CD 1–2 (stuns never spam every Echo)
+ * 3) dodge/veil — usually 1 Any, CD 4 (NA invul cadence)
+ * 4) finisher — **3 Weave**, CD 3–4 (bank & spike)
+ * `rebalanceKit` enforces the pacing so kits stay strategic.
  */
-export const FIGHTERS: Fighter[] = [
+const RAW_FIGHTERS: Fighter[] = [
   {
     id: 'kenji-orb',
     name: 'Naruto Uzumaki',
@@ -118,8 +132,8 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#f97316',
     skills: [
-      art('cinder-rush', 'Chidori', '1 Strike — 15 pierce.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      art('cinder-rush', 'Chidori', '1 Strike — 15 pierce (ignores DR).', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy', kind: 'pierce' },
       ]),
       art('ember-mark', 'Katon: Goukakyuu', 'Mark (+8 next) and burn seed.', 2, { blood: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
@@ -128,8 +142,8 @@ export const FIGHTERS: Fighter[] = [
       art('chidori-nagashi', 'Sharingan Feint', 'Dodge next hit. Read their move.', 2, { any: 1 }, 'self', [
         { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-      art('fang-break', 'Kirin', '38 damage. Ignores 10 shield.', 4, { strike: 2 }, 'enemy', [
-        { type: 'DAMAGE', amount: 38, target: 'enemy' },
+      art('fang-break', 'Kirin', '38 pierce. Ignores DR.', 4, { strike: 2 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy', kind: 'pierce' },
       ]),
     ],
   },
@@ -201,11 +215,11 @@ export const FIGHTERS: Fighter[] = [
       art('shadow-needle', 'Shadow Needles', '1 Pulse — 12 damage.', 0, { pulse: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 12, target: 'enemy' },
       ]),
-      art('shadow-pin', 'Shadow Possession', '1 Pulse — stun.', 2, { pulse: 1 }, 'enemy', [
+      art('shadow-pin', 'Shadow Possession', '1 Pulse — Control stun.', 2, { pulse: 1 }, 'enemy', [
         { type: 'STUN', echoes: 1, target: 'enemy' },
-      ]),
-      art('plan-two', 'Shadow Strangle', 'Drain 1 Weave (no damage).', 2, { tide: 1 }, 'enemy', [
-        { type: 'DRAIN_WEAVE', amount: 1 },
+      ], { persistence: 'control' }),
+      art('plan-two', 'Shadow Strangle', 'Steal 1 Weave.', 2, { tide: 1 }, 'enemy', [
+        { type: 'STEAL_WEAVE', amount: 1 },
       ]),
       art('checkmate', 'Shadow Neck Bind', '18 damage + stun. IQ win.', 3, { pulse: 1, strike: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 18, target: 'enemy' },
@@ -290,8 +304,8 @@ export const FIGHTERS: Fighter[] = [
         { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
         { type: 'DAMAGE', amount: 6, target: 'random-enemy' },
       ]),
-      art('quiet-kill', 'Amaterasu', '32 damage; burns after.', 3, { blood: 1, pulse: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 32, target: 'enemy' },
+      art('quiet-kill', 'Amaterasu', '32 affliction; burns after.', 3, { blood: 1, pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 32, target: 'enemy', kind: 'affliction' },
         { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
       ]),
     ],
@@ -311,9 +325,9 @@ export const FIGHTERS: Fighter[] = [
       art('stretch-tide', 'Gomu Gomu no Pistol', '1 Tide — 15 punch.', 0, { tide: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
-      art('crew-call', 'Gomu Gomu no Gatling', '7 to all + 8 self shield.', 1, { tide: 1 }, 'all-enemies', [
+      art('crew-call', 'Gomu Gomu no Gatling', '7 to all + 10 DR (2 Echo).', 1, { tide: 1 }, 'all-enemies', [
         { type: 'DAMAGE', amount: 7, target: 'all-enemies' },
-        { type: 'SHIELD', amount: 8, target: 'self' },
+        { type: 'APPLY_STATUS', status: 'dr', echoes: 2, target: 'self', amount: 10 },
       ]),
       art('rubber-dodge', 'Gear Second Step', 'Dodge the next hit.', 2, { any: 1 }, 'self', [
         { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
@@ -335,8 +349,8 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#155e75',
     skills: [
-      art('ram', 'Onigiri', '1 Strike — 18 slash.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 18, target: 'enemy' },
+      art('ram', 'Onigiri', '1 Strike — 15 slash.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
       art('dragon-twister', 'Tatsu Maki', '1 Tide — 9 slash all foes.', 0, { tide: 1 }, 'all-enemies', [
         { type: 'DAMAGE', amount: 9, target: 'all-enemies' },
@@ -361,8 +375,8 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#fb923c',
     skills: [
-      art('spice-burn', 'Diable Jambe', '1 Blood — 14 + burn 1.', 0, { blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      art('spice-burn', 'Diable Jambe', '1 Blood — 14 affliction + burn.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy', kind: 'affliction' },
         { type: 'APPLY_STATUS', status: 'burn', echoes: 1, target: 'enemy' },
       ]),
       art('hot-plate', 'Crew Care', '1 Pulse — heal 20.', 0, { pulse: 1 }, 'ally', [
@@ -418,8 +432,8 @@ export const FIGHTERS: Fighter[] = [
       art('thunderbolt', 'Thunderbolt Tempo', '1 Pulse — 13 lightning.', 0, { pulse: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 13, target: 'enemy' },
       ]),
-      art('harbor', 'Mirage Tempo', '1 Pulse — 14 shield ally.', 0, { pulse: 1 }, 'ally', [
-        { type: 'SHIELD', amount: 14, target: 'ally' },
+      art('harbor', 'Mirage Tempo', '1 Pulse — 8 DR on ally (2 Echo).', 0, { pulse: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'dr', echoes: 2, target: 'ally', amount: 8 },
       ]),
       art('mirage-dodge', 'Mirage Dodge', 'Ally dodges next hit.', 2, { any: 1 }, 'ally', [
         { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'ally' },
@@ -444,8 +458,8 @@ export const FIGHTERS: Fighter[] = [
       art('keel-cut', 'Dos Fleur Slap', '1 Strike — 13.', 0, { strike: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 13, target: 'enemy' },
       ]),
-      art('siphon', 'Cien Fleur Grab', '1 Tide — drain 1 + 8 dmg.', 1, { tide: 1 }, 'enemy', [
-        { type: 'DRAIN_WEAVE', amount: 1 },
+      art('siphon', 'Cien Fleur Grab', '1 Tide — steal 1 + 8 dmg.', 1, { tide: 1 }, 'enemy', [
+        { type: 'STEAL_WEAVE', amount: 1 },
         { type: 'DAMAGE', amount: 8, target: 'enemy' },
       ]),
       art('empty-hold', 'Clutch', 'Stun — flowers pin them.', 2, { pulse: 1 }, 'enemy', [
@@ -468,16 +482,16 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'wins',
     accent: '#5eead4',
     skills: [
-      art('salt-cut', 'Room: Scalpel', '1 Blood — 12 + burn 2.', 0, { blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+      art('salt-cut', 'Room: Scalpel', '1 Blood — 12 affliction + burn 2.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy', kind: 'affliction' },
         { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
       ]),
       art('shambles', 'Shambles', '1 Tide — dodge via Room swap.', 1, { tide: 1 }, 'self', [
         { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-      art('rot-wave', 'Injection Shot', 'Burn all foes.', 2, { blood: 1 }, 'all-enemies', [
+      art('rot-wave', 'Injection Shot', 'Burn all foes (Action DoT seed).', 2, { blood: 1 }, 'all-enemies', [
         { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'all-enemies' },
-      ]),
+      ], { persistence: 'action' }),
       art('open-water', 'Gamma Knife', '28 to a burning foe.', 3, { blood: 1, tide: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 28, target: 'enemy' },
       ]),
@@ -769,8 +783,8 @@ export const FIGHTERS: Fighter[] = [
       art('kick-box', 'Bamboo Kick', '1 Strike — 14.', 0, { strike: 1 }, 'enemy', [
         { type: 'DAMAGE', amount: 14, target: 'enemy' },
       ]),
-      art('blood-burst', 'Exploding Blood', 'Burn + 12 pyrokinesis.', 1, { blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+      art('blood-burst', 'Exploding Blood', 'Burn + 12 affliction.', 1, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy', kind: 'affliction' },
         { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
       ]),
       art('grow-size', 'Demon Size', '12 self shield — grow.', 2, { any: 1 }, 'self', [
@@ -1063,8 +1077,8 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#f97316',
     skills: [
-      art('getsuga', 'Getsuga Tensho', '1 Strike — 16 crescent.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      art('getsuga', 'Getsuga Tensho', '1 Strike — 16 pierce crescent.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy', kind: 'pierce' },
       ]),
       art('bankai-rush', 'Tensa Zangetsu', 'Mark + 16 Bankai rush.', 1, { strike: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
@@ -1210,6 +1224,113 @@ export const FIGHTERS: Fighter[] = [
     ],
   },
 ];
+
+function energyTotal(energy: Art['energy']): number {
+  return (Object.values(energy) as number[]).reduce((sum, n) => sum + (n ?? 0), 0);
+}
+
+function primaryColor(energy: Art['energy'], fallback: EnergyId): EnergyId {
+  const keys = (Object.keys(energy) as EnergyId[]).filter((key) => key !== 'any' && (energy[key] ?? 0) > 0);
+  return keys[0] ?? fallback;
+}
+
+function ensureThreeChakra(energy: Art['energy'], preferred: EnergyId): Art['energy'] {
+  const next: Art['energy'] = { ...energy };
+  const grow = preferred === 'any' ? 'strike' : preferred;
+  let total = energyTotal(next);
+  while (total < 3) {
+    if (total === 2) {
+      next.any = (next.any ?? 0) + 1;
+    } else {
+      next[grow] = (next[grow] ?? 0) + 1;
+    }
+    total = energyTotal(next);
+  }
+  return next;
+}
+
+function costWords(energy: Art['energy']): string {
+  const parts: string[] = [];
+  (['strike', 'tide', 'pulse', 'blood', 'any'] as EnergyId[]).forEach((id) => {
+    const n = energy[id] ?? 0;
+    if (n <= 0) return;
+    const label = ENERGY_META[id].label;
+    parts.push(n === 1 ? `1 ${label}` : `${n} ${label}`);
+  });
+  return parts.join(' + ') || 'free';
+}
+
+function rebalanceArt(art: Art, slot: number, faction: FactionId): Art {
+  const energy = { ...art.energy };
+  let cooldown = art.cooldown;
+  const isDodgeOrVeil = art.effects.some(
+    (effect) =>
+      effect.type === 'APPLY_STATUS' && (effect.status === 'dodge' || effect.status === 'veil')
+  );
+  const isStun = art.effects.some((effect) => effect.type === 'STUN');
+  const heal = art.effects.find((effect) => effect.type === 'HEAL');
+  const bigHeal = heal && heal.type === 'HEAL' && heal.amount >= 20;
+  const damage = art.effects.find((effect) => effect.type === 'DAMAGE');
+  const strongHit = damage && damage.type === 'DAMAGE' && damage.amount >= 18;
+  const factionColor: EnergyId =
+    faction === 'tide' ? 'tide' : faction === 'pulse' || faction === 'soul' ? 'pulse' : faction === 'blade' ? 'blood' : 'strike';
+
+  // Slot 0 chip: keep cheap & spamable.
+  if (slot === 0) {
+    cooldown = 0;
+    if (energyTotal(energy) === 0) energy[factionColor] = 1;
+  }
+
+  // Slot 1 signature: light CD so mid tools aren't free every Echo.
+  if (slot === 1) {
+    if (isStun) cooldown = Math.max(cooldown, 2);
+    else if (bigHeal) cooldown = Math.max(cooldown, 1);
+    else if (strongHit) cooldown = Math.max(cooldown, 1);
+    else cooldown = Math.max(cooldown, 1);
+  }
+
+  // Defense / dodge / veil — NA invul is typically CD 4.
+  if (isDodgeOrVeil) {
+    cooldown = Math.max(cooldown, 4);
+    if (energyTotal(energy) < 1) energy.any = 1;
+  } else if (slot === 2 && isStun) {
+    cooldown = Math.max(cooldown, 2);
+  }
+
+  // Finishers: 3 chakra + multi-Echo lockout (can't fire two turns in a row).
+  if (slot === 3) {
+    cooldown = Math.max(cooldown, 3);
+    const preferred = primaryColor(energy, factionColor);
+    Object.assign(energy, ensureThreeChakra(energy, preferred));
+  }
+
+  // Hard floor: any stun art CD ≥ 2 (no stun every Echo).
+  if (isStun) cooldown = Math.max(cooldown, 2);
+  // Big single heals can't be free every turn.
+  if (bigHeal) cooldown = Math.max(cooldown, slot === 0 ? 0 : 1);
+
+  let description = art.description;
+  if (slot === 3) {
+    description = `${art.description.replace(/\.\s*$/, '')} · ${costWords(energy)} · CD ${cooldown}.`;
+  } else if (isDodgeOrVeil && cooldown >= 4) {
+    description = `${art.description.replace(/\.\s*$/, '')} · CD ${cooldown} (no chain).`;
+  }
+
+  return {
+    ...art,
+    energy,
+    cooldown,
+    description: description.trim(),
+  };
+}
+
+function rebalanceFighter(fighter: Fighter): Fighter {
+  const skills = fighter.skills.map((skill, slot) => rebalanceArt(skill, slot, fighter.faction)) as Fighter['skills'];
+  return { ...fighter, skills };
+}
+
+/** Balanced NA-style kits (3-cost finishers, CD locks on defense/stun). */
+export const FIGHTERS: Fighter[] = RAW_FIGHTERS.map(rebalanceFighter);
 
 export const FIGHTER_BY_ID: Record<string, Fighter> = Object.fromEntries(
   FIGHTERS.map((fighter) => [fighter.id, fighter])

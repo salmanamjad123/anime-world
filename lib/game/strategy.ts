@@ -12,8 +12,10 @@ export function lobbyStrategyTips(fighters: Fighter[], validation: TeamValidatio
   const tips: string[] = [];
   const roles = new Set(fighters.map((fighter) => fighter.role));
 
-  tips.push('Each Echo: +2 mixed jutsu energy. Leftovers bank until spent (cap 10) — wait for the right color like Naruto Arena.');
-  tips.push('Most openers cost 1 pip. Finishers cost more. Dodge avoids the next hit completely.');
+  tips.push(
+    'Ash Rule + living Weave: first side opens with 1, second with 3; later 1 pip per living ally. Bank for 3-cost finishers (CD 3–4).'
+  );
+  tips.push('Dodge/veil is CD 4 — spend it to survive a spike, not every Echo. Stuns need 2+ Echoes before reuse.');
 
   if (validation.resonance === 'none' && fighters.length === 3) {
     tips.push('Pair two of one faction for +5 damage, run three for Trinity shred, or split all three for Chaos Weave.');
@@ -69,20 +71,26 @@ export function battleStrategyTip(match: MatchState, sideId: SideId): string {
   if (bloodiedAlly) {
     return `${getFighter(bloodiedAlly)?.name ?? 'Your fighter'} is bloodied (+20% damage) but fragile. Heal or Guard now.`;
   }
+  if (mine.weave.length >= 5 && mine.weave.length < 8) {
+    return 'Banking for a 3-cost spike? Hold one more Echo — or Exchange 5→1 if colors are wrong.';
+  }
   if (mine.weave.length >= WEAVE_CAP) {
     return `Jutsu bank is full (${WEAVE_CAP}). Spend — unused energy stays, but new grants won't fit.`;
+  }
+  if (mine.weave.length >= 5) {
+    return 'Wrong colors? Exchange 5 Weave for 1 Strike, Tide, Pulse, or Blood from the bank header.';
   }
   if (stunnedFoe) {
     return 'They are stunned — their next arts can fizzle. Dump damage on that seal.';
   }
   if (granted.length && mine.weave.length < 3) {
-    return 'Thin bank — chip or heal this turn; save for a 2–3 pip finisher next Echo.';
+    return 'Thin bank — chip or pass pressure; save for a 3-Weave finisher next Echo.';
   }
-  if (mine.queue.length === 1) {
-    return 'One art is a telegraph. Add a stun, a heal, or a second hit on the same seal.';
+  if (mine.queue.length === 1 && myLiving.length > 1) {
+    return 'One fighter queued — each ally can still add 1 jutsu before you Attack.';
   }
   if (match.echo >= match.maxEcho - 1) {
     return 'Last Echoes: higher total HP wins if nobody is sealed. Chip the healthiest foe.';
   }
-  return 'Control first (stun / bind / veil), then damage. Heal when under half — otherwise push a seal.';
+  return 'Bank → dodge on CD 4 → 3-cost spike. Stun/control first, then finish a seal.';
 }

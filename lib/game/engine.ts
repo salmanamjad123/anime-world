@@ -1,4 +1,4 @@
-import type { Art, Effect, EnergyId, TargetKind } from '@/types/game';
+import type { Art, DamageKind, Effect, EnergyId, TargetKind } from '@/types/game';
 import { ENERGY_META, findGuardArt, getFighter, getFighterArts, TEAM_SIZE } from '@/lib/game/roster';
 import { getResonance } from '@/lib/game/team-rules';
 
@@ -8,6 +8,20 @@ export type QueuedArt = {
   fighterId: string;
   artId: string;
   targetId: string | null;
+};
+
+/** Multi-echo Action/Control channel (NA-style persistence). */
+export type Channel = {
+  id: string;
+  persistence: 'action' | 'control';
+  sourceSide: SideId;
+  sourceId: string;
+  targetSide: SideId;
+  targetId: string;
+  amount: number;
+  kind: DamageKind;
+  remaining: number;
+  label: string;
 };
 
 export type UnitState = {
@@ -23,6 +37,10 @@ export type UnitState = {
   mark: number;
   burn: number;
   tidebind: number;
+  /** Remaining Echoes of flat damage reduction. */
+  dr: number;
+  /** Flat damage reduction while `dr` > 0. */
+  drAmount: number;
 };
 
 export type SideState = {
@@ -60,9 +78,11 @@ export type MatchState = {
   endReason: 'seal' | 'echo-cap' | 'surrender' | 'draw' | null;
   /** Last Weave pips granted this Echo (for UI: bank and wait). */
   lastGranted: Record<SideId, EnergyId[]>;
+  /** Action / Control damage channels. */
+  channels: Channel[];
 };
 
-export const ECHO_SECONDS = 22;
+export const ECHO_SECONDS = 60;
 export const MAX_ECHO = 12;
 /** Max banked Weave. Unused pips never expire — only spend or refuse new grants when full. */
 export const WEAVE_CAP = 10;
@@ -71,6 +91,8 @@ export const VEIL_COUNTER = 10;
 export const COMBO_BONUS = 6;
 export const FOCUS_BONUS = 8;
 export const TRINITY_SHRED = 10;
+/** Trade this many banked pips for 1 chosen color (Naruto-Arena exchange). */
+export const WEAVE_EXCHANGE_COST = 5;
 const COLORED: EnergyId[] = ['strike', 'tide', 'pulse', 'blood'];
 
 export function mulberry32(seed: number) {
@@ -102,6 +124,8 @@ function makeUnit(id: string): UnitState {
     mark: 0,
     burn: 0,
     tidebind: 0,
+    dr: 0,
+    drAmount: 0,
   };
 }
 
@@ -200,13 +224,16 @@ export function createMatch(playerIds: string[], foeIds: string[], seed = Date.n
       player: makeSide(playerIds),
       foe: makeSide(foeIds),
     },
-    log: ['Echo 1 — +2 mixed jutsu energy each turn. Unused energy banks. Spend when ready.'],
+    log: [
+      'Echo 1 — Ash Rule: first side gets 1 Weave, second gets 3. Bank for 3-cost finishers. 60s per turn.',
+    ],
     winner: null,
     seed,
     lastCasterId: playerIds[0] ?? null,
     combatEvents: [],
     endReason: null,
     lastGranted: { player: [], foe: [] },
+    channels: [],
   };
 
   fillWeave(state, rng);
@@ -216,16 +243,24 @@ export function createMatch(playerIds: string[], foeIds: string[], seed = Date.n
 function fillWeave(state: MatchState, rng: () => number) {
   (['player', 'foe'] as SideId[]).forEach((sideId) => {
     const side = state.sides[sideId];
+    const alive = livingIds(side).length;
     const bound = livingIds(side).filter((id) => side.units[id].tidebind > 0).length;
     const fighters = livingIds(side).map((id) => getFighter(id)!).filter(Boolean);
     const chaos = getResonance(fighters) === 'chaos';
-    // Naruto-Arena style: +2 mixed jutsu energy each Echo; leftovers stay until spent.
-    // Never drop old pips — only grant what fits under the cap. Tidebind cuts the grant;
-    // Chaos Resonance still adds +1 Any when there is room.
     const room = Math.max(0, WEAVE_CAP - side.weave.length);
-    let grant = Math.min(2, room);
-    if (bound > 0 && grant > 0) grant = Math.max(1, grant - Math.min(bound, 1));
-    if (grant === 0 && room === 0) {
+    // Naruto-Arena Ash Rule: first actor Echo 1 = 1; second actor Echo 1 = 3.
+    // Later Echoes: 1 random pip per living ally.
+    let grant: number;
+    if (state.echo <= 1) {
+      grant = sideId === 'player' ? 1 : 3;
+    } else {
+      grant = alive;
+    }
+    grant = Math.min(grant, room);
+    if (bound > 0 && grant > 0 && state.echo > 1) {
+      grant = Math.max(1, grant - Math.min(bound, 1));
+    }
+    if (grant === 0) {
       state.lastGranted[sideId] = [];
       side.drainedThisEcho = false;
       return;
@@ -239,7 +274,12 @@ function fillWeave(state: MatchState, rng: () => number) {
 }
 
 function isControlEffect(effect: Effect): boolean {
-  return effect.type === 'STUN' || effect.type === 'DRAIN_WEAVE' || effect.type === 'APPLY_STATUS';
+  return (
+    effect.type === 'STUN' ||
+    effect.type === 'DRAIN_WEAVE' ||
+    effect.type === 'STEAL_WEAVE' ||
+    effect.type === 'APPLY_STATUS'
+  );
 }
 
 function factionCombo(side: SideState): boolean {
@@ -322,6 +362,9 @@ export function queueError(
   if (side.queue.some((item) => item.fighterId === fighterId && item.artId === artId)) {
     return 'Already queued.';
   }
+  if (side.queue.some((item) => item.fighterId === fighterId)) {
+    return 'Each fighter can use only 1 jutsu per Echo.';
+  }
   const art = artById(fighterId, artId);
   if (!art) return 'Unknown art.';
   if (!canAfford(remainingWeaveAfterQueue(side), art.energy)) return 'Not enough Weave.';
@@ -335,6 +378,37 @@ export function queueError(
     }
   }
   return null;
+}
+
+/** Trade WEAVE_EXCHANGE_COST banked pips for 1 chosen color (Naruto-Arena exchange). */
+export function exchangeWeave(
+  state: MatchState,
+  sideId: SideId,
+  want: EnergyId
+): MatchState {
+  const next = clone(state);
+  if ((next.activeSide ?? 'player') !== sideId) {
+    next.log = [...next.log.slice(-8), "Not your turn."];
+    return next;
+  }
+  if (!COLORED.includes(want) && want !== 'any') {
+    next.log = [...next.log.slice(-8), 'Pick Strike, Tide, Pulse, or Blood.'];
+    return next;
+  }
+  const side = next.sides[sideId];
+  if (side.locked) {
+    next.log = [...next.log.slice(-8), 'Already locked.'];
+    return next;
+  }
+  if (side.weave.length < WEAVE_EXCHANGE_COST) {
+    next.log = [...next.log.slice(-8), `Need ${WEAVE_EXCHANGE_COST} Weave to exchange.`];
+    return next;
+  }
+  const color = want === 'any' ? 'strike' : want;
+  side.weave = side.weave.slice(WEAVE_EXCHANGE_COST);
+  side.weave.push(color);
+  next.log = [...next.log.slice(-8), `Exchanged ${WEAVE_EXCHANGE_COST} → 1 ${ENERGY_META[color]?.label ?? color}.`];
+  return next;
 }
 
 export function remainingWeaveAfterQueue(side: SideState): EnergyId[] {
@@ -433,7 +507,7 @@ export function pickBotQueue(state: MatchState, rng: () => number): MatchState {
       }
       if (art.target === 'self') targetId = fighterId;
       side.queue.push({ fighterId, artId: art.id, targetId });
-      if (side.queue.length >= 3) break;
+      break; // Naruto-Arena: one jutsu per fighter per Echo
     }
   }
 
@@ -512,6 +586,25 @@ function applyEffect(
     return lines;
   }
 
+  if (effect.type === 'STEAL_WEAVE') {
+    const foe = state.sides[otherSide(sourceSide)];
+    const stolen: EnergyId[] = [];
+    for (let i = 0; i < effect.amount; i += 1) {
+      const pip = foe.weave.pop();
+      if (!pip) break;
+      stolen.push(pip);
+    }
+    if (stolen.length) {
+      allies.weave = [...allies.weave, ...stolen].slice(-WEAVE_CAP);
+      allies.drainedThisEcho = true;
+      pushEvent(ctx, { kind: 'drain', sourceSide, targetSide: otherSide(sourceSide), fighterId: sourceId, amount: stolen.length });
+      lines.push(`${sourceFighter?.name} stole ${stolen.length} Weave.`);
+    } else {
+      lines.push(`${sourceFighter?.name} found no Weave to steal.`);
+    }
+    return lines;
+  }
+
   for (const targetId of targetIds) {
     const targetSideId: SideId = allies.units[targetId] ? sourceSide : otherSide(sourceSide);
     const unit = state.sides[targetSideId].units[targetId];
@@ -519,6 +612,7 @@ function applyEffect(
     const name = getFighter(targetId)?.name ?? targetId;
 
     if (effect.type === 'HEAL') {
+      if (unit.hp <= 0) continue;
       const before = unit.hp;
       unit.hp = Math.min(unit.maxHp, unit.hp + effect.amount);
       const healed = unit.hp - before;
@@ -539,81 +633,161 @@ function applyEffect(
       lines.push(`${name} is stunned.`);
     }
     if (effect.type === 'APPLY_STATUS') {
-      const key = effect.status;
-      unit[key] = Math.max(unit[key] ?? 0, effect.echoes);
-      if (effect.status === 'veil') {
-        pushEvent(ctx, { kind: 'veil', sourceSide, targetSide: targetSideId, fighterId: targetId });
-      }
-      if (effect.status === 'dodge') {
-        pushEvent(ctx, { kind: 'dodge', sourceSide, targetSide: targetSideId, fighterId: targetId });
-        lines.push(`${name} is ready to dodge.`);
+      if (effect.status === 'dr') {
+        unit.dr = Math.max(unit.dr, effect.echoes);
+        unit.drAmount = Math.max(unit.drAmount, effect.amount ?? 8);
+        lines.push(`${name} gained ${unit.drAmount} damage reduction (${unit.dr} Echo).`);
       } else {
-        lines.push(`${name} gained ${effect.status}.`);
+        const key = effect.status;
+        unit[key] = Math.max(unit[key] ?? 0, effect.echoes);
+        if (effect.status === 'veil') {
+          pushEvent(ctx, { kind: 'veil', sourceSide, targetSide: targetSideId, fighterId: targetId });
+        }
+        if (effect.status === 'dodge') {
+          pushEvent(ctx, { kind: 'dodge', sourceSide, targetSide: targetSideId, fighterId: targetId });
+          lines.push(`${name} is ready to dodge.`);
+        } else {
+          lines.push(`${name} gained ${effect.status}.`);
+        }
       }
     }
     if (effect.type === 'DAMAGE') {
+      const persistence = art.persistence ?? 'instant';
+      const kind: DamageKind = effect.kind ?? 'normal';
       pushEvent(ctx, { kind: 'attack', sourceSide, targetSide: targetSideId, fighterId: sourceId });
-      if ((unit.dodge ?? 0) > 0) {
-        unit.dodge = Math.max(0, (unit.dodge ?? 1) - 1);
-        pushEvent(ctx, { kind: 'dodge', sourceSide: targetSideId, targetSide: sourceSide, fighterId: targetId });
-        lines.push(`${name} dodged ${sourceFighter?.name}'s hit!`);
-        continue;
+
+      if (persistence === 'action' || persistence === 'control') {
+        state.channels = state.channels ?? [];
+        state.channels.push({
+          id: `${art.id}-${sourceId}-${targetId}-${state.echo}`,
+          persistence,
+          sourceSide,
+          sourceId,
+          targetSide: targetSideId,
+          targetId,
+          amount: Math.max(1, Math.round((effect.amount + bonus) * 0.55)),
+          kind,
+          remaining: Math.max(2, Math.min(4, art.cooldown || 3)),
+          label: art.name,
+        });
+        lines.push(`${sourceFighter?.name} began ${art.name} on ${name} (${persistence}).`);
       }
-      if (unit.veil > 0) {
-        lines.push(`${name}'s Aegis held.`);
-        pushEvent(ctx, { kind: 'block', sourceSide, targetSide: targetSideId, fighterId: targetId });
-        if (sourceUnit && sourceUnit.hp > 0) {
-          let counter = VEIL_COUNTER;
-          const absorbed = Math.min(sourceUnit.shield, counter);
-          sourceUnit.shield -= absorbed;
-          counter -= absorbed;
-          sourceUnit.hp = Math.max(0, sourceUnit.hp - counter);
-          pushEvent(ctx, { kind: 'hit', sourceSide: targetSideId, targetSide: sourceSide, fighterId: sourceId, amount: VEIL_COUNTER });
-          lines.push(`${sourceFighter?.name} ate ${VEIL_COUNTER} veil counter.`);
-          if (sourceUnit.hp <= 0) {
-            pushEvent(ctx, { kind: 'seal', sourceSide: targetSideId, targetSide: sourceSide, fighterId: sourceId });
-            lines.push(`${sourceFighter?.name} is sealed.`);
-          }
-        }
-        continue;
-      }
-      if (art.id === 'black-prize' && !allies.drainedThisEcho) {
-        lines.push(`${sourceFighter?.name}'s Black Prize fizzled — no drain this Echo.`);
-        continue;
-      }
-      let amount = effect.amount + bonus;
-      if (ctx.combo[sourceSide]) amount += COMBO_BONUS;
-      if ((sourceUnit?.hp ?? 100) <= BLOODIED_HP) amount = Math.round(amount * 1.2);
-      if ((sourceUnit?.tidebind ?? 0) > 0) amount = Math.round(amount * 0.75);
-      const priorHits = ctx.hitsOn[targetId] ?? 0;
-      if (priorHits > 0) amount += FOCUS_BONUS;
-      const marked = unit.mark > 0;
-      if (marked) {
-        amount += 8;
-        unit.mark = 0;
-      }
-      if (art.id === 'open-water' && unit.burn > 0) amount += 10;
-      if (art.id === 'second-cut' && marked) amount += 8;
-      if (art.id === 'true-name') unit.shield = Math.max(0, unit.shield - 12);
-      if (art.id === 'tap' || art.id === 'shatter-note' || art.id === 'hollow-palm') unit.shield = 0;
-      let incoming = amount;
-      if (art.id === 'fang-break') incoming = Math.max(0, incoming - Math.min(10, unit.shield));
-      if (ctx.firstDamage[sourceSide] && resonance === 'trinity') {
-        incoming = Math.max(0, incoming - Math.min(TRINITY_SHRED, unit.shield));
-      }
-      ctx.firstDamage[sourceSide] = false;
-      ctx.hitsOn[targetId] = priorHits + 1;
-      const absorbed = Math.min(unit.shield, incoming);
-      unit.shield -= absorbed;
-      incoming -= absorbed;
-      unit.hp = Math.max(0, unit.hp - incoming);
-      pushEvent(ctx, { kind: 'hit', sourceSide, targetSide: targetSideId, fighterId: targetId, amount });
-      lines.push(`${sourceFighter?.name} hit ${name} for ${amount}${absorbed ? ` (${absorbed} shielded)` : ''}.`);
-      if (unit.hp <= 0) {
-        pushEvent(ctx, { kind: 'seal', sourceSide, targetSide: targetSideId, fighterId: targetId });
-        lines.push(`${name} is sealed.`);
+
+      lines.push(
+        ...dealDamage(state, sourceSide, sourceId, targetSideId, targetId, effect.amount + bonus, kind, art, ctx)
+      );
+    }
+  }
+  return lines;
+}
+
+function dealDamage(
+  state: MatchState,
+  sourceSide: SideId,
+  sourceId: string,
+  targetSideId: SideId,
+  targetId: string,
+  baseAmount: number,
+  kind: DamageKind,
+  art: Art,
+  ctx: ResolveCtx
+): string[] {
+  const lines: string[] = [];
+  const allies = state.sides[sourceSide];
+  const sourceUnit = allies.units[sourceId];
+  const sourceFighter = getFighter(sourceId);
+  const unit = state.sides[targetSideId].units[targetId];
+  if (!unit || unit.hp <= 0) return lines;
+  const name = getFighter(targetId)?.name ?? targetId;
+  const resonance = getResonance(allies.fighterIds.map((id) => getFighter(id)!).filter(Boolean));
+
+  if ((unit.dodge ?? 0) > 0 && kind !== 'affliction') {
+    unit.dodge = Math.max(0, (unit.dodge ?? 1) - 1);
+    pushEvent(ctx, { kind: 'dodge', sourceSide: targetSideId, targetSide: sourceSide, fighterId: targetId });
+    lines.push(`${name} dodged ${sourceFighter?.name}'s hit!`);
+    return lines;
+  }
+  if (unit.veil > 0 && kind !== 'affliction') {
+    lines.push(`${name}'s Aegis held.`);
+    pushEvent(ctx, { kind: 'block', sourceSide, targetSide: targetSideId, fighterId: targetId });
+    if (sourceUnit && sourceUnit.hp > 0) {
+      let counter = VEIL_COUNTER;
+      const absorbed = Math.min(sourceUnit.shield, counter);
+      sourceUnit.shield -= absorbed;
+      counter -= absorbed;
+      sourceUnit.hp = Math.max(0, sourceUnit.hp - counter);
+      pushEvent(ctx, { kind: 'hit', sourceSide: targetSideId, targetSide: sourceSide, fighterId: sourceId, amount: VEIL_COUNTER });
+      lines.push(`${sourceFighter?.name} ate ${VEIL_COUNTER} veil counter.`);
+      if (sourceUnit.hp <= 0) {
+        pushEvent(ctx, { kind: 'seal', sourceSide: targetSideId, targetSide: sourceSide, fighterId: sourceId });
+        lines.push(`${sourceFighter?.name} is sealed.`);
       }
     }
+    return lines;
+  }
+  if (art.id === 'black-prize' && !allies.drainedThisEcho) {
+    lines.push(`${sourceFighter?.name}'s Black Prize fizzled — no drain this Echo.`);
+    return lines;
+  }
+
+  let amount = baseAmount;
+  if (ctx.combo[sourceSide]) amount += COMBO_BONUS;
+  if ((sourceUnit?.hp ?? 100) <= BLOODIED_HP) amount = Math.round(amount * 1.2);
+  if ((sourceUnit?.tidebind ?? 0) > 0) amount = Math.round(amount * 0.75);
+  const priorHits = ctx.hitsOn[targetId] ?? 0;
+  if (priorHits > 0) amount += FOCUS_BONUS;
+  const marked = unit.mark > 0;
+  if (marked) {
+    amount += 8;
+    unit.mark = 0;
+  }
+  if (art.id === 'open-water' && unit.burn > 0) amount += 10;
+  if (art.id === 'second-cut' && marked) amount += 8;
+  if (art.id === 'true-name' && kind === 'normal') unit.shield = Math.max(0, unit.shield - 12);
+  if ((art.id === 'tap' || art.id === 'shatter-note' || art.id === 'hollow-palm') && kind !== 'affliction') {
+    unit.shield = 0;
+  }
+
+  // Damage reduction (ignored by pierce + affliction).
+  if (kind === 'normal' && unit.dr > 0 && unit.drAmount > 0) {
+    amount = Math.max(0, amount - unit.drAmount);
+  }
+
+  let incoming = amount;
+  if (art.id === 'fang-break' && kind === 'normal') incoming = Math.max(0, incoming - Math.min(10, unit.shield));
+  if (ctx.firstDamage[sourceSide] && resonance === 'trinity' && kind === 'normal') {
+    incoming = Math.max(0, incoming - Math.min(TRINITY_SHRED, unit.shield));
+  }
+  ctx.firstDamage[sourceSide] = false;
+  ctx.hitsOn[targetId] = priorHits + 1;
+
+  let absorbed = 0;
+  if (kind === 'affliction') {
+    // Affliction ignores destructible defense (shield) and DR.
+  } else if (kind === 'pierce') {
+    // Pierce ignores DR but still hits shield.
+    absorbed = Math.min(unit.shield, incoming);
+    unit.shield -= absorbed;
+    incoming -= absorbed;
+  } else {
+    absorbed = Math.min(unit.shield, incoming);
+    unit.shield -= absorbed;
+    incoming -= absorbed;
+  }
+
+  unit.hp = Math.max(0, unit.hp - incoming);
+  pushEvent(ctx, { kind: 'hit', sourceSide, targetSide: targetSideId, fighterId: targetId, amount });
+  const tag = kind === 'affliction' ? ' affliction' : kind === 'pierce' ? ' pierce' : '';
+  lines.push(
+    `${sourceFighter?.name} hit ${name} for ${amount}${tag}${absorbed ? ` (${absorbed} shielded)` : ''}.`
+  );
+  if (unit.hp <= 0) {
+    pushEvent(ctx, { kind: 'seal', sourceSide, targetSide: targetSideId, fighterId: targetId });
+    lines.push(`${name} is sealed.`);
+    // Control channels break when target is sealed.
+    state.channels = (state.channels ?? []).filter(
+      (ch) => !(ch.persistence === 'control' && (ch.targetId === targetId || ch.sourceId === targetId))
+    );
   }
   return lines;
 }
@@ -714,6 +888,55 @@ function checkWinnerAfterResolve(state: MatchState): boolean {
 }
 
 function tickStatuses(state: MatchState) {
+  // Tick Action/Control channels first.
+  const nextChannels: Channel[] = [];
+  for (const channel of state.channels ?? []) {
+    const source = state.sides[channel.sourceSide].units[channel.sourceId];
+    const target = state.sides[channel.targetSide].units[channel.targetId];
+    if (!source || source.hp <= 0) continue;
+    if (!target || target.hp <= 0) continue;
+    if (channel.persistence === 'action' && source.stun > 0) {
+      state.log.push(`${channel.label} paused (caster stunned).`);
+      nextChannels.push({ ...channel, remaining: channel.remaining });
+      continue;
+    }
+    if (channel.persistence === 'control' && source.stun > 0) {
+      state.log.push(`${channel.label} broke (control interrupted).`);
+      continue;
+    }
+    const fakeArt = {
+      id: channel.id,
+      name: channel.label,
+      description: '',
+      cooldown: 0,
+      energy: {},
+      target: 'enemy' as const,
+      effects: [],
+    };
+    const ctx: ResolveCtx = {
+      combo: { player: false, foe: false },
+      hitsOn: {},
+      firstDamage: { player: false, foe: false },
+      events: state.combatEvents,
+    };
+    state.log.push(
+      ...dealDamage(
+        state,
+        channel.sourceSide,
+        channel.sourceId,
+        channel.targetSide,
+        channel.targetId,
+        channel.amount,
+        channel.kind,
+        fakeArt,
+        ctx
+      )
+    );
+    const remaining = channel.remaining - 1;
+    if (remaining > 0) nextChannels.push({ ...channel, remaining });
+  }
+  state.channels = nextChannels;
+
   (['player', 'foe'] as SideId[]).forEach((sideId) => {
     const side = state.sides[sideId];
     for (const id of side.fighterIds) {
@@ -723,18 +946,26 @@ function tickStatuses(state: MatchState) {
         unit.stun = 0;
         unit.veil = 0;
         unit.dodge = 0;
+        unit.dr = 0;
+        unit.drAmount = 0;
         continue;
       }
       if (unit.burn > 0) {
+        // Affliction burn — ignores shield.
         unit.hp = Math.max(0, unit.hp - 6);
-        state.log.push(`${getFighter(id)?.name} burned for 6.`);
+        state.log.push(`${getFighter(id)?.name} burned for 6 (affliction).`);
         unit.burn -= 1;
+        if (unit.hp <= 0) state.log.push(`${getFighter(id)?.name} is sealed.`);
       }
       if (unit.stun > 0) unit.stun -= 1;
       if (unit.veil > 0) unit.veil -= 1;
       if ((unit.dodge ?? 0) > 0) unit.dodge -= 1;
       if (unit.mark > 0) unit.mark -= 1;
       if (unit.tidebind > 0) unit.tidebind -= 1;
+      if (unit.dr > 0) {
+        unit.dr -= 1;
+        if (unit.dr <= 0) unit.drAmount = 0;
+      }
       for (const [artId, cd] of Object.entries(unit.cooldowns)) {
         unit.cooldowns[artId] = Math.max(0, cd - 1);
       }

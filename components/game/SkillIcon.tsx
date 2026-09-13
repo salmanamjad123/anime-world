@@ -17,9 +17,9 @@ export function skillFamily(art: Art): SkillFamily {
   if (types.has('HEAL')) return 'heal';
   if (types.has('SHIELD')) return 'shield';
   if (types.has('STUN')) return 'stun';
-  if (types.has('DRAIN_WEAVE')) return 'drain';
+  if (types.has('DRAIN_WEAVE') || types.has('STEAL_WEAVE')) return 'drain';
   if (types.has('APPLY_STATUS')) {
-    if (art.effects.some((effect) => effect.type === 'APPLY_STATUS' && effect.status === 'veil')) {
+    if (art.effects.some((effect) => effect.type === 'APPLY_STATUS' && (effect.status === 'veil' || effect.status === 'dr'))) {
       return 'defend';
     }
     return 'status';
@@ -140,13 +140,22 @@ export function SkillIcon({ art, size = 44, active, dim, cooldown = 0, className
 }
 
 export function describeArtEffects(art: Art): string[] {
-  return art.effects.map((effect) => effectLine(effect));
+  const lines = art.effects.map((effect) => effectLine(effect));
+  if (art.persistence === 'action') {
+    lines.push('Action: keeps ticking each Echo unless the caster is stunned.');
+  }
+  if (art.persistence === 'control') {
+    lines.push('Control: bond persists until the caster or target is sealed.');
+  }
+  return lines;
 }
 
 function effectLine(effect: Effect): string {
   switch (effect.type) {
-    case 'DAMAGE':
-      return `Deals ${effect.amount} damage to ${targetWords(effect.target)}.`;
+    case 'DAMAGE': {
+      const kind = effect.kind === 'pierce' ? ' pierce' : effect.kind === 'affliction' ? ' affliction' : '';
+      return `Deals ${effect.amount}${kind} damage to ${targetWords(effect.target)}.`;
+    }
     case 'HEAL':
       return `Heals ${effect.amount} HP on ${targetWords(effect.target)}.`;
     case 'SHIELD':
@@ -155,12 +164,17 @@ function effectLine(effect: Effect): string {
       return `Stuns ${targetWords(effect.target)} for ${effect.echoes} Echo (their queued arts fizzle).`;
     case 'DRAIN_WEAVE':
       return `Drains ${effect.amount} Weave from the enemy bank.`;
+    case 'STEAL_WEAVE':
+      return `Steals ${effect.amount} Weave from the enemy bank into yours.`;
     case 'APPLY_STATUS':
       if (effect.status === 'dodge') {
         return `Grants dodge — the next damaging hit on ${targetWords(effect.target)} is fully avoided.`;
       }
       if (effect.status === 'veil') {
         return `Veil on ${targetWords(effect.target)} — blocks hits and counters for 10.`;
+      }
+      if (effect.status === 'dr') {
+        return `Damage reduction −${effect.amount ?? 8} for ${effect.echoes} Echo(es) on ${targetWords(effect.target)}.`;
       }
       return `Applies ${effect.status} for ${effect.echoes} Echo(es) on ${targetWords(effect.target)}.`;
     default:

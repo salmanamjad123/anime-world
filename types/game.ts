@@ -17,17 +17,28 @@ export type GameMode = 'ranked' | 'quick' | 'private';
 
 export type TargetKind = 'self' | 'ally' | 'enemy' | 'all-enemies' | 'all-allies' | 'random-enemy';
 
+/** Naruto-Arena style damage layers. */
+export type DamageKind = 'normal' | 'pierce' | 'affliction';
+
+/** Instant = resolve now. Action = multi-echo channel (dies if caster stunned). Control = bond (dies if caster sealed). */
+export type ArtPersistence = 'instant' | 'action' | 'control';
+
+export type StatusId = 'burn' | 'mark' | 'tidebind' | 'veil' | 'dodge' | 'dr';
+
 export type Effect =
-  | { type: 'DAMAGE'; amount: number; target: TargetKind }
+  | { type: 'DAMAGE'; amount: number; target: TargetKind; kind?: DamageKind }
   | { type: 'HEAL'; amount: number; target: TargetKind }
   | { type: 'STUN'; echoes: number; target: TargetKind }
   | { type: 'SHIELD'; amount: number; target: TargetKind }
   | { type: 'DRAIN_WEAVE'; amount: number }
+  | { type: 'STEAL_WEAVE'; amount: number }
   | {
       type: 'APPLY_STATUS';
-      status: 'burn' | 'mark' | 'tidebind' | 'veil' | 'dodge';
+      status: StatusId;
       echoes: number;
       target: TargetKind;
+      /** Used for damage reduction (flat). */
+      amount?: number;
     };
 
 export type EnergyCost = Partial<Record<EnergyId, number>>;
@@ -41,6 +52,7 @@ export type Art = {
   target: TargetKind;
   effects: Effect[];
   universal?: boolean;
+  persistence?: ArtPersistence;
 };
 
 export type Fighter = {
@@ -101,4 +113,3 @@ export const GAME_TITLES = [
 ] as const;
 
 export type GameTitle = (typeof GAME_TITLES)[number];
-

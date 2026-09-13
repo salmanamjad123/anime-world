@@ -9,7 +9,7 @@ import { WeaveCost, WeavePip } from '@/components/game/WeavePips';
 import { HowToPlay, TUTORIAL_KEYS } from '@/components/game/HowToPlay';
 import { MusicToggle } from '@/components/game/MusicToggle';
 import { SkillIcon, describeArtEffects, skillFamily, targetHint } from '@/components/game/SkillIcon';
-import { FIGHTERS, TEAM_SIZE, getFighter, getFighterArts } from '@/lib/game/roster';
+import { ENERGY_META, FIGHTERS, TEAM_SIZE, getFighter, getFighterArts } from '@/lib/game/roster';
 import { pickShadeTeam } from '@/lib/game/team-rules';
 import { battleStrategyTip } from '@/lib/game/strategy';
 import {
@@ -23,9 +23,11 @@ import {
   writeMatch,
 } from '@/lib/game/rooms';
 import {
+  WEAVE_EXCHANGE_COST,
   canAfford,
   commitTurn,
   createMatch,
+  exchangeWeave,
   forfeitMatch,
   isBloodied,
   legalTargets,
@@ -40,6 +42,7 @@ import {
   unqueueArt,
   type MatchState,
   type SideId,
+  type UnitState,
 } from '@/lib/game/engine';
 import { playCombatFromPerspective, playDefeat, playUiClick, playVictory } from '@/lib/game/sfx';
 import { useGameLobbyStore } from '@/store/useGameLobbyStore';
@@ -48,19 +51,38 @@ import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/lib/utils';
-import type { Art, Fighter } from '@/types/game';
+import type { Art, EnergyId, Fighter } from '@/types/game';
+
+const EXCHANGE_COLORS: EnergyId[] = ['strike', 'tide', 'pulse', 'blood'];
 
 function resolveFighters(ids: string[]): Fighter[] {
   return ids.map((id) => getFighter(id)).filter((fighter): fighter is Fighter => Boolean(fighter));
 }
 
 function normalizeMatch(match: MatchState): MatchState {
+  const sides = { ...match.sides };
+  (['player', 'foe'] as const).forEach((sideId) => {
+    const side = sides[sideId];
+    if (!side) return;
+    const units = { ...side.units };
+    for (const [id, unit] of Object.entries(units)) {
+      units[id] = {
+        ...unit,
+        dodge: unit.dodge ?? 0,
+        dr: unit.dr ?? 0,
+        drAmount: unit.drAmount ?? 0,
+      };
+    }
+    sides[sideId] = { ...side, units };
+  });
   return {
     ...match,
+    sides,
     activeSide: match.activeSide ?? 'player',
     combatEvents: match.combatEvents ?? [],
     endReason: match.endReason ?? null,
     lastGranted: match.lastGranted ?? { player: [], foe: [] },
+    channels: match.channels ?? [],
   };
 }
 
@@ -675,7 +697,40 @@ export function BattleSandbox({
                   {match.lastGranted[mySide].map((energy, index) => (
                     <WeavePip key={`g-${energy}-${index}`} energy={energy} size={12} />
                   ))}
-                  <span className="normal-case tracking-normal text-amber-100/50">· +2/turn, leftovers stay</span>
+                  <span className="normal-case tracking-normal text-amber-100/50">
+                    ·{' '}
+                    {match.echo <= 1
+                      ? mySide === 'player'
+                        ? 'Ash Rule: you 1 · foe 3'
+                        : 'Ash Rule: you 3 · foe 1'
+                      : '1 per living'}{' '}
+                    · bank for 3-cost spikes
+                  </span>
+                </div>
+              )}
+              {myTurn && me.weave.length >= WEAVE_EXCHANGE_COST && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-amber-200/55">
+                    Exchange {WEAVE_EXCHANGE_COST}→1
+                  </span>
+                  {EXCHANGE_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      title={`Trade ${WEAVE_EXCHANGE_COST} Weave for 1 ${ENERGY_META[color].label}`}
+                      onClick={() => {
+                        void playUiClick();
+                        const next = exchangeWeave(match, mySide, color);
+                        setMatch(next);
+                        if (pvp && roomCode) void writeMatch(roomCode, next, { mine: mySide });
+                        setNotice(next.log[next.log.length - 1] ?? null);
+                      }}
+                      className="rounded border border-amber-200/25 bg-black/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100 hover:border-amber-300/50 hover:bg-black/65"
+                      style={{ boxShadow: `inset 0 0 0 1px ${ENERGY_META[color].color}55` }}
+                    >
+                      {ENERGY_META[color].short}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -698,7 +753,7 @@ export function BattleSandbox({
                   <p
                     className={cn(
                       'font-mono text-3xl font-black leading-none',
-                      match.secondsLeft <= 5 ? 'text-red-400' : 'text-amber-200'
+                      match.secondsLeft <= 10 ? 'text-red-400' : 'text-amber-200'
                     )}
                   >
                     {timerLabel}
@@ -758,7 +813,7 @@ export function BattleSandbox({
           <div className="grid flex-1 gap-2 lg:grid-cols-[1fr_minmax(200px,0.65fr)_1fr]">
             <section className="space-y-2">
               <p className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
-                Your team · select caster{pending?.art.target === 'ally' ? ' / heal target' : ''}
+                Your team · 1 jutsu / fighter{pending?.art.target === 'ally' ? ' · heal target' : ''}
               </p>
               <ul className="space-y-2">
                 {me.fighterIds.map((id) => {
@@ -883,6 +938,8 @@ export function BattleSandbox({
                   {getFighterArts(selected).map((art) => {
                     const cd = selectedUnit.cooldowns[art.id] ?? 0;
                     const queued = me.queue.some((item) => item.fighterId === selected.id && item.artId === art.id);
+                    const fighterBusy =
+                      !queued && me.queue.some((item) => item.fighterId === selected.id);
                     const affordable = queued || canAfford(leftover, art.energy);
                     const focused = pending?.art.id === art.id || selectedArt?.id === art.id;
                     return (
@@ -890,7 +947,8 @@ export function BattleSandbox({
                         key={art.id}
                         type="button"
                         onClick={() => tryQueue(selected, art, null)}
-                        disabled={!myTurn || (cd > 0 && !queued)}
+                        disabled={!myTurn || fighterBusy || (cd > 0 && !queued)}
+                        title={fighterBusy ? 'This fighter already queued a jutsu this Echo' : undefined}
                         className={cn(
                           'flex min-w-[7.5rem] flex-1 items-start gap-2 rounded-lg border px-2 py-2 text-left disabled:opacity-40',
                           queued
@@ -1010,6 +1068,40 @@ export function BattleSandbox({
   );
 }
 
+function StatusBadges({ unit, align = 'start' }: { unit: UnitState; align?: 'start' | 'end' }) {
+  const badges: { key: string; label: string; className: string }[] = [];
+  if (unit.stun > 0) badges.push({ key: 'stun', label: `Stun ${unit.stun}`, className: 'bg-violet-700/90 text-violet-50' });
+  if (unit.veil > 0) badges.push({ key: 'veil', label: `Veil ${unit.veil}`, className: 'bg-slate-600/90 text-slate-50' });
+  if ((unit.dodge ?? 0) > 0) {
+    badges.push({ key: 'dodge', label: `Dodge ${unit.dodge}`, className: 'bg-cyan-700/90 text-cyan-50' });
+  }
+  if ((unit.dr ?? 0) > 0) {
+    badges.push({
+      key: 'dr',
+      label: `DR ${unit.drAmount || 8}`,
+      className: 'bg-stone-600/90 text-amber-50',
+    });
+  }
+  if (unit.burn > 0) badges.push({ key: 'burn', label: `Burn ${unit.burn}`, className: 'bg-orange-700/90 text-orange-50' });
+  if (unit.mark > 0) badges.push({ key: 'mark', label: `Mark ${unit.mark}`, className: 'bg-rose-800/90 text-rose-50' });
+  if (unit.tidebind > 0) {
+    badges.push({ key: 'bind', label: `Bind ${unit.tidebind}`, className: 'bg-sky-800/90 text-sky-50' });
+  }
+  if (!badges.length) return null;
+  return (
+    <div className={cn('mt-1 flex flex-wrap gap-0.5', align === 'end' && 'justify-end')}>
+      {badges.map((badge) => (
+        <span
+          key={badge.key}
+          className={cn('rounded px-1 py-px text-[8px] font-black uppercase tracking-wide', badge.className)}
+        >
+          {badge.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function FighterRow({
   fighter,
   unit,
@@ -1023,7 +1115,7 @@ function FighterRow({
   onArt,
 }: {
   fighter: Fighter;
-  unit: MatchState['sides']['player']['units'][string];
+  unit: UnitState;
   side: SideId;
   selected: boolean;
   highlight: boolean;
@@ -1092,28 +1184,28 @@ function FighterRow({
           <p className="mt-0.5 font-mono text-[10px]">
             {unit.hp}/{unit.maxHp}
             {unit.shield > 0 ? ` +${unit.shield}` : ''}
-            {unit.veil > 0 ? ' veil' : ''}
-            {(unit.dodge ?? 0) > 0 ? ' dodge' : ''}
-            {unit.stun > 0 ? ' stun' : ''}
-            {unit.tidebind > 0 ? ' bind' : ''}
-            {unit.burn > 0 ? ' burn' : ''}
-            {unit.mark > 0 ? ' mark' : ''}
-            {bloodied ? ' bloodied' : ''}
+            {bloodied ? ' · bloodied' : ''}
           </p>
+          <StatusBadges unit={unit} align={side === 'foe' ? 'end' : 'start'} />
           <div className={cn('mt-1.5 flex flex-nowrap gap-1', side === 'foe' && 'justify-end')}>
             {arts.map((art) => {
               const queued = queuedArtIds.includes(art.id);
+              const fighterBusy = !queued && queuedArtIds.length > 0;
               const cd = queued ? 0 : unit.cooldowns[art.id] ?? 0;
               return (
                 <button
                   key={art.id}
                   type="button"
-                  title={`${art.name}${cd > 0 ? ` · CD ${cd}` : ''}`}
+                  title={
+                    fighterBusy
+                      ? 'Already queued a jutsu this Echo'
+                      : `${art.name}${cd > 0 ? ` · CD ${cd}` : ''}`
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     onArt(art);
                   }}
-                  disabled={!canAct || sealed || (cd > 0 && !queued)}
+                  disabled={!canAct || sealed || fighterBusy || (cd > 0 && !queued)}
                   className={cn(
                     'flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded border px-0.5 py-1 disabled:opacity-50',
                     queued
