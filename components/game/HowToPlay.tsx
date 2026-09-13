@@ -6,6 +6,10 @@ import { cn } from '@/lib/utils';
 
 const LOBBY_STEPS = [
   {
+    title: 'Set your game profile',
+    body: 'Pick a Village Arena username (required). Add a title, motto, and profile seal so rivals know who they face.',
+  },
+  {
     title: 'Build a team of 3',
     body: 'Tap fighters on the scroll to seal them. Six famous series — mix roles (striker / heal / control). Filters by anime help you build.',
   },

@@ -43,6 +43,7 @@ import {
 } from '@/lib/game/engine';
 import { playCombatFromPerspective, playDefeat, playUiClick, playVictory } from '@/lib/game/sfx';
 import { useGameLobbyStore } from '@/store/useGameLobbyStore';
+import { useGameProfileStore } from '@/store/useGameProfileStore';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { ROUTES } from '@/constants/routes';
@@ -63,14 +64,23 @@ function normalizeMatch(match: MatchState): MatchState {
   };
 }
 
-export function BattleSandbox({ roomCode = null }: { roomCode?: string | null }) {
+export function BattleSandbox({
+  roomCode = null,
+  onExit,
+}: {
+  roomCode?: string | null;
+  onExit?: () => void;
+}) {
   const router = useRouter();
   const teamIds = useGameLobbyStore((s) => s.teamIds);
   const shadeIds = useGameLobbyStore((s) => s.shadeIds);
   const setShadeIds = useGameLobbyStore((s) => s.setShadeIds);
   const lastMode = useGameLobbyStore((s) => s.lastMode);
+  const exitToLobby = useGameLobbyStore((s) => s.exitToLobby);
   const { user, isLoading: authLoading } = useUserStore();
   const openAuthModal = useAuthModalStore((s) => s.openAuthModal);
+  const arenaName = useGameProfileStore((s) => s.arenaName);
+  const gameTitle = useGameProfileStore((s) => s.title);
   const [hydrated, setHydrated] = useState(false);
   const [help, setHelp] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,6 +91,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const [room, setRoom] = useState<ArenaRoom | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [leavePrompt, setLeavePrompt] = useState(false);
   const lockingRef = useRef(false);
   const lockEchoRef = useRef<() => void>(() => {});
   const joiningRef = useRef(false);
@@ -88,6 +99,14 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const lastSfxKey = useRef('');
   const endSfxDone = useRef(false);
   const pvp = Boolean(roomCode);
+
+  const goLobby = () => {
+    if (onExit) onExit();
+    else {
+      exitToLobby();
+      router.replace(ROUTES.GAME);
+    }
+  };
 
   useEffect(() => {
     const finish = () => setHydrated(true);
@@ -108,21 +127,6 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const playerTeam = useMemo(() => resolveFighters(teamIds), [teamIds]);
   const needsTeam = playerTeam.length < TEAM_SIZE;
 
-  useEffect(() => {
-    if (!hydrated) return;
-    if (!pvp && playerTeam.length < TEAM_SIZE) router.replace(ROUTES.GAME);
-  }, [hydrated, pvp, playerTeam.length, router]);
-
-  useEffect(() => {
-    if (!pvp || !hydrated) return;
-    if (!needsTeam) return;
-    // Host who already created a room keeps waiting UI; guest must pick 3 first.
-    if (room && rememberedSeat(room.code) === 'host' && room.status === 'waiting') return;
-    if (!room) {
-      setRoomError(`Seal ${TEAM_SIZE} fighters on the Game scroll, then join this gate again.`);
-    }
-  }, [pvp, hydrated, needsTeam, room]);
-
   const foeIds = useMemo(() => {
     if (pvp) return room?.guestTeam ?? [];
     const stored = resolveFighters(shadeIds).map((fighter) => fighter.id);
@@ -133,12 +137,58 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const mySide: SideId = pvp && room && user ? seatFor(room, user.uid) ?? 'player' : 'player';
   const foeSide = otherSide(mySide);
 
-  if (!pvp && hydrated && playerTeam.length >= 3 && shadeIds.length !== 3) {
-    setShadeIds(foeIds);
-  }
-  if (!pvp && hydrated && playerTeam.length >= 3 && !match && foeIds.length === 3) {
-    setMatch(createMatch(teamIds, foeIds));
-  }
+  useEffect(() => {
+    if (!pvp || !hydrated) return;
+    if (!needsTeam) return;
+    if (room && rememberedSeat(room.code) === 'host' && room.status === 'waiting') return;
+    if (!room) {
+      setRoomError(`Seal ${TEAM_SIZE} fighters on the Game scroll, then join this gate again.`);
+    }
+  }, [pvp, hydrated, needsTeam, room]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!pvp && playerTeam.length < TEAM_SIZE) goLobby();
+  }, [hydrated, pvp, playerTeam.length]);
+
+  useEffect(() => {
+    if (pvp || !hydrated || playerTeam.length < TEAM_SIZE) return;
+    if (shadeIds.length !== 3) {
+      const ids = foeIds.length === 3 ? foeIds : pickShadeTeam(teamIds, FIGHTERS).map((f) => f.id);
+      setShadeIds(ids);
+      return;
+    }
+    if (!match && foeIds.length === 3) {
+      setMatch(createMatch(teamIds, foeIds));
+    }
+  }, [pvp, hydrated, playerTeam.length, shadeIds.length, foeIds, match, teamIds, setShadeIds]);
+
+  // Block browser back during an active fight — ask to surrender instead of flipping views.
+  useEffect(() => {
+    if (!match || match.winner) return;
+    const pushGuard = () => {
+      try {
+        window.history.pushState({ vaBattle: true }, '', window.location.href);
+      } catch {
+        /* ignore */
+      }
+    };
+    pushGuard();
+    const onPop = () => {
+      pushGuard();
+      setLeavePrompt(true);
+    };
+    window.addEventListener('popstate', onPop);
+    const onUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [match?.seed, match?.winner]);
 
   useEffect(() => {
     if (!pvp || authLoading) return;
@@ -156,13 +206,13 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     joiningRef.current = true;
     void joinRoom(roomCode, {
       uid: user.uid,
-      name: user.displayName || user.email?.split('@')[0] || 'Challenger',
+      name: arenaName(),
       team: teamIds,
     }).catch((error: unknown) => {
       joiningRef.current = false;
       setRoomError(error instanceof Error ? error.message : 'Could not join that gate.');
     });
-  }, [pvp, roomCode, room, user, playerTeam.length, teamIds]);
+  }, [pvp, roomCode, room, user, playerTeam.length, teamIds, arenaName]);
 
   useEffect(() => {
     if (match) rngRef.current = mulberry32(match.seed + match.echo * 997);
@@ -336,7 +386,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
         <Header />
         <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#14301f] px-4 text-center text-amber-100">
           <p>{roomError}</p>
-          <button type="button" className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold" onClick={() => router.push(ROUTES.GAME)}>
+          <button type="button" className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold" onClick={() => goLobby()}>
             Pick fighters on Game
           </button>
         </div>
@@ -353,7 +403,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
           <p className="max-w-sm text-sm text-amber-100/70">
             Multiplayer gates need a full team. Pick three on the Game scroll, then create or join again.
           </p>
-          <button type="button" className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold" onClick={() => router.push(ROUTES.GAME)}>
+          <button type="button" className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold" onClick={() => goLobby()}>
             Back to scroll
           </button>
         </div>
@@ -397,7 +447,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
             className="text-sm text-orange-200 underline"
             onClick={() => {
               if (user && roomCode) void cancelRoom(roomCode, user.uid);
-              router.push(ROUTES.GAME);
+              goLobby();
             }}
           >
             Cancel gate
@@ -430,7 +480,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
       .map((id) => (foe.fighterIds.includes(id) ? getFighter(id) : null))
       .find(Boolean) ?? null;
   const showcase = aimedFoe ?? getFighter(match.lastCasterId ?? '') ?? selected;
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Guest';
+  const displayName = arenaName();
   const foeName = pvp ? (mySide === 'player' ? room?.guestName : room?.hostName) ?? 'Challenger' : 'Shade';
   const targeting = pending ? legalTargets(match, mySide, pending.fighterId, pending.art) : [];
   const strategy = battleStrategyTip(match, mySide);
@@ -483,19 +533,21 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     }
   };
 
-  const surrender = () => {
-    if (match.winner) {
-      router.push(ROUTES.GAME);
+  const surrender = (andLeave = false) => {
+    if (!match || match.winner) {
+      goLobby();
       return;
     }
-    if (!window.confirm('Surrender this match? Your opponent wins.')) return;
+    if (!andLeave && !window.confirm('Surrender this match? Your opponent wins.')) return;
     if (pvp && roomCode) {
       void surrenderRoom(roomCode, mySide).then((next) => {
         if (next) setMatch(normalizeMatch(next));
+        if (andLeave) goLobby();
       });
       return;
     }
     setMatch(forfeitMatch(match, mySide));
+    if (andLeave) window.setTimeout(() => goLobby(), 350);
   };
 
   const myTurn = match.phase === 'pick' && (match.activeSide ?? 'player') === mySide && !match.winner;
@@ -607,7 +659,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
             <div className="min-w-0">
               <p className="truncate text-sm font-black uppercase tracking-wider">{displayName}</p>
               <p className="text-[10px] uppercase text-emerald-200/70">
-                {pvp ? `Private ${room?.code}` : lastMode === 'ranked' ? 'Ranked' : 'Quick Duel'} · Echo{' '}
+                {gameTitle} · {pvp ? `Private ${room?.code}` : lastMode === 'ranked' ? 'Ranked' : 'Quick Duel'} · Echo{' '}
                 {match.echo}/{match.maxEcho}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -805,7 +857,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={surrender}
+                onClick={() => surrender()}
                 className="inline-flex items-center justify-center gap-1 rounded-lg bg-red-900 px-3 py-2 text-xs font-bold uppercase tracking-widest"
               >
                 <Flag className="h-3.5 w-3.5" />
@@ -916,10 +968,39 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
               </p>
               <button
                 type="button"
-                onClick={() => router.push(ROUTES.GAME)}
+                onClick={() => goLobby()}
                 className="mt-5 w-full rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest hover:bg-orange-500"
               >
                 Back to scroll
+              </button>
+            </div>
+          </div>
+        )}
+
+        {leavePrompt && !match.winner && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-sm rounded-2xl border border-orange-400/40 bg-[#1c1008] p-5 text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-orange-300">Leave match?</p>
+              <h2 className="mt-2 text-2xl font-black">Surrender to quit</h2>
+              <p className="mt-2 text-sm text-amber-100/70">
+                Leaving now counts as a loss. Stay in the fight or surrender and return to the scroll.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLeavePrompt(false);
+                  surrender(true);
+                }}
+                className="mt-4 w-full rounded-xl bg-red-700 py-2.5 text-sm font-black uppercase tracking-widest hover:bg-red-600"
+              >
+                Surrender & leave
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeavePrompt(false)}
+                className="mt-2 w-full rounded-xl border border-amber-200/30 bg-black/40 py-2.5 text-sm font-bold uppercase tracking-widest hover:bg-black/60"
+              >
+                Keep fighting
               </button>
             </div>
           </div>

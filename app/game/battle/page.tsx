@@ -1,7 +1,22 @@
-import { Suspense } from 'react';
-import { BattleSandbox } from '@/components/game/BattleSandbox';
+'use client';
 
-function BattleFallback() {
+import { useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useGameLobbyStore } from '@/store/useGameLobbyStore';
+import { ROUTES } from '@/constants/routes';
+
+function BattleRedirectInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const startBattle = useGameLobbyStore((s) => s.startBattle);
+  const room = params.get('room');
+
+  useEffect(() => {
+    startBattle({ room: room || null, mode: room ? 'private' : 'quick' });
+    router.replace(ROUTES.GAME);
+  }, [room, router, startBattle]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#14301f] text-amber-100">
       Opening the gate…
@@ -9,23 +24,16 @@ function BattleFallback() {
   );
 }
 
-export default function GameBattlePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ room?: string }>;
-}) {
+export default function GameBattlePage() {
   return (
-    <Suspense fallback={<BattleFallback />}>
-      <BattleFromParams searchParams={searchParams} />
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#14301f] text-amber-100">
+          Opening the gate…
+        </div>
+      }
+    >
+      <BattleRedirectInner />
     </Suspense>
   );
-}
-
-async function BattleFromParams({
-  searchParams,
-}: {
-  searchParams: Promise<{ room?: string }>;
-}) {
-  const params = await searchParams;
-  return <BattleSandbox roomCode={params.room ?? null} />;
 }

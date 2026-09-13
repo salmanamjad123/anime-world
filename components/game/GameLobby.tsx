@@ -1,22 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Maximize, Minimize, Lock, Swords, Users, Zap, X, CircleHelp } from 'lucide-react';
+import { Maximize, Minimize, Lock, Swords, Users, Zap, X, CircleHelp, UserRound } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { FighterArt } from '@/components/game/FighterArt';
 import { WeaveCost } from '@/components/game/WeavePips';
 import { HowToPlay, TUTORIAL_KEYS } from '@/components/game/HowToPlay';
 import { MusicToggle } from '@/components/game/MusicToggle';
+import { GameProfilePanel } from '@/components/game/GameProfilePanel';
+import { BattleSandbox } from '@/components/game/BattleSandbox';
 import { FACTIONS, FEATURED_FIGHTER_IDS, FIGHTERS, RULESET_VERSION, TEAM_SIZE, getFighter, getFighterArts, lobbyFighters } from '@/lib/game/roster';
 import { pickShadeTeam, validateTeam } from '@/lib/game/team-rules';
 import { lobbyStrategyTips } from '@/lib/game/strategy';
 import { createRoom, joinRoom, normalizeGateCode } from '@/lib/game/rooms';
 import { useGameLobbyStore } from '@/store/useGameLobbyStore';
+import { useGameProfileStore } from '@/store/useGameProfileStore';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
-import { ROUTES } from '@/constants/routes';
 import { cn } from '@/lib/utils';
 import type { FactionId, Fighter, FighterRole, GameMode, ResonanceKind } from '@/types/game';
 
@@ -63,15 +64,25 @@ function useHydratedTeam() {
 }
 
 export function GameLobby() {
-  const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const { teamIds, focusedId, hydrated } = useHydratedTeam();
   const toggleFighter = useGameLobbyStore((s) => s.toggleFighter);
   const setFocused = useGameLobbyStore((s) => s.setFocused);
   const setShadeIds = useGameLobbyStore((s) => s.setShadeIds);
   const setLastMode = useGameLobbyStore((s) => s.setLastMode);
+  const startBattle = useGameLobbyStore((s) => s.startBattle);
+  const exitToLobby = useGameLobbyStore((s) => s.exitToLobby);
+  const view = useGameLobbyStore((s) => s.view);
+  const battleRoom = useGameLobbyStore((s) => s.battleRoom);
+  const battleKey = useGameLobbyStore((s) => s.battleKey);
   const { user } = useUserStore();
   const openAuthModal = useAuthModalStore((s) => s.openAuthModal);
+  const gameUsername = useGameProfileStore((s) => s.username);
+  const gameTitle = useGameProfileStore((s) => s.title);
+  const gameMotto = useGameProfileStore((s) => s.motto);
+  const favoriteFighterId = useGameProfileStore((s) => s.favoriteFighterId);
+  const hasGameProfile = useGameProfileStore((s) => s.hasProfile);
+  const arenaName = useGameProfileStore((s) => s.arenaName);
 
   const [fullscreen, setFullscreen] = useState(false);
   const [queueMode, setQueueMode] = useState<GameMode | null>(null);
@@ -80,6 +91,9 @@ export function GameLobby() {
   const [privateBusy, setPrivateBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileRequired, setProfileRequired] = useState(false);
+  const [profileHydrated, setProfileHydrated] = useState(false);
   const [selectFlash, setSelectFlash] = useState(0);
   const [roleFilter, setRoleFilter] = useState<FighterRole | 'all'>('all');
   const [factionFilter, setFactionFilter] = useState<FactionId | 'all'>('all');
@@ -99,7 +113,8 @@ export function GameLobby() {
   const validation = useMemo(() => validateTeam(team), [team]);
   const focused = getFighter(focusedId ?? teamIds[0] ?? scroll[0]?.id ?? '') ?? scroll[0] ?? FIGHTERS[0];
   const strategyTips = useMemo(() => lobbyStrategyTips(team, validation), [team, validation]);
-  const playerName = user?.displayName || user?.email?.split('@')[0] || 'Challenger';
+  const playerName = arenaName();
+  const profileSeal = getFighter(favoriteFighterId ?? '') ?? focused;
 
   useEffect(() => {
     const onChange = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -108,11 +123,23 @@ export function GameLobby() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    const finish = () => setProfileHydrated(true);
+    const unsub = useGameProfileStore.persist.onFinishHydration(finish);
+    if (useGameProfileStore.persist.hasHydrated()) finish();
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !profileHydrated) return;
+    if (!hasGameProfile()) {
+      setProfileRequired(true);
+      setProfileOpen(true);
+      return;
+    }
     if (typeof window === 'undefined') return;
     if (window.localStorage.getItem(TUTORIAL_KEYS.lobby) === '1') return;
     setHelp(true);
-  }, [hydrated]);
+  }, [hydrated, profileHydrated, hasGameProfile, gameUsername]);
 
   useEffect(() => {
     if (!queueMode) return;
@@ -120,13 +147,23 @@ export function GameLobby() {
       const shade = pickShadeTeam(teamIds, FIGHTERS);
       setShadeIds(shade.map((fighter) => fighter.id));
       setLastMode(queueMode);
+      const mode = queueMode;
       setQueueMode(null);
-      router.push(ROUTES.GAME_BATTLE);
+      startBattle({ mode });
     }, queueMode === 'quick' ? 900 : 1600);
     return () => window.clearTimeout(timer);
-  }, [queueMode, router, setLastMode, setShadeIds, teamIds]);
+  }, [queueMode, setLastMode, setShadeIds, startBattle, teamIds]);
+
+  const ensureProfile = () => {
+    if (hasGameProfile()) return true;
+    setProfileRequired(true);
+    setProfileOpen(true);
+    setNotice('Set your game username before you queue.');
+    return false;
+  };
 
   const startMode = (mode: GameMode) => {
+    if (!ensureProfile()) return;
     if (!validation.ready) {
       setNotice(validation.reasons[0] ?? `Pick ${TEAM_SIZE} fighters first.`);
       return;
@@ -154,6 +191,16 @@ export function GameLobby() {
     }
   };
 
+  if (view === 'battle') {
+    return (
+      <BattleSandbox
+        key={battleKey}
+        roomCode={battleRoom}
+        onExit={exitToLobby}
+      />
+    );
+  }
+
   return (
     <div ref={rootRef} className="game-arena min-h-screen bg-[#140e0a] text-amber-50">
       <Header />
@@ -163,6 +210,17 @@ export function GameLobby() {
           <FloatingOrbs />
           <div className="absolute right-3 top-3 z-20 flex gap-2">
             <MusicToggle />
+            <button
+              type="button"
+              onClick={() => {
+                setProfileRequired(false);
+                setProfileOpen(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-200/30 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-amber-100 hover:bg-black/70"
+            >
+              <UserRound className="h-3.5 w-3.5" />
+              {gameUsername ? 'Profile' : 'Set name'}
+            </button>
             <button
               type="button"
               onClick={() => setHelp(true)}
@@ -199,6 +257,33 @@ export function GameLobby() {
               </AnimatePresence>
             </div>
             <div className="flex flex-col justify-end gap-3 pb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileRequired(false);
+                  setProfileOpen(true);
+                }}
+                className="flex max-w-md items-center gap-3 rounded-xl border border-amber-200/25 bg-black/35 p-2.5 text-left transition hover:border-orange-400/50 hover:bg-black/50"
+              >
+                <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-amber-200/30">
+                  {profileSeal ? (
+                    <FighterArt fighter={profileSeal} sizes="48px" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center bg-orange-900/40">
+                      <UserRound className="h-5 w-5" />
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black text-amber-50">
+                    {gameUsername || 'Set game username'}
+                  </span>
+                  <span className="block truncate text-[10px] uppercase tracking-wider text-orange-200/80">
+                    {gameUsername ? gameTitle : 'Required to queue'}
+                    {gameMotto ? ` · ${gameMotto}` : ''}
+                  </span>
+                </span>
+              </button>
               <p className="text-[10px] uppercase tracking-[0.25em] text-orange-300/80">Village Arena · {RULESET_VERSION}</p>
               <h1 className="font-black leading-none tracking-tight text-3xl sm:text-5xl text-amber-50">
                 {focused.name}
@@ -461,6 +546,20 @@ export function GameLobby() {
         }}
       />
 
+      <GameProfilePanel
+        open={profileOpen}
+        required={profileRequired && !hasGameProfile()}
+        onClose={() => {
+          if (profileRequired && !hasGameProfile()) return;
+          setProfileOpen(false);
+          setProfileRequired(false);
+        }}
+        onSaved={() => {
+          setProfileRequired(false);
+          setNotice(`Arena name set — welcome, ${useGameProfileStore.getState().username}.`);
+        }}
+      />
+
       <AnimatePresence>
         {queueMode && (
           <motion.div
@@ -518,6 +617,7 @@ export function GameLobby() {
                 type="button"
                 disabled={privateBusy || !validation.ready}
                 onClick={async () => {
+                  if (!ensureProfile()) return;
                   if (!validation.ready) {
                     setNotice(`Seal ${TEAM_SIZE} fighters before you create a gate.`);
                     return;
@@ -538,7 +638,7 @@ export function GameLobby() {
                     if (!cloud) {
                       setNotice('Cloud gate unavailable — this code works in another tab on this device until Firestore rules are published.');
                     }
-                    router.push(ROUTES.GAME_BATTLE_ROOM(room.code));
+                    startBattle({ room: room.code, mode: 'private' });
                   } catch (error) {
                     setNotice(error instanceof Error ? error.message : 'Could not open a gate.');
                   } finally {
@@ -565,6 +665,7 @@ export function GameLobby() {
                 type="button"
                 disabled={privateBusy || !validation.ready}
                 onClick={async () => {
+                  if (!ensureProfile()) return;
                   if (!validation.ready) {
                     setNotice(`Seal ${TEAM_SIZE} fighters before you join.`);
                     return;
@@ -590,7 +691,7 @@ export function GameLobby() {
                     if (!cloud) {
                       setNotice('Joined a local gate — both players must be on this device.');
                     }
-                    router.push(ROUTES.GAME_BATTLE_ROOM(room.code));
+                    startBattle({ room: room.code, mode: 'private' });
                   } catch (error) {
                     setNotice(error instanceof Error ? error.message : 'Could not join that gate.');
                   } finally {

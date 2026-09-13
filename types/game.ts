@@ -77,3 +77,28 @@ export type FactionMeta = {
   blurb: string;
   color: string;
 };
+
+/** Local Village Arena identity — separate from site account display name. */
+export type GameProfile = {
+  /** Arena handle shown in lobby / battle / rooms. Required to queue. */
+  username: string;
+  motto: string;
+  title: string;
+  /** Optional portrait fighter id for the profile seal. */
+  favoriteFighterId: string | null;
+  updatedAt: number;
+};
+
+export const GAME_TITLES = [
+  'Challenger',
+  'Village Hero',
+  'Echo Walker',
+  'Shade Hunter',
+  'Hashira Hopeful',
+  'Saiyan Sparker',
+  'Soul Reaper',
+  'Arena Ace',
+] as const;
+
+export type GameTitle = (typeof GAME_TITLES)[number];
+
