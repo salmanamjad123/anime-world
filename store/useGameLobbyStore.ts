@@ -32,14 +32,22 @@ export const useGameLobbyStore = create<GameLobbyState>()(
           set({ focusedId: id });
           return;
         }
-        const { teamIds } = get();
+        const { teamIds, focusedId } = get();
         if (teamIds.includes(id)) {
           const next = teamIds.filter((item) => item !== id);
           set({ teamIds: next, focusedId: next[next.length - 1] ?? id });
           return;
         }
-        if (teamIds.length >= TEAM_SIZE) return;
-        set({ teamIds: [...teamIds, id], focusedId: id });
+        if (teamIds.length < TEAM_SIZE) {
+          set({ teamIds: [...teamIds, id], focusedId: id });
+          return;
+        }
+        // Team full — swap over the focused seal (or the last seal).
+        const focusIdx = focusedId ? teamIds.indexOf(focusedId) : -1;
+        const replaceIdx = focusIdx >= 0 ? focusIdx : TEAM_SIZE - 1;
+        const next = [...teamIds];
+        next[replaceIdx] = id;
+        set({ teamIds: next, focusedId: id });
       },
 
       setFocused: (id) => set({ focusedId: id }),

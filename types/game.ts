@@ -3,7 +3,7 @@
  * Source of truth: docs/GAME_ARENA.md
  */
 
-export type FactionId = 'ashen' | 'tide' | 'pulse';
+export type FactionId = 'ashen' | 'tide' | 'pulse' | 'blade' | 'flare' | 'soul';
 
 export type EnergyId = 'strike' | 'tide' | 'pulse' | 'blood' | 'any';
 
@@ -23,7 +23,12 @@ export type Effect =
   | { type: 'STUN'; echoes: number; target: TargetKind }
   | { type: 'SHIELD'; amount: number; target: TargetKind }
   | { type: 'DRAIN_WEAVE'; amount: number }
-  | { type: 'APPLY_STATUS'; status: 'burn' | 'mark' | 'tidebind' | 'veil'; echoes: number; target: TargetKind };
+  | {
+      type: 'APPLY_STATUS';
+      status: 'burn' | 'mark' | 'tidebind' | 'veil' | 'dodge';
+      echoes: number;
+      target: TargetKind;
+    };
 
 export type EnergyCost = Partial<Record<EnergyId, number>>;
 
@@ -49,7 +54,7 @@ export type Fighter = {
   unlocked: boolean;
   unlock: UnlockRule;
   accent: string;
-  skills: [Art, Art, Art];
+  skills: [Art, Art, Art, Art];
 };
 
 export type ResonanceKind = 'none' | 'pair' | 'trinity' | 'chaos';

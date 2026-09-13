@@ -6,7 +6,7 @@ import { Flag, CircleHelp, Copy, Check } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { FighterArt } from '@/components/game/FighterArt';
 import { WeaveCost, WeavePip } from '@/components/game/WeavePips';
-import { HowToPlay } from '@/components/game/HowToPlay';
+import { HowToPlay, TUTORIAL_KEYS } from '@/components/game/HowToPlay';
 import { MusicToggle } from '@/components/game/MusicToggle';
 import { SkillIcon, describeArtEffects, skillFamily, targetHint } from '@/components/game/SkillIcon';
 import { FIGHTERS, TEAM_SIZE, getFighter, getFighterArts } from '@/lib/game/roster';
@@ -59,6 +59,7 @@ function normalizeMatch(match: MatchState): MatchState {
     activeSide: match.activeSide ?? 'player',
     combatEvents: match.combatEvents ?? [],
     endReason: match.endReason ?? null,
+    lastGranted: match.lastGranted ?? { player: [], foe: [] },
   };
 }
 
@@ -74,6 +75,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const [help, setHelp] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<{ fighterId: string; art: Art } | null>(null);
+  const [botStatus, setBotStatus] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [room, setRoom] = useState<ArenaRoom | null>(null);
@@ -214,25 +216,56 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     lockEchoRef.current = lockEcho;
   });
 
-  // Bot takes its turn after the player commits.
+  // First battle: open the guided coach once.
   useEffect(() => {
-    if (pvp || !match || match.winner || match.phase !== 'pick') return;
-    if ((match.activeSide ?? 'player') !== 'foe') return;
+    if (!match || match.winner) return;
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem(TUTORIAL_KEYS.battle) === '1') return;
+    setHelp(true);
+  }, [match?.seed]);
+
+  // Bot takes a human-paced thinking turn.
+  useEffect(() => {
+    if (pvp || !match || match.winner || match.phase !== 'pick') {
+      setBotStatus(null);
+      return;
+    }
+    if ((match.activeSide ?? 'player') !== 'foe') {
+      setBotStatus(null);
+      return;
+    }
     if (lockingRef.current) return;
     lockingRef.current = true;
+
+    const thinkMs = 2800 + Math.floor(Math.random() * 1600);
+    const lines = ['Shade is reading the board…', 'Shade is picking jutsu…', 'Shade locks in…'];
+    setBotStatus(lines[0]!);
+    const tick = window.setInterval(() => {
+      setBotStatus((current) => {
+        const index = lines.indexOf(current ?? lines[0]!);
+        return lines[Math.min(index + 1, lines.length - 1)]!;
+      });
+    }, Math.max(900, Math.floor(thinkMs / 3)));
+
     const id = window.setTimeout(() => {
+      window.clearInterval(tick);
+      setBotStatus('Shade attacks!');
       setMatch((latest) => {
         if (!latest || latest.winner || (latest.activeSide ?? 'player') !== 'foe') {
           lockingRef.current = false;
+          setBotStatus(null);
           return latest;
         }
         const withBot = pickBotQueue(latest, rngRef.current);
         lockingRef.current = false;
+        window.setTimeout(() => setBotStatus(null), 600);
         return commitTurn(withBot, 'foe', rngRef.current);
       });
-    }, 1200);
+    }, thinkMs);
+
     return () => {
       window.clearTimeout(id);
+      window.clearInterval(tick);
       lockingRef.current = false;
     };
   }, [pvp, match?.activeSide, match?.echo, match?.phase, match?.winner]);
@@ -389,7 +422,14 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
   const me = match.sides[mySide];
   const foe = match.sides[foeSide];
   const leftover = remainingWeaveAfterQueue(me);
-  const showcase = getFighter(match.lastCasterId ?? '') ?? selected;
+  const aimTargetIds = new Set(
+    me.queue.map((item) => item.targetId).filter((id): id is string => Boolean(id))
+  );
+  const aimedFoe =
+    [...aimTargetIds]
+      .map((id) => (foe.fighterIds.includes(id) ? getFighter(id) : null))
+      .find(Boolean) ?? null;
+  const showcase = aimedFoe ?? getFighter(match.lastCasterId ?? '') ?? selected;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Guest';
   const foeName = pvp ? (mySide === 'player' ? room?.guestName : room?.hostName) ?? 'Challenger' : 'Shade';
   const targeting = pending ? legalTargets(match, mySide, pending.fighterId, pending.art) : [];
@@ -413,7 +453,11 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     if (needsExplicitTarget(art.target) && !targetId) {
       setPending({ fighterId: fighter.id, art });
       setSelectedId(fighter.id);
-      setNotice(`Choose a ${art.target} for ${art.name}.`);
+      setNotice(
+        art.target === 'enemy'
+          ? `${art.name}: tap an ENEMY on the right (not your team).`
+          : `${art.name}: tap an ALLY on the left.`
+      );
       return;
     }
     const error = queueError(match, mySide, fighter.id, art.id, targetId);
@@ -426,8 +470,17 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     setMatch(next);
     if (pvp && roomCode) void writeMatch(roomCode, next, { mine: mySide });
     setPending(null);
-    setNotice(null);
     setSelectedId(fighter.id);
+    if (targetId) {
+      const targetName = getFighter(targetId)?.name ?? 'target';
+      setNotice(
+        art.target === 'ally'
+          ? `${art.name} → ${targetName} (ally)`
+          : `${art.name} → ${targetName} (locked on)`
+      );
+    } else {
+      setNotice(null);
+    }
   };
 
   const surrender = () => {
@@ -445,31 +498,6 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
     setMatch(forfeitMatch(match, mySide));
   };
 
-  const clickUnit = (side: SideId, fighterId: string) => {
-    if (pending) {
-      const ok = targeting.some((unit) => unit.id === fighterId);
-      if (!ok) {
-        setNotice('That is not a legal target.');
-        return;
-      }
-      const fighter = getFighter(pending.fighterId);
-      if (fighter) tryQueue(fighter, pending.art, fighterId);
-      return;
-    }
-    if (side === foeSide && myTurn && selected && selectedArt && needsExplicitTarget(selectedArt.target)) {
-      const ok = legalTargets(match, mySide, selected.id, selectedArt).some((unit) => unit.id === fighterId);
-      if (!ok) {
-        setNotice('That is not a legal target for this power.');
-        return;
-      }
-      tryQueue(selected, selectedArt, fighterId);
-      return;
-    }
-    if (side === mySide) {
-      setSelectedId(fighterId);
-    }
-  };
-
   const myTurn = match.phase === 'pick' && (match.activeSide ?? 'player') === mySide && !match.winner;
   const opponentTurn = match.phase === 'pick' && (match.activeSide ?? 'player') !== mySide && !match.winner;
   const timerLabel = `${String(Math.floor(match.secondsLeft / 10))}${String(match.secondsLeft % 10)}`;
@@ -481,23 +509,97 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
         ) ?? getFighterArts(selected)[0]
       : null);
   const selectedUnit = selected ? me.units[selected.id] : null;
+
+  const clickUnit = (side: SideId, fighterId: string) => {
+    if (!myTurn) {
+      setNotice('Wait for your turn.');
+      return;
+    }
+
+    const aimArt = pending?.art ?? null;
+    const aimOwner = pending ? getFighter(pending.fighterId) : null;
+
+    if (aimArt && aimOwner) {
+      const wantsEnemy = aimArt.target === 'enemy';
+      const wantsAlly = aimArt.target === 'ally';
+
+      if (wantsEnemy && side === mySide) {
+        setPending(null);
+        setSelectedId(fighterId);
+        setNotice('Selected caster. ATK powers aim at enemies on the right.');
+        return;
+      }
+      if (wantsAlly && side === foeSide) {
+        setNotice('Heals and buffs only work on YOUR team (left).');
+        return;
+      }
+
+      const ok = targeting.some((unit) => unit.id === fighterId);
+      if (!ok) {
+        setNotice(wantsEnemy ? 'Tap a glowing enemy on the right.' : 'Tap a glowing ally on the left.');
+        return;
+      }
+      tryQueue(aimOwner, aimArt, fighterId);
+      return;
+    }
+
+    if (side === mySide) {
+      if (selected && selectedArt && selectedArt.target === 'ally' && needsExplicitTarget(selectedArt.target)) {
+        const ok = legalTargets(match, mySide, selected.id, selectedArt).some((unit) => unit.id === fighterId);
+        if (ok && selected.id !== fighterId) {
+          tryQueue(selected, selectedArt, fighterId);
+          return;
+        }
+      }
+      setSelectedId(fighterId);
+      setPending(null);
+      return;
+    }
+
+    if (side === foeSide) {
+      if (selected && selectedArt && selectedArt.target === 'enemy' && needsExplicitTarget(selectedArt.target)) {
+        const ok = legalTargets(match, mySide, selected.id, selectedArt).some((unit) => unit.id === fighterId);
+        if (!ok) {
+          setNotice('That enemy is not a legal target.');
+          return;
+        }
+        tryQueue(selected, selectedArt, fighterId);
+        return;
+      }
+      setNotice('Pick an ATK power first, then tap an enemy on the right.');
+    }
+  };
+
   const turnBanner = match.winner
     ? 'Match over'
     : myTurn
       ? pending
-        ? `YOUR TURN — tap a glowing ${pending.art.target}`
+        ? pending.art.target === 'enemy'
+          ? 'YOUR TURN — tap an ENEMY on the right'
+          : pending.art.target === 'ally'
+            ? 'YOUR TURN — tap an ALLY on the left'
+            : `YOUR TURN — tap a glowing ${pending.art.target}`
         : me.queue.length
           ? 'YOUR TURN — add powers or press Attack'
           : 'YOUR TURN — pick fighter + power'
       : opponentTurn
-        ? `OPPONENT'S TURN — ${foeName} is attacking`
+        ? botStatus
+          ? `OPPONENT'S TURN — ${botStatus}`
+          : `OPPONENT'S TURN — ${foeName} is thinking`
         : '…';
-  const readyLabel = opponentTurn ? "Opponent's turn" : 'Press when ready';
+  const readyLabel = opponentTurn ? (botStatus ?? "Opponent's turn") : 'Press when ready';
 
   return (
     <>
       <Header />
-      <HowToPlay open={help} onClose={() => setHelp(false)} />
+      <HowToPlay
+        open={help}
+        variant="battle"
+        onClose={() => {
+          window.localStorage.setItem(TUTORIAL_KEYS.battle, '1');
+          setHelp(false);
+        }}
+      />
       <div className="game-battle relative min-h-screen overflow-x-hidden bg-[#14301f] text-amber-50">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(74,222,128,0.18),transparent_50%),linear-gradient(180deg,#1c4d2a_0%,#14301f_55%,#0c1f14_100%)]" />
         <div className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col gap-2 p-2 sm:p-3">
@@ -509,12 +611,21 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
                 {match.echo}/{match.maxEcho}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1">
-                <span className="text-[10px] uppercase text-amber-200/60">Weave</span>
+                <span className="text-[10px] uppercase text-amber-200/60">Jutsu bank</span>
                 {leftover.map((energy, index) => (
                   <WeavePip key={`${energy}-${index}`} energy={energy} size={16} />
                 ))}
                 {leftover.length === 0 && <span className="text-[10px] text-amber-200/50">empty</span>}
               </div>
+              {(match.lastGranted?.[mySide]?.length ?? 0) > 0 && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/70">
+                  <span>+Echo</span>
+                  {match.lastGranted[mySide].map((energy, index) => (
+                    <WeavePip key={`g-${energy}-${index}`} energy={energy} size={12} />
+                  ))}
+                  <span className="normal-case tracking-normal text-amber-100/50">· +2/turn, leftovers stay</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col items-center gap-1">
@@ -566,14 +677,37 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
           </header>
 
           {pending && (
-            <p className="rounded-lg border border-amber-400/40 bg-amber-950/50 px-3 py-1.5 text-center text-xs font-bold text-amber-100">
-              Targeting: {pending.art.name} — tap a glowing {pending.art.target} portrait
+            <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-amber-400/40 bg-amber-950/50 px-3 py-1.5 text-center text-xs font-bold text-amber-100">
+              <span>
+                {pending.art.target === 'enemy'
+                  ? `Aim ${pending.art.name} → tap ENEMY (right)`
+                  : pending.art.target === 'ally'
+                    ? `Aim ${pending.art.name} → tap ALLY (left)`
+                    : `Aim ${pending.art.name}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPending(null);
+                  setNotice(null);
+                }}
+                className="rounded bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200 hover:bg-black/60"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {botStatus && (
+            <p className="rounded-lg border border-sky-400/30 bg-sky-950/40 px-3 py-1.5 text-center text-xs font-bold text-sky-100">
+              {botStatus}
             </p>
           )}
 
           <div className="grid flex-1 gap-2 lg:grid-cols-[1fr_minmax(200px,0.65fr)_1fr]">
             <section className="space-y-2">
-              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">Your team</p>
+              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
+                Your team · select caster{pending?.art.target === 'ally' ? ' / heal target' : ''}
+              </p>
               <ul className="space-y-2">
                 {me.fighterIds.map((id) => {
                   const fighter = getFighter(id);
@@ -586,7 +720,7 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
                       side="player"
                       selected={selected?.id === id}
                       highlight={targeting.some((unit) => unit.id === id)}
-                      hiddenArts={false}
+                      targeted={aimTargetIds.has(id)}
                       queuedArtIds={me.queue.filter((item) => item.fighterId === id).map((item) => item.artId)}
                       canAct={myTurn}
                       onSelect={() => clickUnit(mySide, id)}
@@ -599,10 +733,15 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
 
             <div className="relative order-first flex min-h-[200px] flex-col items-center justify-center gap-2 lg:order-none">
               {showcase && (
-                <div className="relative h-[220px] w-[170px] overflow-hidden rounded-2xl border-2 border-amber-200/40 shadow-2xl sm:h-[280px] sm:w-[210px]">
+                <div
+                  className={cn(
+                    'relative h-[220px] w-[170px] overflow-hidden rounded-2xl border-2 shadow-2xl sm:h-[280px] sm:w-[210px]',
+                    aimedFoe ? 'border-red-400 ring-2 ring-red-400/50' : 'border-amber-200/40'
+                  )}
+                >
                   <FighterArt fighter={showcase} sizes="210px" priority />
                   <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-6 text-center text-xs font-black">
-                    {showcase.name}
+                    {aimedFoe ? `Target · ${showcase.name}` : showcase.name}
                   </span>
                 </div>
               )}
@@ -614,14 +753,30 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
                     if (!owner) return null;
                     const art = getFighterArts(owner).find((a) => a.id === item.artId);
                     if (!art) return null;
-                    return <SkillIcon key={`${item.fighterId}-${item.artId}`} art={art} size={36} active />;
+                    const targetName = item.targetId ? getFighter(item.targetId)?.name : null;
+                    return (
+                      <div
+                        key={`${item.fighterId}-${item.artId}`}
+                        className="flex flex-col items-center gap-0.5 rounded-lg border border-orange-400/40 bg-black/50 px-1.5 py-1"
+                      >
+                        <SkillIcon art={art} size={36} active />
+                        {targetName && (
+                          <span className="max-w-[72px] truncate text-[8px] font-bold uppercase tracking-wide text-red-200">
+                            → {targetName}
+                          </span>
+                        )}
+                      </div>
+                    );
                   })}
                 </div>
               )}
             </div>
 
             <section className="space-y-2">
-              <p className="px-1 text-right text-[10px] font-bold uppercase tracking-[0.2em] text-red-200/70">Enemy team</p>
+              <p className="px-1 text-right text-[10px] font-bold uppercase tracking-[0.2em] text-red-200/70">
+                Enemy team · powers visible · tap to attack
+                {pending?.art.target === 'enemy' ? ' (glowing)' : ''}
+              </p>
               <ul className="space-y-2">
                 {foe.fighterIds.map((id) => {
                   const fighter = getFighter(id);
@@ -634,8 +789,8 @@ export function BattleSandbox({ roomCode = null }: { roomCode?: string | null })
                       side="foe"
                       selected={false}
                       highlight={targeting.some((unit) => unit.id === id)}
-                      hiddenArts
-                      queuedArtIds={[]}
+                      targeted={aimTargetIds.has(id)}
+                      queuedArtIds={foe.queue.filter((item) => item.fighterId === id).map((item) => item.artId)}
                       canAct={false}
                       onSelect={() => clickUnit(foeSide, id)}
                       onArt={() => undefined}
@@ -780,7 +935,7 @@ function FighterRow({
   side,
   selected,
   highlight,
-  hiddenArts,
+  targeted,
   queuedArtIds,
   canAct,
   onSelect,
@@ -791,7 +946,7 @@ function FighterRow({
   side: SideId;
   selected: boolean;
   highlight: boolean;
-  hiddenArts: boolean;
+  targeted: boolean;
   queuedArtIds: string[];
   canAct: boolean;
   onSelect: () => void;
@@ -805,43 +960,51 @@ function FighterRow({
   return (
     <li>
       <div
-        role={highlight ? 'button' : undefined}
-        tabIndex={highlight ? 0 : undefined}
-        onClick={highlight ? onSelect : undefined}
-        onKeyDown={
-          highlight
-            ? (event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelect();
-                }
-              }
-            : undefined
-        }
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
         className={cn(
-          'grid items-center gap-2 rounded-lg border bg-black/40 p-1.5',
+          'relative grid cursor-pointer items-center gap-2 rounded-lg border bg-black/40 p-1.5 transition hover:bg-black/55',
           side === 'foe'
             ? 'grid-cols-[minmax(0,1fr)_72px] sm:grid-cols-[minmax(0,1fr)_88px]'
             : 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[88px_minmax(0,1fr)]',
-          selected ? 'border-orange-400 ring-1 ring-orange-400/40' : 'border-emerald-900/70',
-          highlight && 'cursor-pointer ring-2 ring-amber-300 animate-pulse',
+          targeted && side === 'foe' && 'border-red-500 bg-red-950/50 ring-2 ring-red-400 shadow-[0_0_20px_rgba(248,113,113,0.35)]',
+          targeted && side === 'player' && 'border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-300/70',
+          !targeted && selected && 'border-orange-400 ring-1 ring-orange-400/40',
+          !targeted && !selected && 'border-emerald-900/70',
+          highlight && !targeted && 'ring-2 ring-amber-300 animate-pulse',
           sealed && 'opacity-45'
         )}
       >
+        {targeted && (
+          <span
+            className={cn(
+              'absolute -top-2 z-[2] rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow',
+              side === 'foe' ? 'right-2 bg-red-600' : 'left-2 bg-emerald-600'
+            )}
+          >
+            {side === 'foe' ? 'Target' : 'Buffed'}
+          </span>
+        )}
         {side === 'player' && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect();
-            }}
-            className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-md sm:h-20 sm:w-[88px]"
+          <div
+            className={cn(
+              'relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-md sm:h-20 sm:w-[88px]',
+              targeted && 'ring-2 ring-emerald-300'
+            )}
           >
             <FighterArt fighter={fighter} sizes="88px" />
-          </button>
+          </div>
         )}
         <div className={cn('min-w-0', side === 'foe' && 'text-right')}>
           <p className="truncate text-xs font-black uppercase">{fighter.name}</p>
+          <p className="text-[9px] uppercase tracking-wider text-amber-100/50">{fighter.role}</p>
           <div className="mt-1 h-2.5 overflow-hidden rounded bg-emerald-950">
             <div className={cn('h-full', pct > 30 ? 'bg-emerald-400' : 'bg-red-500')} style={{ width: `${pct}%` }} />
           </div>
@@ -849,54 +1012,62 @@ function FighterRow({
             {unit.hp}/{unit.maxHp}
             {unit.shield > 0 ? ` +${unit.shield}` : ''}
             {unit.veil > 0 ? ' veil' : ''}
+            {(unit.dodge ?? 0) > 0 ? ' dodge' : ''}
             {unit.stun > 0 ? ' stun' : ''}
             {unit.tidebind > 0 ? ' bind' : ''}
             {unit.burn > 0 ? ' burn' : ''}
             {unit.mark > 0 ? ' mark' : ''}
             {bloodied ? ' bloodied' : ''}
           </p>
-          <div className={cn('mt-1 flex gap-1', side === 'foe' && 'justify-end')}>
-            {arts.slice(0, 3).map((art) =>
-              hiddenArts ? (
-                <span
-                  key={art.id}
-                  className="flex h-9 w-9 items-center justify-center rounded border border-amber-200/20 bg-[#3b2410] text-amber-100"
-                >
-                  <span className="text-xs">?</span>
-                </span>
-              ) : (
+          <div className={cn('mt-1.5 flex flex-nowrap gap-1', side === 'foe' && 'justify-end')}>
+            {arts.map((art) => {
+              const queued = queuedArtIds.includes(art.id);
+              const cd = queued ? 0 : unit.cooldowns[art.id] ?? 0;
+              return (
                 <button
                   key={art.id}
                   type="button"
+                  title={`${art.name}${cd > 0 ? ` · CD ${cd}` : ''}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onArt(art);
                   }}
-                  disabled={!canAct || sealed || ((unit.cooldowns[art.id] ?? 0) > 0 && !queuedArtIds.includes(art.id))}
-                  className="disabled:opacity-40"
+                  disabled={!canAct || sealed || (cd > 0 && !queued)}
+                  className={cn(
+                    'flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded border px-0.5 py-1 disabled:opacity-50',
+                    queued
+                      ? 'border-orange-400 bg-orange-900/70'
+                      : 'border-amber-200/15 bg-black/35 hover:bg-black/55',
+                    !canAct && 'cursor-default hover:bg-black/35'
+                  )}
                 >
-                  <SkillIcon
-                    art={art}
-                    size={36}
-                    active={queuedArtIds.includes(art.id)}
-                    cooldown={queuedArtIds.includes(art.id) ? 0 : unit.cooldowns[art.id] ?? 0}
-                  />
+                  <SkillIcon art={art} size={30} active={queued} cooldown={cd} />
+                  <span className="w-full truncate text-center text-[8px] font-bold leading-tight sm:text-[9px]">
+                    {art.name}
+                  </span>
+                  <span className="inline-flex items-center justify-center gap-0.5">
+                    <WeaveCost cost={art.energy} size={9} />
+                  </span>
                 </button>
-              )
-            )}
+              );
+            })}
           </div>
         </div>
         {side === 'foe' && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect();
-            }}
-            className="relative h-[72px] w-[72px] shrink-0 justify-self-end overflow-hidden rounded-md border border-emerald-800/80 bg-emerald-950/40 sm:h-20 sm:w-[88px]"
+          <div
+            className={cn(
+              'relative h-[72px] w-[72px] shrink-0 justify-self-end overflow-hidden rounded-md border border-emerald-800/80 bg-emerald-950/40 sm:h-20 sm:w-[88px]',
+              targeted && 'border-red-400 ring-2 ring-red-400',
+              highlight && !targeted && 'ring-2 ring-amber-300'
+            )}
           >
             <FighterArt fighter={fighter} sizes="88px" />
-          </button>
+            {targeted && (
+              <span className="absolute inset-x-0 bottom-0 bg-red-700/90 py-0.5 text-center text-[8px] font-black uppercase tracking-wider text-white">
+                Aimed
+              </span>
+            )}
+          </div>
         )}
       </div>
     </li>

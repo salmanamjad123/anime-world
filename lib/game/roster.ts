@@ -1,7 +1,6 @@
 import type { Art, EnergyId, FactionId, FactionMeta, Fighter } from '@/types/game';
-import { AEGIS_VEIL } from '@/lib/game/aegis';
 
-export const RULESET_VERSION = 'v0.3';
+export const RULESET_VERSION = 'v0.9';
 
 export function fighterPortrait(id: string): string {
   return `/game/fighters/${id}.png`;
@@ -13,20 +12,38 @@ export const FACTIONS: Record<FactionId, FactionMeta> = {
   ashen: {
     id: 'ashen',
     name: 'Naruto Shippuden',
-    blurb: 'Shinobi strikers — burst, marks, and clean blades.',
+    blurb: 'Shinobi — clones, genjutsu, and rasengan finishers.',
     color: '#fb923c',
   },
   tide: {
     id: 'tide',
     name: 'One Piece',
-    blurb: 'Pirates — shields, drains, and crushing waves.',
+    blurb: 'Pirates — crew synergy, Haki grit, and Devil Fruit pressure.',
     color: '#22d3ee',
   },
   pulse: {
     id: 'pulse',
     name: 'Jujutsu Kaisen',
-    blurb: 'Sorcerers — beams, domains, and cursed strikes.',
+    blurb: 'Sorcerers — domains, cursed energy, and Black Flash timing.',
     color: '#a78bfa',
+  },
+  blade: {
+    id: 'blade',
+    name: 'Demon Slayer',
+    blurb: 'Hashira & Corps — Breathing Styles, Total Concentration, and sun finishers.',
+    color: '#ef4444',
+  },
+  flare: {
+    id: 'flare',
+    name: 'Dragon Ball',
+    blurb: 'Saiyans & gods — ki blasts, Instant Transmission, and planet-busters.',
+    color: '#f59e0b',
+  },
+  soul: {
+    id: 'soul',
+    name: 'Bleach',
+    blurb: 'Shinigami & Espada — Getsuga, Bankai, kido control, and spiritual pressure.',
+    color: '#38bdf8',
   },
 };
 
@@ -48,12 +65,47 @@ function art(
   cooldown: number,
   energy: Art['energy'],
   target: Art['target'],
-  effects: Art['effects']
+  effects: Art['effects'],
+  universal?: boolean
 ): Art {
-  return { id, name, description, cooldown, energy, target, effects };
+  return { id, name, description, cooldown, energy, target, effects, universal };
 }
 
+/**
+ * Kit pattern (Naruto-Arena inspired) — every fighter gets a *mix*:
+ * 1) 1-cost chip attack
+ * 2) signature mid (mark / aoe / heal / drain / stun — character flavor)
+ * 3) defensive or control tool (dodge / veil / stun / tidebind / shield)
+ * 4) expensive finisher
+ * Never 4 pure damage buttons — strategy should differ per character.
+ */
 export const FIGHTERS: Fighter[] = [
+  {
+    id: 'kenji-orb',
+    name: 'Naruto Uzumaki',
+    epithet: 'Nine Tails',
+    faction: 'ashen',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#f97316',
+    skills: [
+      art('orb-rush', 'Rasengan', '1 Strike — 16 spiral damage.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('uzumaki-barrage', 'Uzumaki Barrage', 'Clone rush — 8 to all foes.', 1, { strike: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      ]),
+      art('spiral-ember', 'Shadow Clone Feint', 'Dodge the next hit — clones take it.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('village-vow', 'Rasenshuriken', '40 damage. Bank Strike + Blood.', 4, { strike: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      ]),
+    ],
+  },
   {
     id: 'kaen-roux',
     name: 'Sasuke Uchiha',
@@ -66,39 +118,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#f97316',
     skills: [
-      art('cinder-rush', 'Cinder Rush', 'Dash in. 28 Strike damage to one foe.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 28, target: 'enemy' },
+      art('cinder-rush', 'Chidori', '1 Strike — 15 pierce.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
-      art('ember-mark', 'Ember Mark', 'Mark a foe. They take +8 from the next art.', 2, { strike: 1, blood: 1 }, 'enemy', [
+      art('ember-mark', 'Katon: Goukakyuu', 'Mark (+8 next) and burn seed.', 2, { blood: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
-        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 1, target: 'enemy' },
       ]),
-      art('fang-break', 'Fang Break', 'Heavy cut. 42 damage. Ignores 10 shield.', 3, { strike: 2 }, 'enemy', [
-        { type: 'DAMAGE', amount: 42, target: 'enemy' },
+      art('chidori-nagashi', 'Sharingan Feint', 'Dodge next hit. Read their move.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-    ],
-  },
-  {
-    id: 'shiro-vale',
-    name: 'Kakashi Hatake',
-    epithet: 'Copy Ninja',
-    faction: 'ashen',
-    rarity: 'rare',
-    role: 'control',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#fdba74',
-    skills: [
-      art('twin-step', 'Twin Step', 'Stun one foe for this Echo resolve.', 2, { pulse: 1 }, 'enemy', [
-        { type: 'STUN', echoes: 1, target: 'enemy' },
-      ]),
-      art('ash-clone', 'Ash Clone', '12 damage to all foes. Hard to read.', 1, { strike: 1, any: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 12, target: 'all-enemies' },
-      ]),
-      art('fold-night', 'Fold Night', 'Ally veil + 10 heal.', 3, { pulse: 1, blood: 1 }, 'ally', [
-        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'ally' },
-        { type: 'HEAL', amount: 10, target: 'ally' },
+      art('fang-break', 'Kirin', '38 damage. Ignores 10 shield.', 4, { strike: 2 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy' },
       ]),
     ],
   },
@@ -114,15 +145,71 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#fb7185',
     skills: [
-      art('field-wrap', 'Field Wrap', 'Heal one ally 22.', 0, { pulse: 1 }, 'ally', [
+      art('cherry-impact', 'Cherry Blossom Impact', '1 Strike — 14 punch.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('field-wrap', 'Mystical Palm', '1 Pulse — heal ally 22.', 0, { pulse: 1 }, 'ally', [
         { type: 'HEAL', amount: 22, target: 'ally' },
       ]),
-      art('splint-line', 'Splint Line', 'Heal all allies 10 and 8 shield.', 2, { pulse: 1, any: 1 }, 'all-allies', [
+      art('splint-line', 'Katsuyu Aid', 'Heal all 10 + 6 shield.', 2, { pulse: 1 }, 'all-allies', [
         { type: 'HEAL', amount: 10, target: 'all-allies' },
-        { type: 'SHIELD', amount: 8, target: 'all-allies' },
+        { type: 'SHIELD', amount: 6, target: 'all-allies' },
       ]),
-      art('last-ember', 'Last Ember', 'Revive logic later. For now 35 heal to lowest ally.', 4, { pulse: 2, blood: 1 }, 'ally', [
-        { type: 'HEAL', amount: 35, target: 'ally' },
+      art('last-ember', 'Strength of a Hundred', 'Heal 30. Long CD.', 4, { pulse: 1, blood: 1 }, 'ally', [
+        { type: 'HEAL', amount: 30, target: 'ally' },
+      ]),
+    ],
+  },
+  {
+    id: 'shiro-vale',
+    name: 'Kakashi Hatake',
+    epithet: 'Copy Ninja',
+    faction: 'ashen',
+    rarity: 'rare',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#fdba74',
+    skills: [
+      art('ash-clone', 'Lightning Blade Tap', '1 Strike — 13 damage.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('twin-step', 'Raikiri', '1 Pulse — stun one foe.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('kamui-dodge', 'Kamui Phase', 'Dodge the next hit completely.', 3, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('fold-night', 'Kamui Strike', '26 damage after you control space.', 3, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 26, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'kage-bind',
+    name: 'Shikamaru Nara',
+    epithet: 'Shadow Bind',
+    faction: 'ashen',
+    rarity: 'epic',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#44403c',
+    skills: [
+      art('shadow-needle', 'Shadow Needles', '1 Pulse — 12 damage.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+      ]),
+      art('shadow-pin', 'Shadow Possession', '1 Pulse — stun.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('plan-two', 'Shadow Strangle', 'Drain 1 Weave (no damage).', 2, { tide: 1 }, 'enemy', [
+        { type: 'DRAIN_WEAVE', amount: 1 },
+      ]),
+      art('checkmate', 'Shadow Neck Bind', '18 damage + stun. IQ win.', 3, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 18, target: 'enemy' },
+        { type: 'STUN', echoes: 1, target: 'enemy' },
       ]),
     ],
   },
@@ -138,16 +225,17 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'wins',
     accent: '#65a30d',
     skills: [
-      art('root-bind', 'Root Bind', 'Tidebind a foe for 2 Echoes.', 2, { tide: 1, pulse: 1 }, 'enemy', [
+      art('gentle-jab', 'Gentle Fist', '1 Strike — 13 tenketsu.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('root-bind', 'Gentle Fist Seal', 'Tidebind 2 Echoes.', 2, { tide: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'tidebind', echoes: 2, target: 'enemy' },
-        { type: 'DAMAGE', amount: 10, target: 'enemy' },
       ]),
-      art('pitfall', 'Pitfall', '18 damage + stun.', 3, { tide: 1, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 18, target: 'enemy' },
-        { type: 'STUN', echoes: 1, target: 'enemy' },
+      art('byakugan-read', 'Byakugan Read', 'Ally dodge next hit.', 3, { pulse: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'ally' },
       ]),
-      art('grove-close', 'Grove Close', 'All foes 8 damage and lose 1 weave (engine).', 3, { tide: 2 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      art('grove-close', '64 Palms', '7 to all + drain 1 Weave.', 3, { tide: 1, pulse: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 7, target: 'all-enemies' },
         { type: 'DRAIN_WEAVE', amount: 1 },
       ]),
     ],
@@ -164,14 +252,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'wins',
     accent: '#facc15',
     skills: [
-      art('first-cut', 'First Cut', '16 damage. Always available.', 0, { strike: 1 }, 'enemy', [
+      art('first-cut', 'Konoha Senpuu', '1 Strike — 14 kick.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('second-cut', 'Dynamic Entry', 'Mark + 16 kick. Youth!', 1, { strike: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
         { type: 'DAMAGE', amount: 16, target: 'enemy' },
       ]),
-      art('second-cut', 'Second Cut', '24 damage if the target is marked.', 1, { strike: 1, any: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 24, target: 'enemy' },
+      art('leaf-dodge', 'Leaf Hurricane Step', 'Dodge next hit. Youth!', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-      art('seventh', 'Seventh', '50 damage. Long cooldown.', 4, { strike: 2, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 50, target: 'enemy' },
+      art('seventh', 'Evening Elephant', '40 gate damage.', 4, { strike: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
       ]),
     ],
   },
@@ -187,17 +279,47 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'rank',
     accent: '#e2e8f0',
     skills: [
-      art('soft-edge', 'Soft Edge', 'Mark + 14 damage.', 1, { pulse: 1 }, 'enemy', [
+      art('soft-edge', 'Fireball Feint', '1 Pulse — 11 + mark.', 0, { pulse: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
-        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+        { type: 'DAMAGE', amount: 11, target: 'enemy' },
       ]),
-      art('vanish-line', 'Vanish Line', 'Self veil and 10 damage to a random foe.', 2, { pulse: 1, any: 1 }, 'self', [
-        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'self' },
-        { type: 'DAMAGE', amount: 10, target: 'random-enemy' },
-      ]),
-      art('quiet-kill', 'Quiet Kill', '36 damage. If marked, stun.', 3, { pulse: 1, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 36, target: 'enemy' },
+      art('tsukuyomi', 'Tsukuyomi', '1 Pulse — pure stun.', 3, { pulse: 1 }, 'enemy', [
         { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('vanish-line', 'Crow Substitution', 'Dodge + 6 to a random foe.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+        { type: 'DAMAGE', amount: 6, target: 'random-enemy' },
+      ]),
+      art('quiet-kill', 'Amaterasu', '32 damage; burns after.', 3, { blood: 1, pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 32, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'riku-tide',
+    name: 'Monkey D. Luffy',
+    epithet: 'Straw Hat',
+    faction: 'tide',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#ef4444',
+    skills: [
+      art('stretch-tide', 'Gomu Gomu no Pistol', '1 Tide — 15 punch.', 0, { tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('crew-call', 'Gomu Gomu no Gatling', '7 to all + 8 self shield.', 1, { tide: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 7, target: 'all-enemies' },
+        { type: 'SHIELD', amount: 8, target: 'self' },
+      ]),
+      art('rubber-dodge', 'Gear Second Step', 'Dodge the next hit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('king-wave', 'King Kong Gun', '42 finisher. Bank Tide + Strike.', 4, { tide: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 42, target: 'enemy' },
       ]),
     ],
   },
@@ -207,21 +329,50 @@ export const FIGHTERS: Fighter[] = [
     epithet: 'Pirate Hunter',
     faction: 'tide',
     rarity: 'rare',
-    role: 'tank',
+    role: 'striker',
     hp: FIGHTER_HP,
     unlocked: true,
     unlock: 'starter',
     accent: '#155e75',
     skills: [
-      art('bulkhead', 'Bulkhead', '18 shield on self.', 0, { tide: 1 }, 'self', [
-        { type: 'SHIELD', amount: 18, target: 'self' },
+      art('ram', 'Onigiri', '1 Strike — 18 slash.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 18, target: 'enemy' },
       ]),
-      art('ram', 'Ram', '22 damage and 8 shield.', 1, { tide: 1, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 22, target: 'enemy' },
-        { type: 'SHIELD', amount: 8, target: 'self' },
+      art('dragon-twister', 'Tatsu Maki', '1 Tide — 9 slash all foes.', 0, { tide: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 9, target: 'all-enemies' },
       ]),
-      art('hold-fast', 'Hold Fast', '12 shield on all allies.', 3, { tide: 2 }, 'all-allies', [
-        { type: 'SHIELD', amount: 12, target: 'all-allies' },
+      art('lion-song', 'Nothing Happened', 'Dodge next hit — grit through it.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('asura-path', 'Asura: Nine Swords', '44 triple-blade finisher.', 4, { strike: 1, tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 44, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'pela-kettle',
+    name: 'Vinsmoke Sanji',
+    epithet: 'Black Leg',
+    faction: 'tide',
+    rarity: 'rare',
+    role: 'support',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#fb923c',
+    skills: [
+      art('spice-burn', 'Diable Jambe', '1 Blood — 14 + burn 1.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 1, target: 'enemy' },
+      ]),
+      art('hot-plate', 'Crew Care', '1 Pulse — heal 20.', 0, { pulse: 1 }, 'ally', [
+        { type: 'HEAL', amount: 20, target: 'ally' },
+      ]),
+      art('sky-walk', 'Sky Walk', 'Dodge next hit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('hell-memories', 'Hell Memories', '28 fire kick.', 3, { blood: 1, tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 28, target: 'enemy' },
       ]),
     ],
   },
@@ -237,16 +388,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#06b6d4',
     skills: [
-      art('spray', 'Spray', '10 damage to all foes.', 0, { tide: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 10, target: 'all-enemies' },
+      art('karate-punch', 'Water Shot', '1 Tide — 15 single.', 0, { tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
-      art('undertow', 'Undertow', '16 to all + tidebind one.', 2, { tide: 2 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 16, target: 'all-enemies' },
-        { type: 'APPLY_STATUS', status: 'tidebind', echoes: 1, target: 'enemy' },
+      art('spray', 'Fish-Man Karate', '1 Tide — 7 to all.', 0, { tide: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 7, target: 'all-enemies' },
       ]),
-      art('reef-crash', 'Reef Crash', '30 to one, 8 to the rest.', 3, { tide: 1, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 30, target: 'enemy' },
-        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      art('undertow', 'Ocean Current', 'Tidebind one foe (cuts their Weave).', 2, { tide: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'tidebind', echoes: 2, target: 'enemy' },
+      ]),
+      art('reef-crash', '5000 Brick Fist', '26 + 8 self shield.', 3, { tide: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 26, target: 'enemy' },
+        { type: 'SHIELD', amount: 8, target: 'self' },
       ]),
     ],
   },
@@ -262,14 +415,16 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#7dd3fc',
     skills: [
-      art('harbor', 'Harbor', '14 shield to an ally.', 0, { pulse: 1 }, 'ally', [
+      art('thunderbolt', 'Thunderbolt Tempo', '1 Pulse — 13 lightning.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('harbor', 'Mirage Tempo', '1 Pulse — 14 shield ally.', 0, { pulse: 1 }, 'ally', [
         { type: 'SHIELD', amount: 14, target: 'ally' },
       ]),
-      art('dusk-tide', 'Dusk Tide', 'Heal 16 + 6 shield.', 1, { tide: 1, pulse: 1 }, 'ally', [
-        { type: 'HEAL', amount: 16, target: 'ally' },
-        { type: 'SHIELD', amount: 6, target: 'ally' },
+      art('mirage-dodge', 'Mirage Dodge', 'Ally dodges next hit.', 2, { any: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'ally' },
       ]),
-      art('blackout', 'Blackout', 'Veil an ally.', 3, { tide: 1, blood: 1 }, 'ally', [
+      art('blackout', 'Thundercloud Tempo', 'Veil an ally.', 3, { tide: 1, blood: 1 }, 'ally', [
         { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'ally' },
       ]),
     ],
@@ -286,15 +441,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'wins',
     accent: '#0e7490',
     skills: [
-      art('siphon', 'Siphon', 'Steal 1 weave (engine) and deal 12.', 1, { tide: 1 }, 'enemy', [
+      art('keel-cut', 'Dos Fleur Slap', '1 Strike — 13.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('siphon', 'Cien Fleur Grab', '1 Tide — drain 1 + 8 dmg.', 1, { tide: 1 }, 'enemy', [
         { type: 'DRAIN_WEAVE', amount: 1 },
-        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+        { type: 'DAMAGE', amount: 8, target: 'enemy' },
       ]),
-      art('empty-hold', 'Empty Hold', 'Drain 2 weave.', 3, { tide: 1, pulse: 1 }, 'enemy', [
-        { type: 'DRAIN_WEAVE', amount: 2 },
+      art('empty-hold', 'Clutch', 'Stun — flowers pin them.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
       ]),
-      art('keel-cut', 'Keel Cut', '26 damage to a drained-feeling target.', 2, { tide: 1, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 26, target: 'enemy' },
+      art('gigantes', 'Gigantesco Mano', '24 after you taxed them.', 2, { strike: 1, any: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 24, target: 'enemy' },
       ]),
     ],
   },
@@ -310,16 +468,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'wins',
     accent: '#5eead4',
     skills: [
-      art('salt-cut', 'Salt Cut', '14 damage + burn 2.', 0, { blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      art('salt-cut', 'Room: Scalpel', '1 Blood — 12 + burn 2.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy' },
         { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
       ]),
-      art('rot-wave', 'Rot Wave', 'Burn all foes.', 2, { tide: 1, blood: 1 }, 'all-enemies', [
-        { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'all-enemies' },
-        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      art('shambles', 'Shambles', '1 Tide — dodge via Room swap.', 1, { tide: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-      art('open-water', 'Open Water', '32 to a burning foe.', 3, { blood: 2 }, 'enemy', [
-        { type: 'DAMAGE', amount: 32, target: 'enemy' },
+      art('rot-wave', 'Injection Shot', 'Burn all foes.', 2, { blood: 1 }, 'all-enemies', [
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'all-enemies' },
+      ]),
+      art('open-water', 'Gamma Knife', '28 to a burning foe.', 3, { blood: 1, tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 28, target: 'enemy' },
       ]),
     ],
   },
@@ -335,255 +495,17 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'rank',
     accent: '#1e3a5f',
     skills: [
-      art('hook', 'Hook', '18 damage. Pull (control later).', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 18, target: 'enemy' },
+      art('hook', 'Dark Vortex', '1 Strike — 13.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
       ]),
-      art('night-tax', 'Night Tax', 'Drain 1 and 16 damage.', 2, { tide: 1, blood: 1 }, 'enemy', [
+      art('night-tax', 'Black Hole', '1 Tide — drain 1.', 1, { tide: 1 }, 'enemy', [
         { type: 'DRAIN_WEAVE', amount: 1 },
-        { type: 'DAMAGE', amount: 16, target: 'enemy' },
       ]),
-      art('black-prize', 'Black Prize', '40 damage if you drained this Echo (engine flag).', 4, { tide: 1, strike: 1, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      art('quake', 'Dark Cloak', 'Dodge next hit in darkness.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
       ]),
-    ],
-  },
-  {
-    id: 'aora-zen',
-    name: 'Yuta Okkotsu',
-    epithet: 'Special Grade',
-    faction: 'pulse',
-    rarity: 'rare',
-    role: 'striker',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#fde047',
-    skills: [
-      art('sun-line', 'Sun Line', '26 Pulse damage.', 0, { pulse: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 26, target: 'enemy' },
-      ]),
-      art('flare-split', 'Flare Split', '14 to all foes.', 1, { pulse: 1, any: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 14, target: 'all-enemies' },
-      ]),
-      art('zenith', 'Zenith', '44 damage beam.', 3, { pulse: 2 }, 'enemy', [
-        { type: 'DAMAGE', amount: 44, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'lys-rael',
-    name: 'Megumi Fushiguro',
-    epithet: 'Ten Shadows',
-    faction: 'pulse',
-    rarity: 'rare',
-    role: 'striker',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#c4b5fd',
-    skills: [
-      art('shift', 'Shift', '10 shield + 16 damage.', 1, { pulse: 1 }, 'enemy', [
-        { type: 'SHIELD', amount: 10, target: 'self' },
-        { type: 'DAMAGE', amount: 16, target: 'enemy' },
-      ]),
-      art('raiment', 'Raiment', 'Self 20 shield.', 2, { pulse: 1, blood: 1 }, 'self', [
-        { type: 'SHIELD', amount: 20, target: 'self' },
-      ]),
-      art('true-name', 'True Name', '38 damage. Breaks 12 shield first (engine).', 3, { pulse: 2, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 38, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'hali-storm',
-    name: 'Nobara Kugisaki',
-    epithet: 'Resonance',
-    faction: 'pulse',
-    rarity: 'common',
-    role: 'aoe',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#818cf8',
-    skills: [
-      art('spark', 'Spark', '20 to one foe.', 0, { pulse: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 20, target: 'enemy' },
-      ]),
-      art('chain-sky', 'Chain Sky', '12 to all foes.', 1, { pulse: 1, strike: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 12, target: 'all-enemies' },
-      ]),
-      art('cell-burst', 'Cell Burst', 'Stun a random foe and 18 damage.', 3, { pulse: 1, any: 1 }, 'random-enemy', [
-        { type: 'STUN', echoes: 1, target: 'random-enemy' },
-        { type: 'DAMAGE', amount: 18, target: 'random-enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'kiro-pulse',
-    name: 'Toji Fushiguro',
-    epithet: 'Sorcerer Killer',
-    faction: 'pulse',
-    rarity: 'epic',
-    role: 'control',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'wins',
-    accent: '#ddd6fe',
-    skills: [
-      art('tap', 'Tap', '15 damage. Shreds shield (engine).', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 15, target: 'enemy' },
-      ]),
-      art('shatter-note', 'Shatter Note', 'All foes 10 + lose shield.', 2, { pulse: 1, strike: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 10, target: 'all-enemies' },
-      ]),
-      art('silence-bell', 'Silence Bell', 'Stun + 20.', 3, { pulse: 2 }, 'enemy', [
-        { type: 'STUN', echoes: 1, target: 'enemy' },
-        { type: 'DAMAGE', amount: 20, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'senna-drift',
-    name: 'Maki Zenin',
-    epithet: 'Heavenly Restriction',
-    faction: 'pulse',
-    rarity: 'epic',
-    role: 'support',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'wins',
-    accent: '#f5d0fe',
-    skills: [
-      art('drift', 'Drift', 'Heal 14 and 8 shield on ally.', 0, { pulse: 1 }, 'ally', [
-        { type: 'HEAL', amount: 14, target: 'ally' },
-        { type: 'SHIELD', amount: 8, target: 'ally' },
-      ]),
-      art('afterimage', 'Afterimage', 'Ally veil.', 3, { pulse: 1, any: 1 }, 'ally', [
-        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'ally' },
-      ]),
-      art('return-thread', 'Return Thread', 'Heal all 12.', 2, { pulse: 2 }, 'all-allies', [
-        { type: 'HEAL', amount: 12, target: 'all-allies' },
-      ]),
-    ],
-  },
-  {
-    id: 'venn-hollow',
-    name: 'Ryomen Sukuna',
-    epithet: 'King of Curses',
-    faction: 'pulse',
-    rarity: 'legendary',
-    role: 'support',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'rank',
-    accent: '#6b21a8',
-    skills: [
-      art('threshold', 'Threshold', '12 shield all allies.', 1, { pulse: 1, blood: 1 }, 'all-allies', [
-        { type: 'SHIELD', amount: 12, target: 'all-allies' },
-      ]),
-      art('hollow-gift', 'Hollow Gift', 'Heal 28. Cannot target self.', 2, { pulse: 2 }, 'ally', [
-        { type: 'HEAL', amount: 28, target: 'ally' },
-      ]),
-      art('last-door', 'Last Door', 'Veil all allies. Once-feeling cooldown.', 4, { pulse: 2, blood: 1 }, 'all-allies', [
-        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'all-allies' },
-      ]),
-    ],
-  },
-  {
-    id: 'kenji-orb',
-    name: 'Naruto Uzumaki',
-    epithet: 'Nine Tails',
-    faction: 'ashen',
-    rarity: 'legendary',
-    role: 'striker',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#f97316',
-    skills: [
-      art('orb-rush', 'Orb Rush', '30 ember damage. Always ready.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 30, target: 'enemy' },
-      ]),
-      art('spiral-ember', 'Spiral Ember', 'Mark and 18 damage. Sets up the closer.', 2, { strike: 1, pulse: 1 }, 'enemy', [
-        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
-        { type: 'DAMAGE', amount: 18, target: 'enemy' },
-      ]),
-      art('village-vow', 'Village Vow', '46 damage. Bloodied Naruto hits even harder.', 3, { strike: 2, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 46, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'kage-bind',
-    name: 'Shikamaru Nara',
-    epithet: 'Shadow Bind',
-    faction: 'ashen',
-    rarity: 'epic',
-    role: 'control',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#44403c',
-    skills: [
-      art('shadow-pin', 'Shadow Pin', 'Stun one foe before their strike wave.', 2, { pulse: 1 }, 'enemy', [
-        { type: 'STUN', echoes: 1, target: 'enemy' },
-      ]),
-      art('plan-two', 'Plan Two', 'Drain 1 Weave and 10 damage.', 2, { pulse: 1, tide: 1 }, 'enemy', [
-        { type: 'DRAIN_WEAVE', amount: 1 },
-        { type: 'DAMAGE', amount: 10, target: 'enemy' },
-      ]),
-      art('checkmate', 'Checkmate', '24 damage + stun. Control wins gates.', 3, { pulse: 1, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 24, target: 'enemy' },
-        { type: 'STUN', echoes: 1, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'riku-tide',
-    name: 'Monkey D. Luffy',
-    epithet: 'Straw Hat',
-    faction: 'tide',
-    rarity: 'legendary',
-    role: 'striker',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#ef4444',
-    skills: [
-      art('stretch-tide', 'Stretch Tide', '26 damage that keeps grinning.', 0, { tide: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 26, target: 'enemy' },
-      ]),
-      art('crew-call', 'Crew Call', '10 to all foes and 8 shield on Luffy.', 1, { tide: 1, any: 1 }, 'all-enemies', [
-        { type: 'DAMAGE', amount: 10, target: 'all-enemies' },
-        { type: 'SHIELD', amount: 8, target: 'self' },
-      ]),
-      art('king-wave', 'King Wave', '48 to one foe. The closer.', 4, { tide: 2, strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 48, target: 'enemy' },
-      ]),
-    ],
-  },
-  {
-    id: 'pela-kettle',
-    name: 'Vinsmoke Sanji',
-    epithet: 'Black Leg',
-    faction: 'tide',
-    rarity: 'rare',
-    role: 'support',
-    hp: FIGHTER_HP,
-    unlocked: true,
-    unlock: 'starter',
-    accent: '#fb923c',
-    skills: [
-      art('hot-plate', 'Hot Plate', 'Heal an ally 22.', 0, { pulse: 1 }, 'ally', [
-        { type: 'HEAL', amount: 22, target: 'ally' },
-      ]),
-      art('feast', 'Feast', 'Heal all 12 and 6 shield.', 2, { tide: 1, pulse: 1 }, 'all-allies', [
-        { type: 'HEAL', amount: 12, target: 'all-allies' },
-        { type: 'SHIELD', amount: 6, target: 'all-allies' },
-      ]),
-      art('spice-burn', 'Spice Burn', '18 damage + burn 2.', 2, { blood: 1, tide: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 18, target: 'enemy' },
-        { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
+      art('black-prize', 'Liberation', '36 if you drained this Echo.', 4, { tide: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 36, target: 'enemy' },
       ]),
     ],
   },
@@ -599,15 +521,18 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#e0f2fe',
     skills: [
-      art('hollow-palm', 'Hollow Palm', '22 damage. Shreds shield first.', 0, { pulse: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 22, target: 'enemy' },
+      art('hollow-palm', 'Lapse: Blue', '1 Pulse — 15. Shreds shield.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
-      art('limit-field', 'Limit Field', 'Self veil. Their hits bounce.', 3, { pulse: 1, any: 1 }, 'self', [
+      art('reversal-red', 'Reversal: Red', '1 Strike — stun + 12 blast.', 1, { strike: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+      ]),
+      art('limit-field', 'Infinity', 'Veil — untouchable bounce.', 3, { pulse: 1 }, 'self', [
         { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'self' },
       ]),
-      art('infinity-cut', 'Infinity Cut', '40 damage. Stun if you are veiled.', 3, { pulse: 2, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 40, target: 'enemy' },
-        { type: 'STUN', echoes: 1, target: 'enemy' },
+      art('infinity-cut', 'Hollow Purple', '36 domain erasure.', 3, { pulse: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 36, target: 'enemy' },
       ]),
     ],
   },
@@ -623,15 +548,664 @@ export const FIGHTERS: Fighter[] = [
     unlock: 'starter',
     accent: '#f472b6',
     skills: [
-      art('pink-spark', 'Pink Spark', '20 cursed damage.', 0, { strike: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 20, target: 'enemy' },
+      art('pink-spark', 'Divergent Fist', '1 Strike — 15.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
       ]),
-      art('cage-break', 'Cage Break', 'Mark + 26. Focus-fire bait.', 2, { pulse: 1, strike: 1 }, 'enemy', [
+      art('cage-break', 'Black Flash', 'Mark + 18.', 2, { pulse: 1 }, 'enemy', [
         { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
-        { type: 'DAMAGE', amount: 26, target: 'enemy' },
+        { type: 'DAMAGE', amount: 18, target: 'enemy' },
       ]),
-      art('malevolent', 'Malevolent', '52 damage. Long cooldown.', 4, { pulse: 1, strike: 1, blood: 1 }, 'enemy', [
-        { type: 'DAMAGE', amount: 52, target: 'enemy' },
+      art('manji-dodge', 'Manji Kick Feint', 'Dodge next hit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('malevolent', 'Sukuna: Cleave', '40 finisher.', 4, { pulse: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'venn-hollow',
+    name: 'Ryomen Sukuna',
+    epithet: 'King of Curses',
+    faction: 'pulse',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'rank',
+    accent: '#6b21a8',
+    skills: [
+      art('dismantle', 'Dismantle', '1 Strike — 17 slash.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 17, target: 'enemy' },
+      ]),
+      art('cleave', 'Cleave', '1 Pulse — mark + 14.', 1, { pulse: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('open', 'Open', 'Stun one foe — domain pressure.', 2, { blood: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('last-door', 'Malevolent Shrine', '38 domain cut.', 4, { pulse: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'aora-zen',
+    name: 'Yuta Okkotsu',
+    epithet: 'Special Grade',
+    faction: 'pulse',
+    rarity: 'rare',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#fde047',
+    skills: [
+      art('sun-line', 'Cursed Speech Cut', '1 Pulse — 14 + stun.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('flare-split', 'Rika Barrage', '8 to all.', 1, { pulse: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      ]),
+      art('rika-guard', 'Rika Shield', '16 self shield.', 1, { any: 1 }, 'self', [
+        { type: 'SHIELD', amount: 16, target: 'self' },
+      ]),
+      art('zenith', 'Pure Love Beam', '38 beam.', 3, { pulse: 2 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'lys-rael',
+    name: 'Megumi Fushiguro',
+    epithet: 'Ten Shadows',
+    faction: 'pulse',
+    rarity: 'rare',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#c4b5fd',
+    skills: [
+      art('shift', 'Divine Dogs', '1 Pulse — 13 + 6 shield.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'SHIELD', amount: 6, target: 'self' },
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('nue-bolt', 'Nue', '1 Strike — 16 from above.', 1, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('rabbit-dodge', 'Rabbit Escape', 'Dodge next hit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('true-name', 'Mahoraga Slash', '34. Breaks 12 shield first.', 3, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 34, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'hali-storm',
+    name: 'Nobara Kugisaki',
+    epithet: 'Resonance',
+    faction: 'pulse',
+    rarity: 'common',
+    role: 'aoe',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#818cf8',
+    skills: [
+      art('spark', 'Straw Doll Nail', '1 Pulse — 14.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('chain-sky', 'Resonance', '1 Strike — 8 to all.', 1, { strike: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      ]),
+      art('hairpin-prep', 'Hairpin Charge', 'Mark one foe.', 1, { pulse: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+      ]),
+      art('cell-burst', 'Hairpin', 'Stun random + 14.', 3, { pulse: 1, any: 1 }, 'random-enemy', [
+        { type: 'STUN', echoes: 1, target: 'random-enemy' },
+        { type: 'DAMAGE', amount: 14, target: 'random-enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'kiro-pulse',
+    name: 'Toji Fushiguro',
+    epithet: 'Sorcerer Killer',
+    faction: 'pulse',
+    rarity: 'epic',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'wins',
+    accent: '#ddd6fe',
+    skills: [
+      art('tap', 'Inverted Spear', '1 Strike — 14. Shreds shield.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('split-soul', 'Split Soul Katana', '1 Strike — 18.', 1, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 18, target: 'enemy' },
+      ]),
+      art('assassin-dodge', 'Assassin Step', 'Dodge next hit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('silence-bell', 'Playful Cloud', 'Stun + 16.', 3, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'senna-drift',
+    name: 'Maki Zenin',
+    epithet: 'Heavenly Restriction',
+    faction: 'pulse',
+    rarity: 'epic',
+    role: 'support',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'wins',
+    accent: '#f5d0fe',
+    skills: [
+      art('spear-thrust', 'Playful Cloud Strike', '1 Strike — 15.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('drift', 'Combat Medic', '1 Pulse — heal 14 + 8 shield.', 0, { pulse: 1 }, 'ally', [
+        { type: 'HEAL', amount: 14, target: 'ally' },
+        { type: 'SHIELD', amount: 8, target: 'ally' },
+      ]),
+      art('return-thread', 'Squad Rally', 'Heal all 12.', 2, { pulse: 1 }, 'all-allies', [
+        { type: 'HEAL', amount: 12, target: 'all-allies' },
+      ]),
+      art('afterimage', 'Split Soul Curtain', 'Ally veil.', 3, { pulse: 1, any: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'ally' },
+      ]),
+    ],
+  },
+
+  // ── Demon Slayer ─────────────────────────────────────────────
+  {
+    id: 'tanjiro-sun',
+    name: 'Tanjiro Kamado',
+    epithet: 'Hinokami',
+    faction: 'blade',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#dc2626',
+    skills: [
+      art('water-slash', 'Water Surface Slash', '1 Tide — 15 water cut.', 0, { tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('hinokami', 'Hinokami Kagura', 'Mark + burn — dance of the fire god.', 2, { blood: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 1, target: 'enemy' },
+      ]),
+      art('total-focus', 'Total Concentration', 'Dodge next hit — steady breath.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('sun-breath', 'Clear Blue Sky', '40 sun-wheel finisher.', 4, { strike: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'nezuko-box',
+    name: 'Nezuko Kamado',
+    epithet: 'Exploding Blood',
+    faction: 'blade',
+    rarity: 'epic',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#f472b6',
+    skills: [
+      art('kick-box', 'Bamboo Kick', '1 Strike — 14.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('blood-burst', 'Exploding Blood', 'Burn + 12 pyrokinesis.', 1, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'burn', echoes: 2, target: 'enemy' },
+      ]),
+      art('grow-size', 'Demon Size', '12 self shield — grow.', 2, { any: 1 }, 'self', [
+        { type: 'SHIELD', amount: 12, target: 'self' },
+      ]),
+      art('blood-detonate', 'Blood Burst Finale', '36 if they burn.', 4, { blood: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 36, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'zenitsu-bolt',
+    name: 'Zenitsu Agatsuma',
+    epithet: 'Thunder',
+    faction: 'blade',
+    rarity: 'rare',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#facc15',
+    skills: [
+      art('thunder-clap', 'Thunderclap and Flash', '1 Strike — 16.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('sleep-sparks', 'Sleeping Thunder', 'Stun — he only fights asleep.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('sixfold', 'Sixfold Flash', 'Dodge next hit at lightning speed.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('godspeed', 'Godspeed', '42 thunder pierce.', 4, { strike: 1, pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 42, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'inosuke-beast',
+    name: 'Inosuke Hashibira',
+    epithet: 'Beast Breathing',
+    faction: 'blade',
+    rarity: 'rare',
+    role: 'aoe',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#86efac',
+    skills: [
+      art('fang-slash', 'Spatial Awareness', '1 Strike — 14 dual blades.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('beast-whirl', 'Crazy Cutting', '8 slash all foes.', 1, { strike: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 8, target: 'all-enemies' },
+      ]),
+      art('boar-head', 'Boar Headbutt', '14 self shield — stubborn.', 1, { any: 1 }, 'self', [
+        { type: 'SHIELD', amount: 14, target: 'self' },
+      ]),
+      art('devour', 'Palindromic Slash', '34 wild finisher.', 3, { strike: 1, tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 34, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'giyu-calm',
+    name: 'Giyu Tomioka',
+    epithet: 'Water Hashira',
+    faction: 'blade',
+    rarity: 'epic',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'wins',
+    accent: '#0ea5e9',
+    skills: [
+      art('water-wheel', 'Water Wheel', '1 Tide — 14.', 0, { tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('dead-calm', 'Dead Calm', 'Stun — nullify their flow.', 3, { tide: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('flowing-dance', 'Flowing Dance', 'Dodge — water steps.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('eleventh', 'Dead Calm Strike', '28 + tidebind.', 3, { tide: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 28, target: 'enemy' },
+        { type: 'APPLY_STATUS', status: 'tidebind', echoes: 2, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'rengoku-flame',
+    name: 'Kyojuro Rengoku',
+    epithet: 'Flame Hashira',
+    faction: 'blade',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'rank',
+    accent: '#f97316',
+    skills: [
+      art('unknowing-fire', 'Unknowing Fire', '1 Blood — 16 flame.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('rising-scorch', 'Rising Scorching Sun', 'Mark + 14.', 1, { blood: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('set-heart', 'Set Your Heart Ablaze', 'Ally shield 16 — inspire.', 2, { any: 1 }, 'ally', [
+        { type: 'SHIELD', amount: 16, target: 'ally' },
+      ]),
+      art('rengoku-ninth', 'Rengoku', '44 blazing pillar.', 4, { blood: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 44, target: 'enemy' },
+      ]),
+    ],
+  },
+
+  // ── Dragon Ball ──────────────────────────────────────────────
+  {
+    id: 'goku-ki',
+    name: 'Son Goku',
+    epithet: 'Ultra Instinct',
+    faction: 'flare',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#f59e0b',
+    skills: [
+      art('kamehameha', 'Kamehameha', '1 Strike — 16 ki wave.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('kaioken', 'Kaio-ken', 'Mark self-pressure + 14 hit.', 1, { blood: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('instant', 'Instant Transmission', 'Dodge — appear behind them.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('spirit-bomb', 'Spirit Bomb', '42 gathered energy.', 4, { strike: 1, pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 42, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'vegeta-pride',
+    name: 'Vegeta',
+    epithet: 'Prince of Saiyans',
+    faction: 'flare',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#1d4ed8',
+    skills: [
+      art('galick-gun', 'Galick Gun', '1 Strike — 15.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('final-flash', 'Final Flash', 'Mark + 18 pride blast.', 2, { strike: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'DAMAGE', amount: 18, target: 'enemy' },
+      ]),
+      art('royal-guard', 'Royal Guard', '16 self shield — pride.', 1, { any: 1 }, 'self', [
+        { type: 'SHIELD', amount: 16, target: 'self' },
+      ]),
+      art('final-explosion', 'Final Explosion', '40 self-sacrifice blast.', 4, { strike: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'piccolo-namek',
+    name: 'Piccolo',
+    epithet: 'Namekian',
+    faction: 'flare',
+    rarity: 'rare',
+    role: 'support',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#166534',
+    skills: [
+      art('special-beam', 'Special Beam Cannon', '1 Pulse — 15 pierce.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('regenerate', 'Namekian Regen', 'Heal ally 20.', 0, { pulse: 1 }, 'ally', [
+        { type: 'HEAL', amount: 20, target: 'ally' },
+      ]),
+      art('stretch-dodge', 'Stretch Arms', 'Dodge — elastic reach.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('hellzone', 'Hellzone Grenade', '9 to all foes.', 3, { pulse: 1, strike: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 9, target: 'all-enemies' },
+      ]),
+    ],
+  },
+  {
+    id: 'gohan-mystic',
+    name: 'Son Gohan',
+    epithet: 'Mystic',
+    faction: 'flare',
+    rarity: 'epic',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#a3e635',
+    skills: [
+      art('masenko', 'Masenko', '1 Pulse — 15.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('potential', 'Potential Unleashed', 'Ally heal 14 + 8 shield.', 2, { pulse: 1 }, 'ally', [
+        { type: 'HEAL', amount: 14, target: 'ally' },
+        { type: 'SHIELD', amount: 8, target: 'ally' },
+      ]),
+      art('hidden-power', 'Hidden Power', 'Dodge — break the limit.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('father-son', 'Father-Son Kamehameha', '40 family beam.', 4, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'frieza-empire',
+    name: 'Frieza',
+    epithet: 'Emperor',
+    faction: 'flare',
+    rarity: 'epic',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'wins',
+    accent: '#e9d5ff',
+    skills: [
+      art('death-beam', 'Death Beam', '1 Blood — 14 finger laser.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('imprison', 'Imprisonment Ball', 'Stun in a death orb.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('golden-dodge', 'Golden Form Step', 'Dodge — reinvented.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('death-ball', 'Death Ball', '38 planet-killer.', 4, { blood: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'beerus-haka',
+    name: 'Beerus',
+    epithet: 'God of Destruction',
+    faction: 'flare',
+    rarity: 'legendary',
+    role: 'drain',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'rank',
+    accent: '#7c3aed',
+    skills: [
+      art('chop', 'God Chop', '1 Strike — 15.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('hakai', 'Hakai', 'Drain 1 Weave — erase matter.', 1, { pulse: 1 }, 'enemy', [
+        { type: 'DRAIN_WEAVE', amount: 1 },
+        { type: 'DAMAGE', amount: 10, target: 'enemy' },
+      ]),
+      art('ultra-instinct-god', 'Destroyer Poise', 'Veil — godly composure.', 3, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'self' },
+      ]),
+      art('sphere-destroy', 'Sphere of Destruction', '42 hakai orb.', 4, { pulse: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 42, target: 'enemy' },
+      ]),
+    ],
+  },
+
+  // ── Bleach ───────────────────────────────────────────────────
+  {
+    id: 'ichigo-blade',
+    name: 'Ichigo Kurosaki',
+    epithet: 'Substitute Shinigami',
+    faction: 'soul',
+    rarity: 'legendary',
+    role: 'striker',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#f97316',
+    skills: [
+      art('getsuga', 'Getsuga Tensho', '1 Strike — 16 crescent.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('bankai-rush', 'Tensa Zangetsu', 'Mark + 16 Bankai rush.', 1, { strike: 1 }, 'enemy', [
+        { type: 'APPLY_STATUS', status: 'mark', echoes: 2, target: 'enemy' },
+        { type: 'DAMAGE', amount: 16, target: 'enemy' },
+      ]),
+      art('shunpo', 'Shunpo', 'Dodge — flash step.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('mugetsu', 'Mugetsu', '44 final Getsuga.', 4, { strike: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 44, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'rukia-ice',
+    name: 'Rukia Kuchiki',
+    epithet: 'Sode no Shirayuki',
+    faction: 'soul',
+    rarity: 'rare',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#e0f2fe',
+    skills: [
+      art('ice-slash', 'Some no Mai', '1 Pulse — 13 ice.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('tsugi-no-mai', 'Tsugi no Mai: Hakuren', 'Stun — freeze solid.', 2, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('ice-veil', 'White Haze', 'Ally dodge — ice mist.', 2, { any: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'ally' },
+      ]),
+      art('san-no-mai', 'San no Mai: Shirafune', '30 ice blade.', 3, { pulse: 1, tide: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 30, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'byakuya-petal',
+    name: 'Byakuya Kuchiki',
+    epithet: 'Senbonzakura',
+    faction: 'soul',
+    rarity: 'epic',
+    role: 'aoe',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#fda4af',
+    skills: [
+      art('petal-cut', 'Senbonzakura', '1 Pulse — 14 petal blade.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 14, target: 'enemy' },
+      ]),
+      art('senkei', 'Senkei', '9 petal storm all foes.', 1, { pulse: 1 }, 'all-enemies', [
+        { type: 'DAMAGE', amount: 9, target: 'all-enemies' },
+      ]),
+      art('noble-step', 'Flash Step', 'Dodge — noble speed.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('shukei', 'Shukei: Hakuteiken', '36 white imperial sword.', 4, { pulse: 1, strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 36, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'aizen-kyoka',
+    name: 'Sosuke Aizen',
+    epithet: 'Kyoka Suigetsu',
+    faction: 'soul',
+    rarity: 'legendary',
+    role: 'control',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'rank',
+    accent: '#854d0e',
+    skills: [
+      art('kido-tap', 'Hado 63', '1 Pulse — 13 kido.', 0, { pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 13, target: 'enemy' },
+      ]),
+      art('complete-hypnosis', 'Complete Hypnosis', 'Stun — you never saw it.', 3, { pulse: 1 }, 'enemy', [
+        { type: 'STUN', echoes: 1, target: 'enemy' },
+      ]),
+      art('illusion-step', 'Kyoka Feint', 'Dodge — perfect illusion.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('kurohitsugi', 'Kurohitsugi', '38 black coffin.', 4, { pulse: 1, blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 38, target: 'enemy' },
+      ]),
+    ],
+  },
+  {
+    id: 'orihime-shield',
+    name: 'Orihime Inoue',
+    epithet: 'Shun Shun Rikka',
+    faction: 'soul',
+    rarity: 'rare',
+    role: 'support',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'starter',
+    accent: '#fb7185',
+    skills: [
+      art('fairies-cut', 'Koten Zanshun', '1 Strike — 12 fairy blade.', 0, { strike: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 12, target: 'enemy' },
+      ]),
+      art('santen', 'Santen Kesshun', '18 shield on ally.', 0, { pulse: 1 }, 'ally', [
+        { type: 'SHIELD', amount: 18, target: 'ally' },
+      ]),
+      art('soten', 'Soten Kisshun', 'Heal ally 24 — reject events.', 1, { pulse: 1 }, 'ally', [
+        { type: 'HEAL', amount: 24, target: 'ally' },
+      ]),
+      art('shiten', 'Shiten Koshun', 'Ally veil — reject & reflect.', 3, { pulse: 1, any: 1 }, 'ally', [
+        { type: 'APPLY_STATUS', status: 'veil', echoes: 1, target: 'ally' },
+      ]),
+    ],
+  },
+  {
+    id: 'ulquiorra-lance',
+    name: 'Ulquiorra Cifer',
+    epithet: 'Espada IV',
+    faction: 'soul',
+    rarity: 'epic',
+    role: 'drain',
+    hp: FIGHTER_HP,
+    unlocked: true,
+    unlock: 'wins',
+    accent: '#134e4a',
+    skills: [
+      art('cero', 'Cero', '1 Blood — 15.', 0, { blood: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 15, target: 'enemy' },
+      ]),
+      art('luz-de-luna', 'Luz de la Luna', 'Drain 1 + 10 spear.', 1, { tide: 1 }, 'enemy', [
+        { type: 'DRAIN_WEAVE', amount: 1 },
+        { type: 'DAMAGE', amount: 10, target: 'enemy' },
+      ]),
+      art('segunda', 'Segunda Etapa', 'Dodge — bat-wing step.', 2, { any: 1 }, 'self', [
+        { type: 'APPLY_STATUS', status: 'dodge', echoes: 1, target: 'self' },
+      ]),
+      art('lanza', 'Lanza del Relampago', '40 lightning lance.', 4, { blood: 1, pulse: 1 }, 'enemy', [
+        { type: 'DAMAGE', amount: 40, target: 'enemy' },
       ]),
     ],
   },
@@ -641,17 +1215,16 @@ export const FIGHTER_BY_ID: Record<string, Fighter> = Object.fromEntries(
   FIGHTERS.map((fighter) => [fighter.id, fighter])
 );
 
-/** Lead fighters shown on the first lobby rows. */
 export const FEATURED_FIGHTER_IDS = [
   'kenji-orb',
+  'goku-ki',
+  'tanjiro-sun',
+  'ichigo-blade',
   'riku-tide',
   'six-hollow',
-  'kaen-roux',
-  'captain-vex',
-  'cage-void',
-  'shiro-vale',
-  'pela-kettle',
-  'venn-hollow',
+  'rengoku-flame',
+  'vegeta-pride',
+  'aizen-kyoka',
 ] as const;
 
 export function lobbyFighters(): Fighter[] {
@@ -667,7 +1240,21 @@ export function getFighter(id: string): Fighter | undefined {
 }
 
 export function getFighterArts(fighter: Fighter): Art[] {
-  return [...fighter.skills, AEGIS_VEIL];
+  return [...fighter.skills];
+}
+
+export function findGuardArt(fighter: Fighter): Art | undefined {
+  return fighter.skills.find(
+    (skill) =>
+      skill.universal ||
+      skill.id === 'aegis-veil' ||
+      skill.effects.some(
+        (effect) =>
+          effect.type === 'APPLY_STATUS' &&
+          (effect.status === 'veil' || effect.status === 'dodge') &&
+          (effect.target === 'self' || skill.target === 'self')
+      )
+  );
 }
 
 export function starterFighters(): Fighter[] {

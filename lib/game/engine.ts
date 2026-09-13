@@ -1,5 +1,5 @@
 import type { Art, Effect, EnergyId, TargetKind } from '@/types/game';
-import { getFighter, getFighterArts, TEAM_SIZE } from '@/lib/game/roster';
+import { ENERGY_META, findGuardArt, getFighter, getFighterArts, TEAM_SIZE } from '@/lib/game/roster';
 import { getResonance } from '@/lib/game/team-rules';
 
 export type SideId = 'player' | 'foe';
@@ -18,6 +18,8 @@ export type UnitState = {
   cooldowns: Record<string, number>;
   stun: number;
   veil: number;
+  /** Next damaging hit is fully avoided, then dodge is consumed. */
+  dodge: number;
   mark: number;
   burn: number;
   tidebind: number;
@@ -32,7 +34,7 @@ export type SideState = {
   drainedThisEcho: boolean;
 };
 
-export type CombatKind = 'attack' | 'hit' | 'heal' | 'shield' | 'stun' | 'seal' | 'veil' | 'drain' | 'block';
+export type CombatKind = 'attack' | 'hit' | 'heal' | 'shield' | 'stun' | 'seal' | 'veil' | 'drain' | 'block' | 'dodge';
 
 export type CombatEvent = {
   kind: CombatKind;
@@ -56,11 +58,14 @@ export type MatchState = {
   lastCasterId: string | null;
   combatEvents: CombatEvent[];
   endReason: 'seal' | 'echo-cap' | 'surrender' | 'draw' | null;
+  /** Last Weave pips granted this Echo (for UI: bank and wait). */
+  lastGranted: Record<SideId, EnergyId[]>;
 };
 
 export const ECHO_SECONDS = 22;
 export const MAX_ECHO = 12;
-export const WEAVE_CAP = 7;
+/** Max banked Weave. Unused pips never expire — only spend or refuse new grants when full. */
+export const WEAVE_CAP = 10;
 export const BLOODIED_HP = 35;
 export const VEIL_COUNTER = 10;
 export const COMBO_BONUS = 6;
@@ -93,6 +98,7 @@ function makeUnit(id: string): UnitState {
     cooldowns: {},
     stun: 0,
     veil: 0,
+    dodge: 0,
     mark: 0,
     burn: 0,
     tidebind: 0,
@@ -117,10 +123,16 @@ export function needsExplicitTarget(target: TargetKind): boolean {
   return target === 'enemy' || target === 'ally';
 }
 
+/** Always prefer a mixed draw (Naruto-Arena style chakra spread). */
 function grantPips(count: number, rng: () => number, extraAny: boolean): EnergyId[] {
   const pips: EnergyId[] = [];
   for (let i = 0; i < count; i += 1) {
-    pips.push(COLORED[Math.floor(rng() * COLORED.length)] ?? 'strike');
+    let pick = COLORED[Math.floor(rng() * COLORED.length)] ?? 'strike';
+    if (i > 0 && pips[i - 1] === pick) {
+      const others = COLORED.filter((color) => color !== pick);
+      pick = others[Math.floor(rng() * others.length)] ?? pick;
+    }
+    pips.push(pick);
   }
   if (extraAny) pips.push('any');
   return pips;
@@ -188,12 +200,13 @@ export function createMatch(playerIds: string[], foeIds: string[], seed = Date.n
       player: makeSide(playerIds),
       foe: makeSide(foeIds),
     },
-    log: ['Echo 1 — your turn. Pick powers, then Attack.'],
+    log: ['Echo 1 — +2 mixed jutsu energy each turn. Unused energy banks. Spend when ready.'],
     winner: null,
     seed,
     lastCasterId: playerIds[0] ?? null,
     combatEvents: [],
     endReason: null,
+    lastGranted: { player: [], foe: [] },
   };
 
   fillWeave(state, rng);
@@ -203,13 +216,24 @@ export function createMatch(playerIds: string[], foeIds: string[], seed = Date.n
 function fillWeave(state: MatchState, rng: () => number) {
   (['player', 'foe'] as SideId[]).forEach((sideId) => {
     const side = state.sides[sideId];
-    const living = livingIds(side).length;
     const bound = livingIds(side).filter((id) => side.units[id].tidebind > 0).length;
     const fighters = livingIds(side).map((id) => getFighter(id)!).filter(Boolean);
     const chaos = getResonance(fighters) === 'chaos';
-    const ash =
-      state.echo === 1 ? (sideId === 'player' ? 1 : 3) : Math.max(0, living - bound);
-    side.weave = [...side.weave, ...grantPips(ash, rng, chaos)].slice(-WEAVE_CAP);
+    // Naruto-Arena style: +2 mixed jutsu energy each Echo; leftovers stay until spent.
+    // Never drop old pips — only grant what fits under the cap. Tidebind cuts the grant;
+    // Chaos Resonance still adds +1 Any when there is room.
+    const room = Math.max(0, WEAVE_CAP - side.weave.length);
+    let grant = Math.min(2, room);
+    if (bound > 0 && grant > 0) grant = Math.max(1, grant - Math.min(bound, 1));
+    if (grant === 0 && room === 0) {
+      state.lastGranted[sideId] = [];
+      side.drainedThisEcho = false;
+      return;
+    }
+    const wantChaos = chaos && room > grant;
+    const granted = grantPips(grant, rng, wantChaos).slice(0, room);
+    state.lastGranted[sideId] = granted;
+    side.weave = [...side.weave, ...granted];
     side.drainedThisEcho = false;
   });
 }
@@ -245,8 +269,35 @@ export function autoAegisIfEmpty(state: MatchState, sideId: SideId): MatchState 
   if (side.queue.length > 0) return next;
   for (const id of livingIds(side)) {
     if (side.units[id].stun > 0) continue;
-    if (!queueError(next, sideId, id, 'aegis-veil', id)) {
-      side.queue.push({ fighterId: id, artId: 'aegis-veil', targetId: id });
+    const fighter = getFighter(id);
+    if (!fighter) continue;
+    const guard = findGuardArt(fighter);
+    if (!guard) continue;
+    const targetId = needsExplicitTarget(guard.target) ? id : guard.target === 'self' ? id : id;
+    if (!queueError(next, sideId, id, guard.id, guard.target === 'self' || guard.target === 'ally' ? id : null)) {
+      side.queue.push({
+        fighterId: id,
+        artId: guard.id,
+        targetId: guard.target === 'enemy' ? null : targetId,
+      });
+      break;
+    }
+  }
+  // If nobody can guard, queue the cheapest ready chip attack on lowest foe.
+  if (side.queue.length === 0) {
+    const foeIds = livingIds(next.sides[otherSide(sideId)]);
+    const lowest = [...foeIds].sort(
+      (a, b) => next.sides[otherSide(sideId)].units[a].hp - next.sides[otherSide(sideId)].units[b].hp
+    )[0];
+    for (const id of livingIds(side)) {
+      const fighter = getFighter(id);
+      if (!fighter || side.units[id].stun > 0) continue;
+      const chip = getFighterArts(fighter).find((skill) => skill.effects.some((effect) => effect.type === 'DAMAGE'));
+      if (!chip) continue;
+      const targetId = chip.target === 'enemy' ? lowest ?? null : chip.target === 'self' ? id : null;
+      const aim = needsExplicitTarget(chip.target) ? targetId : chip.target === 'self' ? id : null;
+      if (queueError(next, sideId, id, chip.id, needsExplicitTarget(chip.target) ? targetId : null)) continue;
+      side.queue.push({ fighterId: id, artId: chip.id, targetId: aim });
       break;
     }
   }
@@ -277,7 +328,11 @@ export function queueError(
   if (needsExplicitTarget(art.target) && !targetId) return 'Pick a target.';
   if (targetId) {
     const legal = legalTargets(state, sideId, fighterId, art).some((unitState) => unitState.id === targetId);
-    if (!legal) return 'Illegal target.';
+    if (!legal) {
+      if (art.target === 'enemy') return 'Attacks hit the enemy team (right side) only.';
+      if (art.target === 'ally') return 'Heals and buffs hit your team (left side) only.';
+      return 'Illegal target.';
+    }
   }
   return null;
 }
@@ -348,8 +403,12 @@ export function pickBotQueue(state: MatchState, rng: () => number): MatchState {
   const lowest = [...foes].sort((a, b) => next.sides.player.units[a].hp - next.sides.player.units[b].hp)[0] ?? null;
   const bloodiedSelf = livingIds(side).find((id) => side.units[id].hp <= BLOODIED_HP) ?? null;
 
-  if (bloodiedSelf && !queueError(next, 'foe', bloodiedSelf, 'aegis-veil', bloodiedSelf)) {
-    side.queue.push({ fighterId: bloodiedSelf, artId: 'aegis-veil', targetId: bloodiedSelf });
+  if (bloodiedSelf) {
+    const fighter = getFighter(bloodiedSelf);
+    const guard = fighter ? findGuardArt(fighter) : undefined;
+    if (guard && !queueError(next, 'foe', bloodiedSelf, guard.id, bloodiedSelf)) {
+      side.queue.push({ fighterId: bloodiedSelf, artId: guard.id, targetId: bloodiedSelf });
+    }
   }
 
   for (const fighterId of livingIds(side)) {
@@ -379,9 +438,15 @@ export function pickBotQueue(state: MatchState, rng: () => number): MatchState {
   }
 
   if (side.queue.length === 0 && livingIds(side)[0]) {
-    const id = livingIds(side)[0];
-    if (!queueError(next, 'foe', id, 'aegis-veil', id)) {
-      side.queue.push({ fighterId: id, artId: 'aegis-veil', targetId: id });
+    const id = livingIds(side)[0]!;
+    const fighter = getFighter(id);
+    const chip = fighter?.skills.find((skill) => skill.effects.some((effect) => effect.type === 'DAMAGE'));
+    if (chip && !queueError(next, 'foe', id, chip.id, chip.target === 'enemy' ? lowest : id)) {
+      side.queue.push({
+        fighterId: id,
+        artId: chip.id,
+        targetId: chip.target === 'enemy' ? lowest : id,
+      });
     }
   }
 
@@ -474,17 +539,26 @@ function applyEffect(
       lines.push(`${name} is stunned.`);
     }
     if (effect.type === 'APPLY_STATUS') {
-      unit[effect.status === 'veil' ? 'veil' : effect.status] = Math.max(
-        unit[effect.status === 'veil' ? 'veil' : effect.status],
-        effect.echoes
-      );
+      const key = effect.status;
+      unit[key] = Math.max(unit[key] ?? 0, effect.echoes);
       if (effect.status === 'veil') {
         pushEvent(ctx, { kind: 'veil', sourceSide, targetSide: targetSideId, fighterId: targetId });
       }
-      lines.push(`${name} gained ${effect.status}.`);
+      if (effect.status === 'dodge') {
+        pushEvent(ctx, { kind: 'dodge', sourceSide, targetSide: targetSideId, fighterId: targetId });
+        lines.push(`${name} is ready to dodge.`);
+      } else {
+        lines.push(`${name} gained ${effect.status}.`);
+      }
     }
     if (effect.type === 'DAMAGE') {
       pushEvent(ctx, { kind: 'attack', sourceSide, targetSide: targetSideId, fighterId: sourceId });
+      if ((unit.dodge ?? 0) > 0) {
+        unit.dodge = Math.max(0, (unit.dodge ?? 1) - 1);
+        pushEvent(ctx, { kind: 'dodge', sourceSide: targetSideId, targetSide: sourceSide, fighterId: targetId });
+        lines.push(`${name} dodged ${sourceFighter?.name}'s hit!`);
+        continue;
+      }
       if (unit.veil > 0) {
         lines.push(`${name}'s Aegis held.`);
         pushEvent(ctx, { kind: 'block', sourceSide, targetSide: targetSideId, fighterId: targetId });
@@ -648,6 +722,7 @@ function tickStatuses(state: MatchState) {
         unit.shield = 0;
         unit.stun = 0;
         unit.veil = 0;
+        unit.dodge = 0;
         continue;
       }
       if (unit.burn > 0) {
@@ -657,6 +732,7 @@ function tickStatuses(state: MatchState) {
       }
       if (unit.stun > 0) unit.stun -= 1;
       if (unit.veil > 0) unit.veil -= 1;
+      if ((unit.dodge ?? 0) > 0) unit.dodge -= 1;
       if (unit.mark > 0) unit.mark -= 1;
       if (unit.tidebind > 0) unit.tidebind -= 1;
       for (const [artId, cd] of Object.entries(unit.cooldowns)) {
@@ -682,7 +758,14 @@ function advanceEcho(state: MatchState, rng: () => number) {
   state.sides.player.locked = false;
   state.sides.foe.locked = false;
   fillWeave(state, rng);
-  state.log.push(`Echo ${state.echo} — your turn.`);
+  const gained = state.lastGranted.player
+    .map((id) => ENERGY_META[id]?.short ?? id)
+    .join('');
+  state.log.push(
+    gained
+      ? `Echo ${state.echo} — banked [${gained}]. Unused Weave stays for finishers.`
+      : `Echo ${state.echo} — your turn.`
+  );
   state.log = state.log.slice(-14);
 }
 

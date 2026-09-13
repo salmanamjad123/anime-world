@@ -1,17 +1,29 @@
 import type { Art, Effect } from '@/types/game';
 import { cn } from '@/lib/utils';
 
-export type SkillFamily = 'damage' | 'heal' | 'shield' | 'stun' | 'status' | 'drain' | 'defend';
+export type SkillFamily = 'damage' | 'heal' | 'shield' | 'stun' | 'status' | 'drain' | 'defend' | 'dodge';
 
 export function skillFamily(art: Art): SkillFamily {
   if (art.id === 'aegis-veil' || art.universal) return 'defend';
+  if (
+    art.effects.some(
+      (effect) => effect.type === 'APPLY_STATUS' && effect.status === 'dodge'
+    )
+  ) {
+    return 'dodge';
+  }
   const types = new Set(art.effects.map((effect) => effect.type));
   if (types.has('DAMAGE')) return 'damage';
   if (types.has('HEAL')) return 'heal';
   if (types.has('SHIELD')) return 'shield';
   if (types.has('STUN')) return 'stun';
   if (types.has('DRAIN_WEAVE')) return 'drain';
-  if (types.has('APPLY_STATUS')) return 'status';
+  if (types.has('APPLY_STATUS')) {
+    if (art.effects.some((effect) => effect.type === 'APPLY_STATUS' && effect.status === 'veil')) {
+      return 'defend';
+    }
+    return 'status';
+  }
   return 'damage';
 }
 
@@ -25,7 +37,8 @@ const FAMILY_META: Record<
   stun: { label: 'STUN', bg: 'from-violet-700 to-fuchsia-600', ring: 'ring-violet-400/50', title: 'Stun' },
   status: { label: 'FX', bg: 'from-amber-700 to-yellow-600', ring: 'ring-amber-400/50', title: 'Status' },
   drain: { label: 'DRN', bg: 'from-rose-800 to-pink-700', ring: 'ring-rose-400/50', title: 'Drain' },
-  defend: { label: 'AEG', bg: 'from-slate-600 to-slate-800', ring: 'ring-slate-300/40', title: 'Defend' },
+  defend: { label: 'GRD', bg: 'from-slate-600 to-slate-800', ring: 'ring-slate-300/40', title: 'Guard' },
+  dodge: { label: 'DGE', bg: 'from-teal-700 to-cyan-600', ring: 'ring-teal-300/50', title: 'Dodge' },
 };
 
 function Glyph({ family }: { family: SkillFamily }) {
@@ -70,6 +83,13 @@ function Glyph({ family }: { family: SkillFamily }) {
       <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
         <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2.4" />
         <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (family === 'dodge') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
+        <path d="M4 12 H14 M14 12 L10 8 M14 12 L10 16 M16 6 L20 12 L16 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -136,6 +156,12 @@ function effectLine(effect: Effect): string {
     case 'DRAIN_WEAVE':
       return `Drains ${effect.amount} Weave from the enemy bank.`;
     case 'APPLY_STATUS':
+      if (effect.status === 'dodge') {
+        return `Grants dodge — the next damaging hit on ${targetWords(effect.target)} is fully avoided.`;
+      }
+      if (effect.status === 'veil') {
+        return `Veil on ${targetWords(effect.target)} — blocks hits and counters for 10.`;
+      }
       return `Applies ${effect.status} for ${effect.echoes} Echo(es) on ${targetWords(effect.target)}.`;
     default:
       return 'Special effect.';
@@ -153,11 +179,11 @@ function targetWords(target: string): string {
 }
 
 export function targetHint(art: Art): string {
-  if (art.target === 'enemy') return 'Then tap an enemy portrait.';
-  if (art.target === 'ally') return 'Then tap an ally portrait.';
-  if (art.target === 'self') return 'Targets this fighter automatically.';
-  if (art.target === 'all-enemies') return 'Hits every living enemy.';
-  if (art.target === 'all-allies') return 'Affects your whole living team.';
-  if (art.target === 'random-enemy') return 'Picks a random living enemy.';
-  return '';
+  if (art.target === 'enemy') return 'Then tap an ENEMY on the right — never your own team.';
+  if (art.target === 'ally') return 'Then tap an ALLY on the left.';
+  if (art.target === 'self') return 'Hits the caster automatically.';
+  if (art.target === 'all-enemies') return 'Hits every enemy automatically.';
+  if (art.target === 'all-allies') return 'Hits your whole team automatically.';
+  if (art.target === 'random-enemy') return 'Picks a random enemy automatically.';
+  return 'No extra target needed.';
 }

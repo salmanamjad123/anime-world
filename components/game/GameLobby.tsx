@@ -7,7 +7,7 @@ import { Maximize, Minimize, Lock, Swords, Users, Zap, X, CircleHelp } from 'luc
 import { Header } from '@/components/layout/Header';
 import { FighterArt } from '@/components/game/FighterArt';
 import { WeaveCost } from '@/components/game/WeavePips';
-import { HowToPlay } from '@/components/game/HowToPlay';
+import { HowToPlay, TUTORIAL_KEYS } from '@/components/game/HowToPlay';
 import { MusicToggle } from '@/components/game/MusicToggle';
 import { FACTIONS, FEATURED_FIGHTER_IDS, FIGHTERS, RULESET_VERSION, TEAM_SIZE, getFighter, getFighterArts, lobbyFighters } from '@/lib/game/roster';
 import { pickShadeTeam, validateTeam } from '@/lib/game/team-rules';
@@ -18,7 +18,7 @@ import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/lib/utils';
-import type { Fighter, GameMode, ResonanceKind } from '@/types/game';
+import type { FactionId, Fighter, FighterRole, GameMode, ResonanceKind } from '@/types/game';
 
 const RESONANCE_COPY: Record<ResonanceKind, string> = {
   none: 'No resonance yet',
@@ -26,6 +26,26 @@ const RESONANCE_COPY: Record<ResonanceKind, string> = {
   trinity: 'Trinity — +8 damage and first art shreds 1 shield',
   chaos: 'Chaos Pulse — +1 Any Weave each Echo',
 };
+
+const ROLE_FILTERS: { id: FighterRole | 'all'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'striker', label: 'Strike' },
+  { id: 'support', label: 'Heal' },
+  { id: 'control', label: 'Control' },
+  { id: 'tank', label: 'Tank' },
+  { id: 'drain', label: 'Drain' },
+  { id: 'aoe', label: 'AoE' },
+];
+
+const FACTION_FILTERS: { id: FactionId | 'all'; label: string }[] = [
+  { id: 'all', label: 'All series' },
+  { id: 'ashen', label: 'Naruto' },
+  { id: 'tide', label: 'One Piece' },
+  { id: 'pulse', label: 'JJK' },
+  { id: 'blade', label: 'Demon Slayer' },
+  { id: 'flare', label: 'Dragon Ball' },
+  { id: 'soul', label: 'Bleach' },
+];
 
 function useHydratedTeam() {
   const teamIds = useGameLobbyStore((s) => s.teamIds);
@@ -61,7 +81,16 @@ export function GameLobby() {
   const [notice, setNotice] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [selectFlash, setSelectFlash] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<FighterRole | 'all'>('all');
+  const [factionFilter, setFactionFilter] = useState<FactionId | 'all'>('all');
   const scroll = useMemo(() => lobbyFighters(), []);
+  const filteredScroll = useMemo(() => {
+    return scroll.filter((fighter) => {
+      if (roleFilter !== 'all' && fighter.role !== roleFilter) return false;
+      if (factionFilter !== 'all' && fighter.faction !== factionFilter) return false;
+      return true;
+    });
+  }, [scroll, roleFilter, factionFilter]);
 
   const team = useMemo(
     () => teamIds.map((id) => getFighter(id)).filter((fighter): fighter is Fighter => Boolean(fighter)),
@@ -77,6 +106,13 @@ export function GameLobby() {
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem(TUTORIAL_KEYS.lobby) === '1') return;
+    setHelp(true);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!queueMode) return;
@@ -169,7 +205,7 @@ export function GameLobby() {
               </h1>
               <p className="text-sm text-orange-200/80">{focused.epithet} · {FACTIONS[focused.faction].name}</p>
               <p className="max-w-md text-sm text-amber-100/70">
-                Seal three fighters. Echo Lock turns. Light music on the mute icon — pause anytime.
+                Seal three. Each Echo gives +2 mixed jutsu energy — bank it, dodge, and finish when ready.
               </p>
             </div>
           </div>
@@ -204,11 +240,45 @@ export function GameLobby() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-bold uppercase tracking-widest text-[#5c3b18]">Fighter scroll</h2>
               <p className="text-xs text-[#7a5424]">
-                {hydrated ? `${team.length}/${TEAM_SIZE} sealed · names on top` : 'Loading team…'}
+                {hydrated ? `${team.length}/${TEAM_SIZE} sealed · tap again to unseal` : 'Loading team…'}
               </p>
             </div>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {FACTION_FILTERS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFactionFilter(item.id)}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition',
+                    factionFilter === item.id
+                      ? 'bg-[#c2410c] text-amber-50'
+                      : 'bg-[#fff6e4] text-[#7a5424] hover:bg-[#f5e6c8]'
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {ROLE_FILTERS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setRoleFilter(item.id)}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition',
+                    roleFilter === item.id
+                      ? 'bg-[#5c3b18] text-amber-50'
+                      : 'bg-[#fff6e4]/80 text-[#7a5424] hover:bg-[#f5e6c8]'
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-9">
-              {scroll.map((fighter) => {
+              {filteredScroll.map((fighter) => {
                 const slot = teamIds.indexOf(fighter.id);
                 const selected = slot >= 0;
                 const featured = FEATURED_FIGHTER_IDS.includes(fighter.id as (typeof FEATURED_FIGHTER_IDS)[number]);
@@ -220,14 +290,16 @@ export function GameLobby() {
                       setFocused(fighter.id);
                       toggleFighter(fighter.id, fighter.unlocked);
                       setSelectFlash((count) => count + 1);
+                      setNotice(null);
                     }}
                     onMouseEnter={() => setFocused(fighter.id)}
                     onFocus={() => setFocused(fighter.id)}
                     aria-pressed={selected}
                     aria-label={`${fighter.name}${fighter.unlocked ? '' : ' (locked)'}`}
                     className={cn(
-                      'relative aspect-square overflow-hidden rounded-lg border-2 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500',
+                      'relative aspect-square overflow-hidden rounded-lg border-2 transition duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500',
                       selected ? 'border-[#d4a017] ring-2 ring-[#d4a017]/50' : 'border-[#8a6a3b]/60',
+                      focused?.id === fighter.id && !selected && 'border-orange-400/80',
                       !fighter.unlocked && 'grayscale'
                     )}
                   >
@@ -239,6 +311,9 @@ export function GameLobby() {
                       )}
                     >
                       {fighter.name}
+                    </span>
+                    <span className="absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/80 to-transparent px-1 pb-1 pt-3 text-[8px] font-bold uppercase tracking-wider text-amber-100/80">
+                      {fighter.role}
                     </span>
                     {!fighter.unlocked && (
                       <span className="absolute inset-0 flex items-center justify-center bg-black/45">
@@ -254,30 +329,60 @@ export function GameLobby() {
                 );
               })}
             </div>
+            {filteredScroll.length === 0 && (
+              <p className="mt-3 text-center text-sm text-[#7a5424]">No fighters match those filters.</p>
+            )}
 
             <div className="mt-4 grid grid-cols-3 gap-2">
               {Array.from({ length: TEAM_SIZE }, (_, index) => {
                 const fighter = team[index];
                 return (
-                  <div
+                  <button
                     key={`slot-${index}`}
-                    className="flex min-h-[64px] items-center gap-2 rounded-lg border border-[#8a6a3b]/70 bg-[#fff6e4]/70 px-2 py-1.5"
+                    type="button"
+                    onClick={() => {
+                      if (!fighter) {
+                        setNotice(`Seal ${index + 1} empty — tap a fighter to fill.`);
+                        return;
+                      }
+                      setFocused(fighter.id);
+                      toggleFighter(fighter.id, true);
+                      setSelectFlash((count) => count + 1);
+                    }}
+                    className={cn(
+                      'flex min-h-[64px] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition',
+                      fighter
+                        ? 'border-[#d4a017]/80 bg-[#fff6e4] hover:bg-[#ffe8b8]'
+                        : 'border-dashed border-[#8a6a3b]/70 bg-[#fff6e4]/50'
+                    )}
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#c2410c] text-xs font-black text-white">
                       {index + 1}
                     </span>
                     {fighter ? (
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-[#3b2410]">{fighter.name}</p>
-                        <p className="truncate text-[10px] uppercase tracking-wider text-[#7a5424]">{FACTIONS[fighter.faction].name}</p>
+                        <p className="truncate text-[10px] uppercase tracking-wider text-[#7a5424]">
+                          {fighter.role} · tap to remove
+                        </p>
                       </div>
                     ) : (
                       <p className="text-xs text-[#7a5424]">Empty seal</p>
                     )}
-                  </div>
+                    {fighter && (
+                      <span className="shrink-0 rounded p-0.5 text-[#7a5424]">
+                        <X className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                  </button>
                 );
               })}
             </div>
+            {team.length === TEAM_SIZE && (
+              <p className="mt-2 text-center text-[11px] text-[#7a5424]">
+                Team full — tap another fighter to swap over the focused seal.
+              </p>
+            )}
           </section>
 
           <aside className="game-parchment rounded-xl p-4">
@@ -294,10 +399,26 @@ export function GameLobby() {
               {getFighterArts(focused).map((skill) => (
                 <li key={skill.id} className="rounded-md bg-[#fff6e4] px-2 py-1.5">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-bold text-[#3b2410]">{skill.name}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#3b2410]">{skill.name}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9a3412]">
+                        {skill.effects.some((effect) => effect.type === 'DAMAGE')
+                          ? 'Attack'
+                          : skill.effects.some((effect) => effect.type === 'HEAL')
+                            ? 'Heal'
+                            : skill.effects.some((effect) => effect.type === 'STUN')
+                              ? 'Control'
+                              : skill.effects.some((effect) => effect.type === 'SHIELD')
+                                ? 'Guard'
+                                : 'Utility'}
+                      </p>
+                    </div>
                     <WeaveCost cost={skill.energy} />
                   </div>
                   <p className="mt-0.5 text-[11px] leading-snug text-[#7a5424]">{skill.description}</p>
+                  {skill.cooldown > 0 && (
+                    <p className="mt-0.5 text-[10px] text-[#9a3412]">Cooldown {skill.cooldown} Echo(es)</p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -333,8 +454,9 @@ export function GameLobby() {
 
       <HowToPlay
         open={help}
+        variant="lobby"
         onClose={() => {
-          window.localStorage.setItem('va-help-seen', '1');
+          window.localStorage.setItem(TUTORIAL_KEYS.lobby, '1');
           setHelp(false);
         }}
       />

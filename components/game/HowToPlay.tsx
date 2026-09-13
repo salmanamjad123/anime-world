@@ -1,76 +1,137 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const STEPS = [
+const LOBBY_STEPS = [
   {
-    title: '1. Seal a team of 3',
-    body: 'Open Game and tap fighters until three seals are filled. Mix factions if you can — three Weave colors is safer than one. Lead names sit on the top row of the scroll.',
+    title: 'Build a team of 3',
+    body: 'Tap fighters on the scroll to seal them. Six famous series — mix roles (striker / heal / control). Filters by anime help you build.',
   },
   {
-    title: '2. Start a duel',
-    body: 'Quick Duel fights Shade. Private Gate needs both players sealed with 3 fighters — Create a code or Join. Surrender gives the other player the win.',
+    title: 'Read the jutsu panel',
+    body: 'Each fighter has 4 powers with a different mix — chip attack, signature mid, dodge/stun/heal/drain tool, and a finisher. Pick a team for coverage, not four identical kits.',
   },
   {
-    title: '3. Spend Weave',
-    body: 'Each Echo you bank colored pips (Strike, Tide, Pulse, Blood), capped at 7. Arts cost those pips. Any can be paid with leftover color. Echo 1 uses the Ash Rule: host 1 pip, challenger 3.',
+    title: 'Start a duel',
+    body: 'Quick Duel = practice vs Shade. Private Gate = friend with a code. You must seal 3 before you can start.',
+  },
+];
+
+const BATTLE_STEPS = [
+  {
+    title: 'Your team is on the left',
+    body: 'Tap YOUR portraits only to choose who casts. You cannot attack your own fighters. Heals and shields also go on the left.',
   },
   {
-    title: '4. Turns go one by one',
-    body: 'When YOUR TURN is red, pick a fighter, tap a power, then tap an enemy portrait if the power needs a target. Press Attack to resolve your powers. Then the opponent takes their turn. After both sides act, the next Echo starts.',
+    title: 'Enemies are on the right',
+    body: 'Enemy jutsu are fully visible — read their costs and cooldowns, then plan. Pick an ATK power and tap a glowing enemy portrait to aim.',
   },
   {
-    title: '5. Read power details',
-    body: 'The bottom panel shows exactly what the selected power does, its Weave cost, cooldown, and who it hits. Enemy portraits stay visible on the right — tap them to aim.',
+    title: 'Bank Weave, then Attack',
+    body: 'Every Echo you gain +2 mixed jutsu energy (different colors). Unused energy stays until you spend it (bank up to 10). Spend 1-cost attacks anytime, or save for a finisher.',
   },
   {
-    title: '6. Control beats raw damage',
-    body: 'Stun, drain, veil, and binds resolve first on your turn. A stun can cancel their later strike in the same Echo. Hitting a veil deals 10 back to you. Tidebind cuts their damage and their Weave grant.',
-  },
-  {
-    title: '7. Combos and closers',
-    body: 'Two arts from the same faction in one turn = +6. A second hit on the same fighter = +8 focus. Bloodied (≤35 HP) fighters deal +20%. After 12 Echoes, higher remaining HP wins.',
+    title: 'Play for seals',
+    body: 'Stun, dodge, mark, and drain are character-unique. Dodge avoids the next hit fully. Focus one enemy. After both sides act, +2 energy again.',
   },
 ];
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  variant?: 'lobby' | 'battle';
 };
 
-export function HowToPlay({ open, onClose }: Props) {
+export function HowToPlay({ open, onClose, variant = 'lobby' }: Props) {
+  const steps = variant === 'battle' ? BATTLE_STEPS : LOBBY_STEPS;
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    if (open) setStep(0);
+  }, [open, variant]);
+
   if (!open) return null;
 
+  const current = steps[step]!;
+  const last = step >= steps.length - 1;
+
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/75 px-4 py-8" role="dialog" aria-labelledby="how-to-play-title">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-orange-400/40 bg-[#1c1008] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 px-4 py-8" role="dialog" aria-labelledby="how-to-play-title">
+      <div className="w-full max-w-md rounded-2xl border border-orange-400/40 bg-[#1c1008] p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-orange-300">Village Arena</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-orange-300">
+              {variant === 'battle' ? 'Battle guide' : 'Village Arena'}
+            </p>
             <h2 id="how-to-play-title" className="text-2xl font-black text-amber-50">
-              How to play
+              {variant === 'battle' ? 'How to fight' : 'How to play'}
             </h2>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-amber-100 hover:bg-white/10" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <ol className="mt-4 space-y-3">
-          {STEPS.map((step) => (
-            <li key={step.title} className="rounded-xl bg-black/35 px-3 py-2.5">
-              <p className="text-sm font-bold text-orange-200">{step.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-amber-100/80">{step.body}</p>
-            </li>
+
+        <div className="mt-4 flex gap-1.5">
+          {steps.map((item, index) => (
+            <button
+              key={item.title}
+              type="button"
+              onClick={() => setStep(index)}
+              className={cn(
+                'h-1.5 flex-1 rounded-full transition',
+                index === step ? 'bg-orange-500' : index < step ? 'bg-orange-500/50' : 'bg-white/15'
+              )}
+              aria-label={`Step ${index + 1}`}
+            />
           ))}
-        </ol>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-5 w-full rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest text-white hover:bg-orange-500"
-        >
-          Got it — pick a team
-        </button>
+        </div>
+
+        <div className="mt-5 min-h-[140px] rounded-xl bg-black/40 px-4 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-orange-300">
+            Step {step + 1} / {steps.length}
+          </p>
+          <h3 className="mt-2 text-lg font-black text-amber-50">{current.title}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-amber-100/85">{current.body}</p>
+        </div>
+
+        <div className="mt-5 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={step === 0}
+            onClick={() => setStep((value) => Math.max(0, value - 1))}
+            className="inline-flex items-center gap-1 rounded-xl border border-amber-200/20 bg-black/40 px-3 py-2.5 text-sm font-bold text-amber-100 disabled:opacity-30"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back
+          </button>
+          {last ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest text-white hover:bg-orange-500"
+            >
+              {variant === 'battle' ? 'Start fighting' : 'Got it — pick a team'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStep((value) => Math.min(steps.length - 1, value + 1))}
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest text-white hover:bg-orange-500"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+export const TUTORIAL_KEYS = {
+  lobby: 'va-help-seen-v2',
+  battle: 'va-battle-guide-seen-v1',
+} as const;
