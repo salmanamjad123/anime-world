@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  getMangaPageImageUrl,
+  getMangaPageImageCandidates,
   normalizeImageUrl,
 } from '@/lib/utils/image-url';
 
@@ -15,11 +15,13 @@ interface MangaPageImageProps {
   priority?: boolean;
   /** Single-page modal: fit within viewport height */
   fitInView?: boolean;
+  /** Optional CDN Referer from provider (headerForImage) */
+  referer?: string;
 }
 
 /**
  * Manga chapter page image — proxied, lazy-loaded, with retry on failure.
- * Avoids MangaDex hotlink blocks and CDN rate limits from loading all pages at once.
+ * Avoids MangaDex/MangaHere hotlink blocks and CDN rate limits from loading all pages at once.
  */
 export function MangaPageImage({
   src,
@@ -27,27 +29,30 @@ export function MangaPageImage({
   className,
   priority = false,
   fitInView = false,
+  referer,
 }: MangaPageImageProps) {
   const rawUrl = normalizeImageUrl(src) ?? '';
   const containerRef = useRef<HTMLDivElement>(null);
-  const retryStage = useRef(0);
+  const candidateIndex = useRef(0);
   const [shouldLoad, setShouldLoad] = useState(priority);
-  const [displaySrc, setDisplaySrc] = useState<string | null>(
-    priority && rawUrl ? getMangaPageImageUrl(rawUrl) : null
-  );
+  const [displaySrc, setDisplaySrc] = useState<string | null>(() => {
+    if (!priority || !rawUrl) return null;
+    return getMangaPageImageCandidates(rawUrl, referer)[0] ?? null;
+  });
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    retryStage.current = 0;
+    candidateIndex.current = 0;
     setFailed(false);
-    if (priority && rawUrl) {
+    const next = getMangaPageImageCandidates(rawUrl, referer);
+    if (priority && next[0]) {
       setShouldLoad(true);
-      setDisplaySrc(getMangaPageImageUrl(rawUrl));
+      setDisplaySrc(next[0]);
     } else {
       setShouldLoad(false);
       setDisplaySrc(null);
     }
-  }, [rawUrl, priority]);
+  }, [rawUrl, priority, referer]);
 
   useEffect(() => {
     if (shouldLoad || priority || !rawUrl) return;
@@ -59,31 +64,27 @@ export function MangaPageImage({
       ([entry]) => {
         if (entry.isIntersecting) {
           setShouldLoad(true);
-          setDisplaySrc(getMangaPageImageUrl(rawUrl));
+          setDisplaySrc(getMangaPageImageCandidates(rawUrl, referer)[0] ?? null);
           observer.disconnect();
         }
       },
-      { rootMargin: '500px 0px', threshold: 0 }
+      { rootMargin: '900px 0px', threshold: 0 }
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [shouldLoad, priority, rawUrl]);
+  }, [shouldLoad, priority, rawUrl, referer]);
 
   const handleError = useCallback(() => {
-    if (!rawUrl) {
-      setFailed(true);
+    const list = getMangaPageImageCandidates(rawUrl, referer);
+    const next = candidateIndex.current + 1;
+    if (next < list.length) {
+      candidateIndex.current = next;
+      setDisplaySrc(list[next]);
       return;
     }
-
-    if (retryStage.current === 0) {
-      retryStage.current = 1;
-      setDisplaySrc(rawUrl);
-      return;
-    }
-
     setFailed(true);
-  }, [rawUrl]);
+  }, [rawUrl, referer]);
 
   return (
     <div
@@ -118,9 +119,12 @@ export function MangaPageImage({
             type="button"
             className="mt-2 text-xs text-amber-400 hover:text-amber-300 underline"
             onClick={() => {
-              retryStage.current = 0;
+              candidateIndex.current = 0;
               setFailed(false);
-              setDisplaySrc(getMangaPageImageUrl(rawUrl));
+              const base = getMangaPageImageCandidates(rawUrl, referer)[0];
+              setDisplaySrc(
+                base ? `${base}${base.includes('?') ? '&' : '?'}_r=${Date.now()}` : null
+              );
             }}
           >
             Tap to retry

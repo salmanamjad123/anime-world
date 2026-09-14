@@ -69,35 +69,129 @@ export function isMangaDexChapterImageUrl(url: string): boolean {
   }
 }
 
+/** MangaHere CDN requires Referer: mangahere.cc — browsers cannot set that */
+export function isMangaHereImageHost(url: string): boolean {
+  try {
+    return new URL(url).hostname.includes('mangahere');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hosts that 403 without a site-specific Referer.
+ * Must go through /api/image; never fall back to a bare CDN URL in the browser.
+ */
+export function mangaPageRequiresProxy(url: unknown): boolean {
+  const normalized = normalizeImageUrl(url);
+  if (!normalized) return false;
+  try {
+    const { hostname } = new URL(normalized);
+    if (isMangaDexImageHost(hostname)) return true;
+    if (hostname.includes('mangahere')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function getImageProxyReferers(url: string): string[] {
   try {
     const { hostname, origin } = new URL(url);
     if (isMangaDexImageHost(hostname)) {
       return ['https://mangadex.org/', 'https://www.mangadex.org/'];
     }
-    return [origin + '/', 'https://mangadex.org/', 'https://hianime.to/'];
+    if (hostname.includes('mangahere')) {
+      return [
+        'https://www.mangahere.cc/',
+        'http://www.mangahere.cc/',
+        origin + '/',
+      ];
+    }
+    // MangaPill / shared CDNs (e.g. cdn.readdetectiveconan.com)
+    if (
+      hostname.includes('readdetectiveconan') ||
+      hostname.includes('mangapill') ||
+      hostname.includes('mangap.')
+    ) {
+      return [
+        'https://mangapill.com/',
+        'https://www.mangapill.com/',
+        origin + '/',
+      ];
+    }
+    if (hostname.includes('mangareader') || hostname.includes('mrserver')) {
+      return [
+        'https://mangareader.to/',
+        'https://www.mangareader.to/',
+        origin + '/',
+      ];
+    }
+    if (
+      hostname.includes('mangakakalot') ||
+      hostname.includes('manganato') ||
+      hostname.includes('chapmanganato') ||
+      hostname.includes('mkklcdnv6')
+    ) {
+      return [
+        'https://www.mangakakalot.gg/',
+        'https://chapmanganato.to/',
+        'https://ww5.mangakakalot.tv/',
+        origin + '/',
+      ];
+    }
+    // Generic scraper CDNs — try common manga sites before the CDN origin
+    // (CDN-as-Referer often 403s and must not be first)
+    return [
+      'https://mangapill.com/',
+      'https://mangareader.to/',
+      'https://www.mangahere.cc/',
+      'https://chapmanganato.to/',
+      origin + '/',
+    ];
   } catch {
     /* fall through */
   }
   return [
+    'https://mangapill.com/',
+    'https://mangareader.to/',
+    'https://www.mangahere.cc/',
     'https://mangadex.org/',
-    'https://hianime.to/',
-    'https://megaplay.buzz/',
-    'https://megacloud.blog/',
   ];
 }
 
 /** Serve through same-origin image proxy (adds Referer server-side). */
-export function getProxiedImageUrl(url: string): string {
-  return `/api/image?url=${encodeURIComponent(url)}`;
+export function getProxiedImageUrl(url: string, referer?: string): string {
+  const base = `/api/image?url=${encodeURIComponent(url)}`;
+  if (referer) return `${base}&referer=${encodeURIComponent(referer)}`;
+  return base;
 }
 
 /** Manga chapter page — always proxy hotlinked CDN URLs for reliable production loads */
-export function getMangaPageImageUrl(url: unknown): string {
+export function getMangaPageImageUrl(url: unknown, referer?: string): string {
   const normalized = normalizeImageUrl(url);
   if (!normalized) return ANIME_PLACEHOLDER;
-  if (isImageProxyAllowed(normalized)) return getProxiedImageUrl(normalized);
+  if (isImageProxyAllowed(normalized)) return getProxiedImageUrl(normalized, referer);
   return normalized;
+}
+
+/**
+ * Ordered display candidates for a chapter page.
+ * Referer-locked CDNs: proxy only. Others: proxy then direct.
+ */
+export function getMangaPageImageCandidates(
+  url: unknown,
+  referer?: string
+): string[] {
+  const normalized = normalizeImageUrl(url);
+  if (!normalized) return [ANIME_PLACEHOLDER];
+  if (mangaPageRequiresProxy(normalized)) {
+    return [getProxiedImageUrl(normalized, referer)];
+  }
+  if (isImageProxyAllowed(normalized)) {
+    return [getProxiedImageUrl(normalized, referer), normalized];
+  }
+  return [normalized];
 }
 
 /**

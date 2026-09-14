@@ -5,9 +5,18 @@
 
 'use client';
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import type { Manga, MangaSearchResult } from '@/types';
+import {
+  useQuery,
+  useQueryClient,
+  useInfiniteQuery,
+  keepPreviousData,
+} from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import type { MangaChapter, MangaSearchResult } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
+import { getMangaPageImageUrl } from '@/lib/utils/image-url';
+
+const CHAPTER_PAGE_SIZE = 60;
 
 async function fetchMangaList(
   type: string,
@@ -42,8 +51,45 @@ async function fetchMangaInfo(id: string, mangadexId?: string) {
   return res.json();
 }
 
-async function fetchMangaChapters(id: string, provider: string, mangadexId?: string) {
-  const params = new URLSearchParams({ provider });
+export type MangaChaptersPage = {
+  chapters: MangaChapter[];
+  /** Resolved provider for reading */
+  provider: string;
+  /** Requested tab (auto, mangadex, …) */
+  mode?: string;
+  mangadexId?: string;
+  source?: string;
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  unavailableReason?: 'empty' | 'title_mismatch';
+};
+
+async function fetchMangaChaptersPage(
+  id: string,
+  provider: string,
+  page: number,
+  mangadexId?: string,
+  limit = CHAPTER_PAGE_SIZE
+): Promise<MangaChaptersPage> {
+  const params = new URLSearchParams({
+    provider,
+    page: String(page),
+    limit: String(limit),
+  });
+  if (mangadexId) params.set('md', mangadexId);
+  const res = await fetch(`/api/manga/${id}/chapters?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch chapters');
+  return res.json();
+}
+
+async function fetchAllMangaChapters(
+  id: string,
+  provider: string,
+  mangadexId?: string
+): Promise<MangaChaptersPage> {
+  const params = new URLSearchParams({ provider, all: '1' });
   if (mangadexId) params.set('md', mangadexId);
   const res = await fetch(`/api/manga/${id}/chapters?${params.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch chapters');
@@ -103,24 +149,149 @@ export function useMangaInfo(id: string | null, mangadexId?: string | null) {
   });
 }
 
-/** Chapters only (MangaDex readable first → Consumet) */
-export function useMangaChapters(id: string | null, provider = 'mangadex', mangadexId?: string | null) {
-  return useQuery({
+/**
+ * Paginated chapters for the detail page (Load more).
+ * Flattens pages into `chapters` for rendering.
+ */
+export function useMangaChapters(
+  id: string | null,
+  provider = 'auto',
+  mangadexId?: string | null
+) {
+  const query = useInfiniteQuery({
     queryKey: ['manga', 'chapters', id, provider, mangadexId],
-    queryFn: () => fetchMangaChapters(id!, provider, mangadexId ?? undefined),
+    queryFn: ({ pageParam }) =>
+      fetchMangaChaptersPage(id!, provider, pageParam, mangadexId ?? undefined),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
     enabled: !!id,
-    placeholderData: keepPreviousData,
+    staleTime: CACHE_DURATIONS.MANGA_LIST * 1000,
+  });
+
+  const chapters = useMemo(
+    () => query.data?.pages.flatMap((p) => p.chapters) ?? [],
+    [query.data]
+  );
+
+  const first = query.data?.pages[0];
+
+  return {
+    ...query,
+    chapters,
+    provider: first?.provider ?? provider,
+    mode: first?.mode ?? provider,
+    mangadexId: first?.mangadexId,
+    source: first?.source,
+    total: first?.total ?? chapters.length,
+    hasMore: query.hasNextPage,
+    isFetching: query.isFetching,
+    isLoading: query.isLoading,
+    fetchNextPage: query.fetchNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    data: first
+      ? {
+          chapters,
+          provider: first.provider,
+          mode: first.mode ?? provider,
+          mangadexId: first.mangadexId,
+          source: first.source,
+          total: first.total,
+          hasMore: Boolean(query.hasNextPage),
+          unavailableReason: first.unavailableReason,
+        }
+      : undefined,
+  };
+}
+
+/**
+ * Full chapter list for the reader (prev/next). Uses server cache after detail warmed it.
+ */
+export function useMangaChaptersAll(
+  id: string | null,
+  provider = 'auto',
+  mangadexId?: string | null
+) {
+  return useQuery({
+    queryKey: ['manga', 'chapters', 'all', id, provider, mangadexId],
+    queryFn: () => fetchAllMangaChapters(id!, provider, mangadexId ?? undefined),
+    enabled: !!id,
+    staleTime: 30 * 60 * 1000,
   });
 }
 
 export function useChapterPages(
   chapterId: string | null,
-  provider = 'mangadex',
+  provider: string | null = 'mangadex',
   options?: { refresh?: boolean }
 ) {
   return useQuery({
-    queryKey: ['manga', 'chapter', chapterId, provider, options?.refresh],
-    queryFn: () => fetchChapterPages(chapterId!, provider, options?.refresh),
-    enabled: !!chapterId,
+    queryKey: ['manga', 'chapter', chapterId, provider],
+    queryFn: () => fetchChapterPages(chapterId!, provider!, options?.refresh),
+    enabled: !!chapterId && !!provider,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
+}
+
+/** Warm React Query cache for the next/prev chapter while the user reads */
+export function usePrefetchChapterPages(
+  chapterId: string | null | undefined,
+  provider?: string | null
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!chapterId || !provider) return;
+
+    const run = () => {
+      void queryClient.prefetchQuery({
+        queryKey: ['manga', 'chapter', chapterId, provider],
+        queryFn: () => fetchChapterPages(chapterId, provider),
+        staleTime: 30 * 60 * 1000,
+      });
+    };
+
+    if (typeof requestIdleCallback !== 'undefined') {
+      const id = requestIdleCallback(run, { timeout: 2500 });
+      return () => cancelIdleCallback(id);
+    }
+
+    const t = window.setTimeout(run, 400);
+    return () => window.clearTimeout(t);
+  }, [chapterId, provider, queryClient]);
+}
+
+/** Warm browser HTTP cache for proxied page images (optional offset for page-view lookahead) */
+export function usePrefetchChapterImages(
+  pages: Array<{ img?: string }> | undefined,
+  count = 4,
+  offset = 0
+) {
+  const urlsKey =
+    pages
+      ?.slice(offset, offset + count)
+      .map((p) => p.img)
+      .filter(Boolean)
+      .join('|') ?? '';
+
+  useEffect(() => {
+    if (!urlsKey) return;
+    const urls = urlsKey.split('|');
+
+    const start = () => {
+      for (const url of urls) {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = getMangaPageImageUrl(url);
+      }
+    };
+
+    if (typeof requestIdleCallback !== 'undefined') {
+      const id = requestIdleCallback(start, { timeout: 1500 });
+      return () => cancelIdleCallback(id);
+    }
+
+    const t = window.setTimeout(start, 50);
+    return () => window.clearTimeout(t);
+  }, [urlsKey]);
 }

@@ -1,6 +1,9 @@
 /**
- * Manga chapter resolution
- * MangaDex (official API, readable chapters only) first → Consumet scrapers as fallback
+ * Manga chapter resolution + pagination
+ * Full lists are cached; API returns page slices for fast first paint.
+ *
+ * - provider=auto: fetch all sources in parallel, pick longest title-verified list
+ * - explicit tab: only that source (no silent swap)
  */
 
 import { getMangaById } from '@/lib/api/anilist-manga';
@@ -9,26 +12,57 @@ import {
   findMangaDexByAnilistId,
   getMangaDexChapters,
 } from '@/lib/api/mangadex';
+import { getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
 import type { Manga, MangaChapter } from '@/types';
 import { getPreferredTitle } from '@/lib/utils';
+import {
+  collectAniListMangaTitles,
+  mangaProviderResultMatches,
+} from '../utils/manga-title-match';
 
-export const CHAPTER_SOURCES = ['mangadex', 'mangapill', 'mangareader'] as const;
-export type ChapterSource = (typeof CHAPTER_SOURCES)[number];
+/** Tabs shown in the manga detail UI */
+export const CHAPTER_UI_SOURCES = [
+  'auto',
+  'mangadex',
+  'mangapill',
+  'mangareader',
+  'mangahere',
+] as const;
+export type ChapterUiSource = (typeof CHAPTER_UI_SOURCES)[number];
 
-export const DEFAULT_CHAPTER_SOURCE: ChapterSource = 'mangadex';
+export const CHAPTER_SOURCES = CHAPTER_UI_SOURCES;
+export type ChapterSource = ChapterUiSource;
 
-const CONSUMET_SOURCES = ['mangapill', 'mangareader', 'mangahere', 'mangakakalot'] as const;
+export const DEFAULT_CHAPTER_SOURCE: ChapterSource = 'auto';
+export const DEFAULT_CHAPTER_PAGE_SIZE = 60;
+
+const CONSUMET_SOURCES = ['mangapill', 'mangareader', 'mangahere'] as const;
+
+/** Tie-break when chapter counts are equal (prefer official MD) */
+const PROVIDER_PRIORITY = ['mangadex', 'mangapill', 'mangareader', 'mangahere'] as const;
 
 export interface ResolveChaptersResult {
   chapters: MangaChapter[];
+  /** Provider used for reading chapter pages */
   provider: string;
+  /** Requested mode (auto vs explicit tab) */
+  mode: string;
   mangadexId?: string | null;
   source?: 'mangadex' | 'consumet' | 'none';
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  unavailableReason?: 'empty' | 'title_mismatch';
 }
 
-function isNativeMangaDex(provider: string): boolean {
-  return !provider || provider === 'mangadex' || provider === 'auto';
+function isAutoMode(provider: string): boolean {
+  return !provider || provider === 'auto';
+}
+
+function isConsumetProvider(provider: string): boolean {
+  return (CONSUMET_SOURCES as readonly string[]).includes(provider);
 }
 
 async function resolveMangaDexId(
@@ -73,41 +107,234 @@ async function chaptersFromMangaDex(
   return { chapters, mangadexId };
 }
 
-async function chaptersFromConsumet(
-  anilistId: string,
-  preferred: string
-): Promise<{ chapters: MangaChapter[]; provider: string }> {
-  const order = [
-    preferred,
-    ...CONSUMET_SOURCES.filter((p) => p !== preferred),
-  ];
+type ConsumetFetchResult = {
+  chapters: MangaChapter[];
+  provider: string;
+  rejected?: 'empty' | 'title_mismatch';
+};
 
-  for (const provider of order) {
-    try {
-      const info = await getMangaInfo(anilistId, provider);
-      if (info?.chapters?.length) {
-        return { chapters: info.chapters, provider };
-      }
-    } catch (err) {
-      console.warn(`[Manga chapters] Consumet ${provider}:`, (err as Error).message);
-    }
+async function chaptersFromConsumetProvider(
+  anilistId: string,
+  provider: string,
+  expectedTitles: string[]
+): Promise<ConsumetFetchResult> {
+  if (!isConsumetProvider(provider)) {
+    return { chapters: [], provider, rejected: 'empty' };
   }
 
-  return { chapters: [], provider: preferred };
+  try {
+    const info = await getMangaInfo(anilistId, provider);
+    if (!info?.chapters?.length) {
+      return { chapters: [], provider, rejected: 'empty' };
+    }
+
+    const sampleId = info.chapters[0]?.id;
+    if (!mangaProviderResultMatches(expectedTitles, info.title, sampleId)) {
+      console.warn(
+        `[Manga chapters] Rejected ${provider} title mismatch for ${anilistId}:`,
+        typeof info.title === 'string' ? info.title : info.title,
+        'vs',
+        expectedTitles[0]
+      );
+      return { chapters: [], provider, rejected: 'title_mismatch' };
+    }
+
+    return { chapters: info.chapters, provider };
+  } catch (err) {
+    console.warn(`[Manga chapters] Consumet ${provider}:`, (err as Error).message);
+    return { chapters: [], provider, rejected: 'empty' };
+  }
+}
+
+interface FullChapterList {
+  chapters: MangaChapter[];
+  provider: string;
+  mode: string;
+  mangadexId?: string | null;
+  source: 'mangadex' | 'consumet' | 'none';
+  unavailableReason?: 'empty' | 'title_mismatch';
+}
+
+type Candidate = {
+  chapters: MangaChapter[];
+  provider: string;
+  source: 'mangadex' | 'consumet';
+  mangadexId?: string | null;
+};
+
+function pickBestCandidate(candidates: Candidate[]): Candidate | null {
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((best, cur) => {
+    if (cur.chapters.length > best.chapters.length) return cur;
+    if (cur.chapters.length < best.chapters.length) return best;
+    const curPri = PROVIDER_PRIORITY.indexOf(cur.provider as (typeof PROVIDER_PRIORITY)[number]);
+    const bestPri = PROVIDER_PRIORITY.indexOf(best.provider as (typeof PROVIDER_PRIORITY)[number]);
+    const curRank = curPri >= 0 ? curPri : 99;
+    const bestRank = bestPri >= 0 ? bestPri : 99;
+    return curRank < bestRank ? cur : best;
+  });
 }
 
 /**
- * Resolve readable chapters for an AniList manga id.
- *
- * - provider=mangadex|auto (default): MangaDex official → Consumet scrapers
- * - provider=mangapill|mangareader|...: that scraper first → MangaDex → other scrapers
+ * Auto mode: query MangaDex + scrapers in parallel, return the longest verified list.
  */
+async function resolveAutoChapterList(
+  anilistId: string,
+  manga: Manga,
+  mangadexIdHint?: string | null
+): Promise<FullChapterList> {
+  const expectedTitles = collectAniListMangaTitles(manga);
+
+  const [mdResult, ...consumetResults] = await Promise.all([
+    chaptersFromMangaDex(anilistId, manga, mangadexIdHint),
+    ...CONSUMET_SOURCES.map((p) =>
+      chaptersFromConsumetProvider(anilistId, p, expectedTitles)
+    ),
+  ]);
+
+  const candidates: Candidate[] = [];
+
+  if (mdResult.chapters.length > 0) {
+    candidates.push({
+      chapters: mdResult.chapters,
+      provider: 'mangadex',
+      source: 'mangadex',
+      mangadexId: mdResult.mangadexId,
+    });
+  }
+
+  for (const r of consumetResults) {
+    if (r.chapters.length > 0) {
+      candidates.push({
+        chapters: r.chapters,
+        provider: r.provider,
+        source: 'consumet',
+        mangadexId: mdResult.mangadexId,
+      });
+    }
+  }
+
+  const winner = pickBestCandidate(candidates);
+  if (winner) {
+    return {
+      chapters: winner.chapters,
+      provider: winner.provider,
+      mode: 'auto',
+      mangadexId: winner.mangadexId ?? mdResult.mangadexId,
+      source: winner.source,
+    };
+  }
+
+  const hadMismatch = consumetResults.some((r) => r.rejected === 'title_mismatch');
+
+  return {
+    chapters: [],
+    provider: 'auto',
+    mode: 'auto',
+    mangadexId: mdResult.mangadexId,
+    source: 'none',
+    unavailableReason: hadMismatch ? 'title_mismatch' : 'empty',
+  };
+}
+
+async function resolveFullChapterList(
+  anilistId: string,
+  provider: string,
+  manga: Manga,
+  mangadexIdHint?: string | null
+): Promise<FullChapterList> {
+  const expectedTitles = collectAniListMangaTitles(manga);
+  const mode = provider || 'auto';
+
+  if (isAutoMode(provider)) {
+    return resolveAutoChapterList(anilistId, manga, mangadexIdHint);
+  }
+
+  if (provider === 'mangadex') {
+    const { chapters, mangadexId } = await chaptersFromMangaDex(
+      anilistId,
+      manga,
+      mangadexIdHint
+    );
+    return {
+      chapters,
+      provider: 'mangadex',
+      mode,
+      mangadexId,
+      source: chapters.length > 0 ? 'mangadex' : 'none',
+      unavailableReason: chapters.length > 0 ? undefined : 'empty',
+    };
+  }
+
+  const consumet = await chaptersFromConsumetProvider(
+    anilistId,
+    provider,
+    expectedTitles
+  );
+  if (consumet.chapters.length > 0) {
+    const { mangadexId } = await chaptersFromMangaDex(anilistId, manga, mangadexIdHint);
+    return {
+      chapters: consumet.chapters,
+      provider: consumet.provider,
+      mode,
+      mangadexId,
+      source: 'consumet',
+    };
+  }
+
+  const { mangadexId } = await chaptersFromMangaDex(anilistId, manga, mangadexIdHint);
+
+  return {
+    chapters: [],
+    provider,
+    mode,
+    mangadexId,
+    source: 'none',
+    unavailableReason: consumet.rejected ?? 'empty',
+  };
+}
+
+export function paginateChapters(
+  chapters: MangaChapter[],
+  page: number,
+  limit: number
+): {
+  chapters: MangaChapter[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+} {
+  const safePage = Math.max(1, Math.floor(page) || 1);
+  const safeLimit =
+    limit <= 0
+      ? chapters.length || DEFAULT_CHAPTER_PAGE_SIZE
+      : Math.min(Math.max(1, Math.floor(limit) || DEFAULT_CHAPTER_PAGE_SIZE), 500);
+  const total = chapters.length;
+  const start = (safePage - 1) * safeLimit;
+  const slice = chapters.slice(start, start + safeLimit);
+  return {
+    chapters: slice,
+    page: safePage,
+    limit: safeLimit,
+    total,
+    hasMore: start + slice.length < total,
+  };
+}
+
 export async function resolveMangaChapters(
   anilistId: string,
   provider: string = DEFAULT_CHAPTER_SOURCE,
   mangaHint?: Manga | null,
-  mangadexIdHint?: string | null
+  mangadexIdHint?: string | null,
+  options?: { page?: number; limit?: number; all?: boolean }
 ): Promise<ResolveChaptersResult> {
+  const page = options?.page ?? 1;
+  const all = options?.all === true;
+  const limit = all ? 0 : (options?.limit ?? DEFAULT_CHAPTER_PAGE_SIZE);
+  const mode = provider || 'auto';
+
   let manga = mangaHint ?? null;
   if (!manga) {
     const anilistRes = await getMangaById(
@@ -118,82 +345,38 @@ export async function resolveMangaChapters(
   }
 
   if (!manga) {
-    return { chapters: [], provider, source: 'none' };
-  }
-
-  if (isNativeMangaDex(provider)) {
-    const { chapters, mangadexId } = await chaptersFromMangaDex(
-      anilistId,
-      manga,
-      mangadexIdHint
-    );
-
-    // Enough readable MD chapters → skip slow Consumet (often offline locally)
-    if (chapters.length >= 5) {
-      return {
-        chapters,
-        provider: 'mangadex',
-        mangadexId,
-        source: 'mangadex',
-      };
-    }
-
-    // Sparse/empty MD (licensed/external-only) → try scrapers for fuller lists
-    const fallback = await chaptersFromConsumet(anilistId, 'mangapill');
-    if (fallback.chapters.length > chapters.length) {
-      return {
-        chapters: fallback.chapters,
-        provider: fallback.provider,
-        mangadexId,
-        source: 'consumet',
-      };
-    }
-
-    if (chapters.length > 0) {
-      return {
-        chapters,
-        provider: 'mangadex',
-        mangadexId,
-        source: 'mangadex',
-      };
-    }
-
     return {
       chapters: [],
-      provider: 'mangadex',
-      mangadexId,
+      provider: mode,
+      mode,
       source: 'none',
+      page: 1,
+      limit: DEFAULT_CHAPTER_PAGE_SIZE,
+      total: 0,
+      hasMore: false,
+      unavailableReason: 'empty',
     };
   }
 
-  const consumet = await chaptersFromConsumet(anilistId, provider);
-  if (consumet.chapters.length > 0) {
-    return {
-      chapters: consumet.chapters,
-      provider: consumet.provider,
-      source: 'consumet',
-    };
-  }
+  const cacheKey = `manga:chapters:full:v5:${anilistId}:${mode}:${mangadexIdHint ?? ''}`;
 
-  const { chapters, mangadexId } = await chaptersFromMangaDex(
-    anilistId,
-    manga,
-    mangadexIdHint
+  const full = await getCachedWhen(
+    cacheKey,
+    () => resolveFullChapterList(anilistId, provider, manga!, mangadexIdHint),
+    CACHE_TTL.MANGA_CHAPTERS_LIST,
+    (r) => (r?.chapters?.length ?? 0) > 0,
+    5 * 60 * 1000
   );
-  if (chapters.length > 0) {
-    return {
-      chapters,
-      provider: 'mangadex',
-      mangadexId,
-      source: 'mangadex',
-    };
-  }
+
+  const paged = paginateChapters(full.chapters, page, limit);
 
   return {
-    chapters: [],
-    provider,
-    mangadexId,
-    source: 'none',
+    ...paged,
+    provider: full.provider,
+    mode: full.mode,
+    mangadexId: full.mangadexId,
+    source: full.source,
+    unavailableReason: full.unavailableReason,
   };
 }
 

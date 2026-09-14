@@ -7,7 +7,13 @@
 
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { useChapterPages, useMangaChapters, useMangaInfo } from '@/hooks/useManga';
+import {
+  useChapterPages,
+  useMangaChaptersAll,
+  useMangaInfo,
+  usePrefetchChapterPages,
+  usePrefetchChapterImages,
+} from '@/hooks/useManga';
 import { ROUTES } from '@/constants/routes';
 import {
   ChevronLeft,
@@ -30,7 +36,7 @@ export default function MangaReadPage() {
   const router = useRouter();
   const mangaId = params.id as string;
   const chapterId = searchParams.get('chapterId');
-  const provider = searchParams.get('provider') || 'mangadex';
+  const providerParam = searchParams.get('provider') || 'auto';
   const mangadexId = searchParams.get('md');
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -45,10 +51,17 @@ export default function MangaReadPage() {
   const { data: infoData } = useMangaInfo(mangaId, mangadexId);
   const manga = infoData?.manga;
   const resolvedMangadexId = mangadexId ?? manga?.mangadexId ?? null;
-  const { data: chaptersData } = useMangaChapters(mangaId, provider, resolvedMangadexId);
+  const { data: chaptersData } = useMangaChaptersAll(mangaId, providerParam, resolvedMangadexId);
+  /** Resolved source for fetching page images (never "auto") */
+  const readProvider =
+    chaptersData?.provider && chaptersData.provider !== 'auto'
+      ? chaptersData.provider
+      : providerParam !== 'auto'
+        ? providerParam
+        : null;
   const { data: chapterData, isLoading, isError, refetch } = useChapterPages(
     chapterId,
-    provider
+    readProvider
   );
 
   const chapters: MangaChapter[] = chaptersData?.chapters || [];
@@ -58,6 +71,17 @@ export default function MangaReadPage() {
   const currentIndex = chapters.findIndex((c) => c.id === chapterId);
   const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null;
   const nextChapter = currentIndex >= 0 && currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null;
+
+  const navProvider = readProvider ?? providerParam;
+
+  usePrefetchChapterPages(nextChapter?.id, readProvider ?? undefined);
+  usePrefetchChapterPages(prevChapter?.id, readProvider ?? undefined);
+  usePrefetchChapterImages(pages, pageViewOpen ? 2 : 5, 0);
+  usePrefetchChapterImages(
+    pageViewOpen ? pages : undefined,
+    2,
+    Math.max(0, currentPageIndex + 1)
+  );
 
   useEffect(() => {
     setCurrentPageIndex(0);
@@ -105,7 +129,7 @@ export default function MangaReadPage() {
       mangaTitle,
       mangaImage,
       currentChapter?.title,
-      provider
+      navProvider
     );
 
     if (user?.uid) {
@@ -129,7 +153,7 @@ export default function MangaReadPage() {
     manga,
     mangaId,
     currentChapter,
-    provider,
+    navProvider,
     user?.uid,
     updateProgress,
     getProgress,
@@ -163,24 +187,24 @@ export default function MangaReadPage() {
     if (currentPageIndex > 0) {
       setCurrentPageIndex((i) => i - 1);
     } else if (prevChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider, resolvedMangadexId ?? undefined));
+      router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, navProvider, resolvedMangadexId ?? undefined));
     }
-  }, [currentPageIndex, prevChapter, mangaId, provider, router]);
+  }, [currentPageIndex, prevChapter, mangaId, navProvider, router, resolvedMangadexId]);
 
   const handleNextPage = useCallback(() => {
     if (currentPageIndex < pages.length - 1) {
       setCurrentPageIndex((i) => i + 1);
     } else if (nextChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider, resolvedMangadexId ?? undefined));
+      router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, navProvider, resolvedMangadexId ?? undefined));
     }
-  }, [currentPageIndex, pages.length, nextChapter, mangaId, provider, router]);
+  }, [currentPageIndex, pages.length, nextChapter, mangaId, navProvider, router, resolvedMangadexId]);
 
   const handlePrevChapter = () => {
-    if (prevChapter) router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, provider, resolvedMangadexId ?? undefined));
+    if (prevChapter) router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, navProvider, resolvedMangadexId ?? undefined));
   };
 
   const handleNextChapter = () => {
-    if (nextChapter) router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, provider, resolvedMangadexId ?? undefined));
+    if (nextChapter) router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, navProvider, resolvedMangadexId ?? undefined));
   };
 
   useEffect(() => {
@@ -193,6 +217,31 @@ export default function MangaReadPage() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [pageViewOpen, handlePrevPage, handleNextPage]);
+
+  // Lock document scroll while page-view modal is open
+  useEffect(() => {
+    if (!pageViewOpen) return;
+
+    const scrollY = window.scrollY;
+    const { overflow, position, top, left, right, width } = document.body.style;
+
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+
+    return () => {
+      document.body.style.overflow = overflow;
+      document.body.style.position = position;
+      document.body.style.top = top;
+      document.body.style.left = left;
+      document.body.style.right = right;
+      document.body.style.width = width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [pageViewOpen]);
 
   useEffect(() => {
     if (!chapterId) {
@@ -231,7 +280,11 @@ export default function MangaReadPage() {
               </Button>
               <span className="text-sm text-gray-300 min-w-[80px] sm:min-w-[100px] text-center px-2 truncate">
                 {pages.length > 0
-                  ? `Ch. ${chapters.find((c) => c.id === chapterId)?.chapter || '—'} · ${scrollViewPage}/${pages.length}`
+                  ? `Ch. ${
+                      chapters.find((c) => c.id === chapterId)?.chapter ||
+                      chapters.find((c) => c.id === chapterId)?.title?.replace(/^ch\.?\s*/i, '') ||
+                      '—'
+                    } · ${scrollViewPage}/${pages.length}`
                   : '—'}
               </span>
               <Button
@@ -261,7 +314,7 @@ export default function MangaReadPage() {
       </div>
 
       {/* Content - Scroll view: all pages stacked, edge-to-edge */}
-      <main className="w-full pb-4">
+      <main className={`w-full pb-4 ${pageViewOpen ? 'overflow-hidden' : ''}`} aria-hidden={pageViewOpen}>
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-24 px-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mb-4" />
@@ -297,7 +350,8 @@ export default function MangaReadPage() {
                 <MangaPageImage
                   src={page.img}
                   alt={`Page ${idx + 1}`}
-                  priority={idx < 2}
+                  priority={idx < 4}
+                  referer={page.headerForImage?.Referer || page.headerForImage?.referer}
                 />
               </div>
             ))}
@@ -308,7 +362,7 @@ export default function MangaReadPage() {
       {/* Page view modal */}
       {pageViewOpen && pages.length > 0 && (
         <div
-          className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+          className="fixed inset-0 z-50 bg-black/95 flex flex-col overscroll-none"
           role="dialog"
           aria-modal="true"
           aria-label="Page view"
@@ -336,7 +390,10 @@ export default function MangaReadPage() {
                 <ChevronLeft className="w-5 h-5" />
               </Button>
               <span className="text-sm text-gray-300 min-w-[72px] text-center px-2">
-                Ch. {chapters.find((c) => c.id === chapterId)?.chapter || '—'}
+                Ch.{' '}
+                {chapters.find((c) => c.id === chapterId)?.chapter ||
+                  chapters.find((c) => c.id === chapterId)?.title?.replace(/^ch\.?\s*/i, '') ||
+                  '—'}
               </span>
               <Button
                 variant="ghost"
@@ -358,6 +415,10 @@ export default function MangaReadPage() {
               alt={`Page ${currentPageIndex + 1}`}
               priority
               fitInView
+              referer={
+                pages[currentPageIndex]?.headerForImage?.Referer ||
+                pages[currentPageIndex]?.headerForImage?.referer
+              }
             />
           </div>
 

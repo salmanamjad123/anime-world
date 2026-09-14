@@ -9,11 +9,11 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
-import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
+import { useMangaInfo, useMangaChaptersAll } from '@/hooks/useManga';
 import { getPreferredTitle, stripHtml, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { BookOpen, Star, ChevronDown, ArrowLeft, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
@@ -21,30 +21,103 @@ import { useMangaListStore } from '@/store/useMangaListStore';
 import { setMangaListItem, removeFromMangaList } from '@/lib/firebase/manga-firestore';
 import { AddToMangaListDropdown } from '@/components/manga/AddToMangaListDropdown';
 
+const CHAPTER_PAGE_SIZE = 60;
+
+function chapterLabel(ch?: MangaChapter | null): string {
+  if (!ch) return '?';
+  if (ch.chapter) return String(ch.chapter);
+  const fromTitle = ch.title?.match(/(\d+(?:\.\d+)?)/);
+  return fromTitle?.[1] ?? '?';
+}
+
+function formatChapterRange(chapters: MangaChapter[], page: number, pageSize: number): string {
+  const start = (page - 1) * pageSize;
+  const slice = chapters.slice(start, start + pageSize);
+  if (slice.length === 0) return `Page ${page}`;
+  const first = chapterLabel(slice[0]);
+  const last = chapterLabel(slice[slice.length - 1]);
+  return first === last ? `Ch. ${first}` : `Ch. ${first} – ${last}`;
+}
+
+function isRedundantChapterTitle(title: string | undefined, chapter?: string): boolean {
+  if (!title?.trim()) return true;
+  const compact = title.replace(/\s+/g, '').toLowerCase();
+  if (/^ch\.?\d+(\.\d+)?$/.test(compact) || /^chapter\d+(\.\d+)?$/.test(compact)) {
+    return true;
+  }
+  if (chapter) {
+    return (
+      compact === `ch.${chapter}` ||
+      compact === `ch${chapter}` ||
+      compact === `chapter${chapter}`
+    );
+  }
+  return false;
+}
+
 export default function MangaDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const mangaId = params.id as string;
   const mangadexId = searchParams.get('md');
-  const [provider, setProvider] = useState('mangadex');
+  const [provider, setProvider] = useState('auto');
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+  const [chapterPage, setChapterPage] = useState(1);
 
   const { data: infoData, isLoading: isInfoLoading, isError: isInfoError } = useMangaInfo(mangaId, mangadexId);
   const manga = infoData?.manga;
   const resolvedMangadexId = mangadexId ?? manga?.mangadexId ?? null;
-  const { data: chaptersData, isFetching: isChaptersLoading } = useMangaChapters(
-    mangaId,
-    provider,
-    resolvedMangadexId
-  );
+  const {
+    data: chaptersData,
+    isFetching: isChaptersLoading,
+    isLoading: isChaptersInitialLoading,
+  } = useMangaChaptersAll(mangaId, provider, resolvedMangadexId);
   const { user } = useUserStore();
   const { openAuthModal } = useAuthModalStore();
   const { addToList, removeFromList, getListStatus } = useMangaListStore();
 
-  const chapters: MangaChapter[] = chaptersData?.chapters || [];
+  const allChapters: MangaChapter[] = chaptersData?.chapters || [];
   const resolvedProvider = chaptersData?.provider || provider;
+  const unavailableReason = chaptersData?.unavailableReason;
+  const chapterMode = chaptersData?.mode ?? provider;
+  const chaptersTotal = chaptersData?.total ?? allChapters.length;
   const listStatus = getListStatus(mangaId);
+
+  const totalPages = Math.max(1, Math.ceil(allChapters.length / CHAPTER_PAGE_SIZE));
+
+  const pageOptions = useMemo(() => {
+    if (allChapters.length === 0) return [];
+    return Array.from({ length: totalPages }, (_, i) => {
+      const page = i + 1;
+      return {
+        page,
+        label: formatChapterRange(allChapters, page, CHAPTER_PAGE_SIZE),
+        count: Math.min(CHAPTER_PAGE_SIZE, allChapters.length - i * CHAPTER_PAGE_SIZE),
+      };
+    });
+  }, [allChapters, totalPages]);
+
+  const chapters = useMemo(() => {
+    const start = (chapterPage - 1) * CHAPTER_PAGE_SIZE;
+    return allChapters.slice(start, start + CHAPTER_PAGE_SIZE);
+  }, [allChapters, chapterPage]);
+
+  useEffect(() => {
+    setChapterPage(1);
+  }, [provider, mangaId]);
+
+  useEffect(() => {
+    if (chapterPage > totalPages) setChapterPage(totalPages);
+  }, [chapterPage, totalPages]);
+
+  const CHAPTER_TABS = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'mangadex', label: 'MangaDex' },
+    { id: 'mangapill', label: 'MangaPill' },
+    { id: 'mangareader', label: 'MangaReader' },
+    { id: 'mangahere', label: 'MangaHere' },
+  ] as const;
 
   if (isInfoLoading && !manga) {
     return (
@@ -102,7 +175,7 @@ export default function MangaDetailPage() {
   };
 
   const handleReadFirst = () => {
-    if (chapters.length > 0) handleReadChapter(chapters[0]);
+    if (allChapters.length > 0) handleReadChapter(allChapters[0]);
   };
 
   return (
@@ -193,7 +266,7 @@ export default function MangaDetailPage() {
                   variant="primary"
                   size="lg"
                   onClick={handleReadFirst}
-                  disabled={isChaptersLoading || chapters.length === 0}
+                  disabled={isChaptersLoading || allChapters.length === 0}
                   isLoading={isChaptersLoading}
                   className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700"
                 >
@@ -239,59 +312,112 @@ export default function MangaDetailPage() {
           <div className="lg:col-span-2">
             {/* Chapters */}
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6 mb-6 relative">
-              {isChaptersLoading && chapters.length > 0 && (
+              {isChaptersLoading && allChapters.length > 0 && (
                 <div className="absolute inset-0 bg-gray-900/50 rounded-lg flex items-center justify-center z-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500" />
                 </div>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <h2 className="text-xl md:text-2xl font-bold text-white">Chapters</h2>
-                <div className="flex gap-2">
-                  {['mangadex', 'mangapill', 'mangareader'].map((p) => (
-                    <Button
-                      key={p}
-                      variant={provider === p ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setProvider(p)}
-                      disabled={isChaptersLoading}
-                      className="capitalize"
-                    >
-                      {p}
-                    </Button>
-                  ))}
+
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h2 className="text-xl md:text-2xl font-bold text-white">Chapters</h2>
+                  {chaptersTotal > 0 && (
+                    <p className="text-gray-500 text-xs mt-0.5">
+                      {chapterMode === 'auto' && resolvedProvider !== 'auto' ? (
+                        <>
+                          Best available · {chaptersTotal} chapters via{' '}
+                          <span className="capitalize text-gray-400">{resolvedProvider}</span>
+                        </>
+                      ) : (
+                        <>{chaptersTotal} chapters</>
+                      )}
+                      {totalPages > 1 && (
+                        <>
+                          {' · '}page {chapterPage} of {totalPages}
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
+
+                {pageOptions.length > 0 && (
+                  <label className="relative inline-flex items-center shrink-0">
+                    <span className="sr-only">Chapter page</span>
+                    <select
+                      value={chapterPage}
+                      onChange={(e) => setChapterPage(Number(e.target.value))}
+                      disabled={isChaptersLoading || totalPages <= 1}
+                      className="appearance-none pl-3 pr-9 py-2 rounded-lg bg-gray-900/80 border border-gray-600/80 text-sm text-gray-100 hover:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500/60 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-w-[10.5rem] max-w-[16rem]"
+                    >
+                      {pageOptions.map((opt) => (
+                        <option key={opt.page} value={opt.page}>
+                          {totalPages > 1
+                            ? `${opt.label} · ${opt.page}/${totalPages}`
+                            : opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 w-4 h-4 text-gray-400" />
+                  </label>
+                )}
               </div>
 
-              {isChaptersLoading && chapters.length === 0 ? (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {CHAPTER_TABS.map(({ id, label }) => (
+                  <Button
+                    key={id}
+                    variant={provider === id ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setProvider(id)}
+                    disabled={isChaptersLoading}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+
+              {isChaptersInitialLoading && allChapters.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-500 mb-3" />
                   <p className="text-gray-400 text-sm">Loading chapters...</p>
                 </div>
               ) : chapters.length > 0 ? (
                 <div className="max-h-[60vh] overflow-y-auto rounded-lg pr-1">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {chapters.map((chapter) => (
-                      <button
-                        key={chapter.id}
-                        onClick={() => handleReadChapter(chapter)}
-                        className="bg-gray-700/50 hover:bg-amber-600/20 hover:border-amber-500/50 rounded-lg p-4 transition-all text-left border border-transparent"
-                      >
-                        <div className="text-white font-semibold">
-                          {chapter.chapter ? `Ch. ${chapter.chapter}` : 'Chapter'}
-                        </div>
-                        {chapter.title && (
-                          <div className="text-gray-400 text-sm mt-1 line-clamp-2">{chapter.title}</div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {chapters.map((chapter) => {
+                      const num = chapter.chapter;
+                      const titleExtra = isRedundantChapterTitle(chapter.title, num)
+                        ? null
+                        : chapter.title;
+                      return (
+                        <button
+                          key={chapter.id}
+                          onClick={() => handleReadChapter(chapter)}
+                          className="bg-gray-700/50 hover:bg-amber-600/20 hover:border-amber-500/50 rounded-md px-3 py-2 transition-all text-left border border-transparent"
+                        >
+                          <div className="text-white text-sm font-semibold leading-tight">
+                            {num ? `Ch. ${num}` : chapter.title || 'Chapter'}
+                          </div>
+                          {titleExtra && (
+                            <div className="text-gray-400 text-xs mt-0.5 line-clamp-1 leading-snug">
+                              {titleExtra}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                    </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-gray-400 mb-2">No chapters available for this provider.</p>
+                  <p className="text-gray-400 mb-2">
+                    {unavailableReason === 'title_mismatch'
+                      ? `No matching chapters on ${provider} for this title.`
+                      : `No chapters available on ${provider}.`}
+                  </p>
                   <p className="text-gray-500 text-sm mb-2">
-                    Try MangaDex or another provider above. Licensed series often need Consumet
-                    scrapers — run docker-compose.consumet.yaml if chapter lists stay empty.
+                    Try another provider tab above. We only show chapters that match this manga —
+                    sources won&apos;t silently swap.
                   </p>
                 </div>
               )}
