@@ -19,6 +19,8 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   activeTab?: SidebarTab;
+  /** Invite-only Game tab — hide links when false */
+  showGameTab?: boolean;
 };
 
 const ANIME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
@@ -48,9 +50,12 @@ const GAME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.Componen
   { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
 ];
 
-export function Sidebar({ isOpen, onClose, activeTab = 'anime' }: Props) {
-  const navItems =
+export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = false }: Props) {
+  const baseItems =
     activeTab === 'manga' ? MANGA_NAV_ITEMS : activeTab === 'game' ? GAME_NAV_ITEMS : ANIME_NAV_ITEMS;
+  const navItems = showGameTab
+    ? baseItems
+    : baseItems.filter((item) => item.href !== ROUTES.GAME);
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';

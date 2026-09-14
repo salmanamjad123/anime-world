@@ -25,6 +25,7 @@ type AdminUserRow = {
   emailVerifiedAt: string | null;
   createdAt: string | null;
   lastLogin: string | null;
+  gameDemoAccess: boolean;
 };
 
 function parsePage(raw: string | null, fallback: number): number {
@@ -79,12 +80,14 @@ export async function GET(request: NextRequest) {
         emailVerifiedAt: toIso(data.emailVerifiedAt),
         createdAt: toIso(data.createdAt),
         lastLogin: toIso(data.lastLogin),
+        gameDemoAccess: data.gameDemoAccess === true,
       };
     });
 
     const totalUsers = users.length;
     const verifiedCount = users.filter((u) => u.emailVerified).length;
     const unverifiedCount = totalUsers - verifiedCount;
+    const gameDemoCount = users.filter((u) => u.gameDemoAccess).length;
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const recentSignups = users.filter((u) => timeMs(u.createdAt) >= weekAgo).length;
 
@@ -92,6 +95,13 @@ export async function GET(request: NextRequest) {
       users = users.filter((u) => u.emailVerified);
     } else if (verifiedFilter === 'no') {
       users = users.filter((u) => !u.emailVerified);
+    }
+
+    const gameDemoFilter = (sp.get('gameDemo') || 'all').toLowerCase();
+    if (gameDemoFilter === 'yes') {
+      users = users.filter((u) => u.gameDemoAccess);
+    } else if (gameDemoFilter === 'no') {
+      users = users.filter((u) => !u.gameDemoAccess);
     }
 
     if (q) {
@@ -143,6 +153,7 @@ export async function GET(request: NextRequest) {
         verified: verifiedCount,
         unverified: unverifiedCount,
         recentSignups,
+        gameDemoAccess: gameDemoCount,
       },
     });
   } catch (e) {

@@ -18,6 +18,8 @@ export interface User {
   createdAt: Date;
   lastLogin?: Date;
   emailVerified?: boolean;
+  /** Invite-only Village Arena access (testers). Managed in Admin → Game demo. */
+  gameDemoAccess?: boolean;
 }
 
 /**

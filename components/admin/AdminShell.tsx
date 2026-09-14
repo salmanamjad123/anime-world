@@ -63,6 +63,11 @@ const PAGE_META: Record<string, { title: string; description?: string }> = {
     title: 'Engagement email',
     description: 'Send updates to registered users via Resend.',
   },
+  [ROUTES.ADMIN_GAME_DEMO]: {
+    title: 'Game demo',
+    description:
+      'Invite-only Village Arena access for testers. Users without access cannot see the Game tab or open /game.',
+  },
 };
 
 function resolveMeta(pathname: string): { title: string; description?: string } {

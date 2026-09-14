@@ -14,7 +14,9 @@ export type AdminAuditAction =
   | 'view_user'
   | 'send_email'
   | 'purge_audits'
-  | 'admin_login';
+  | 'admin_login'
+  | 'grant_game_demo'
+  | 'revoke_game_demo';
 
 export type AdminAuditEntry = {
   id: string;

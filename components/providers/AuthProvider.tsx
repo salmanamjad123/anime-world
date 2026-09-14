@@ -5,10 +5,11 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useUserStore } from '@/store/useUserStore';
-import { onAuthChange, getUserDocument } from '@/lib/firebase/auth';
-import { isFirebaseConfigured } from '@/lib/firebase/config';
+import { onAuthChange } from '@/lib/firebase/auth';
+import { db, isFirebaseConfigured } from '@/lib/firebase/config';
 import { getWatchlist, getWatchHistory, trimContinueWatchingToMax } from '@/lib/firebase/firestore';
 import {
   getMangaList,
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { syncWithFirebase: syncHistory, clearHistory } = useHistoryStore();
   const { syncWithFirebase: syncMangaList } = useMangaListStore();
   const { syncWithFirebase: syncReadingHistory } = useReadingHistoryStore();
+  const listsSyncedForUid = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -33,49 +35,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthChange(async (firebaseUser) => {
-      if (firebaseUser) {
-        // User doc only exists after email verification – treat unverified as not logged in
-        const userDoc = await getUserDocument(firebaseUser.uid);
-        if (!userDoc) {
-          clearUser();
-          return;
-        }
+    let unsubUserDoc: (() => void) | null = null;
 
-        const user = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email!,
-          displayName: userDoc.displayName ?? firebaseUser.displayName ?? undefined,
-          photoURL: userDoc.photoURL ?? firebaseUser.photoURL ?? undefined,
-          createdAt: userDoc.createdAt ?? new Date(),
-          emailVerified: userDoc.emailVerified ?? false,
-        };
-        setUser(user);
+    const unsubscribe = onAuthChange((firebaseUser) => {
+      unsubUserDoc?.();
+      unsubUserDoc = null;
 
-        // Sync data from Firebase
-        try {
-          const [watchlist, history, mangaList, readingHistory] = await Promise.all([
-            getWatchlist(firebaseUser.uid),
-            getWatchHistory(firebaseUser.uid),
-            getMangaList(firebaseUser.uid),
-            getReadingHistory(firebaseUser.uid),
-          ]);
-          syncWatchlist(watchlist);
-          syncHistory(history);
-          syncMangaList(mangaList);
-          syncReadingHistory(readingHistory);
-          trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
-          trimContinueReadingToMax(firebaseUser.uid).catch(() => {});
-        } catch (error) {
-          console.error('Failed to sync user data:', error);
-        }
-      } else {
+      if (!firebaseUser) {
+        listsSyncedForUid.current = null;
         clearUser();
+        return;
       }
+
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      unsubUserDoc = onSnapshot(
+        userRef,
+        (snap) => {
+          // User doc only exists after email verification – treat unverified as not logged in
+          if (!snap.exists()) {
+            listsSyncedForUid.current = null;
+            clearUser();
+            return;
+          }
+
+          const data = snap.data();
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email!,
+            displayName:
+              (data.displayName as string | undefined) ??
+              firebaseUser.displayName ??
+              undefined,
+            photoURL:
+              (data.photoURL as string | undefined) ??
+              firebaseUser.photoURL ??
+              undefined,
+            createdAt: data.createdAt?.toDate?.() ?? new Date(),
+            lastLogin: data.lastLogin?.toDate?.(),
+            emailVerified: data.emailVerified ?? false,
+            gameDemoAccess: data.gameDemoAccess === true,
+          });
+
+          // Sync lists once per uid (not on every gameDemoAccess toggle)
+          if (listsSyncedForUid.current === firebaseUser.uid) return;
+          listsSyncedForUid.current = firebaseUser.uid;
+
+          void (async () => {
+            try {
+              const [watchlist, history, mangaList, readingHistory] = await Promise.all([
+                getWatchlist(firebaseUser.uid),
+                getWatchHistory(firebaseUser.uid),
+                getMangaList(firebaseUser.uid),
+                getReadingHistory(firebaseUser.uid),
+              ]);
+              syncWatchlist(watchlist);
+              syncHistory(history);
+              syncMangaList(mangaList);
+              syncReadingHistory(readingHistory);
+              trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
+              trimContinueReadingToMax(firebaseUser.uid).catch(() => {});
+            } catch (error) {
+              console.error('Failed to sync user data:', error);
+            }
+          })();
+        },
+        (error) => {
+          console.error('User doc listener failed:', error);
+          clearUser();
+        }
+      );
     });
 
-    return () => unsubscribe();
-  }, [setUser, setLoading, clearUser, syncWatchlist, syncHistory, syncMangaList, syncReadingHistory, clearList, clearHistory]);
+    return () => {
+      unsubUserDoc?.();
+      unsubscribe();
+    };
+  }, [
+    setUser,
+    setLoading,
+    clearUser,
+    syncWatchlist,
+    syncHistory,
+    syncMangaList,
+    syncReadingHistory,
+    clearList,
+    clearHistory,
+  ]);
 
   return <>{children}</>;
 }

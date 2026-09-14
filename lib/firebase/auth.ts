@@ -167,6 +167,7 @@ export async function getUserDocument(uid: string): Promise<User | null> {
       createdAt: data.createdAt?.toDate() || new Date(),
       lastLogin: data.lastLogin?.toDate(),
       emailVerified: data.emailVerified ?? false,
+      gameDemoAccess: data.gameDemoAccess === true,
     };
   }
 

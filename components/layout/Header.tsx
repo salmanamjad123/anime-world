@@ -22,6 +22,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { Anime, Manga } from '@/types';
+import { canAccessGameDemo } from '@/lib/game-demo-access';
 import { Sidebar, type SidebarTab } from './Sidebar';
 
 type SearchResultItem = (Anime | Manga) & { id: string };
@@ -53,17 +54,18 @@ export function Header() {
   const HEADER_BORDER_PX = 1;
 
   const { user } = useUserStore();
+  const showGameTab = canAccessGameDemo(user);
 
-  const activeTab: ActiveTab = pathname.startsWith('/game')
-    ? 'game'
-    : pathname.startsWith('/manga')
-      ? 'manga'
-      : 'anime';
-  const isWatchPage = pathname.startsWith('/watch/');
-  const isGameBattlePage = pathname.startsWith('/game/battle');
-  const hideChrome = isWatchPage || isGameBattlePage;
-  // Manga reader uses its own chrome; watch/battle hide via hideChrome
+  const activeTab: ActiveTab =
+    showGameTab && pathname.startsWith('/game')
+      ? 'game'
+      : pathname.startsWith('/manga')
+        ? 'manga'
+        : 'anime';
+  const isGameBattlePage = showGameTab && pathname.startsWith('/game/battle');
+  // Hide sticky chrome only on manga reader + game battle (watch keeps the header)
   const isReaderPage = pathname.includes('/read');
+  const hideChrome = isGameBattlePage;
   const hideSearch = activeTab === 'game';
   // Mobile: Anime/Manga toggle only on section homes (not detail/search/profile/watch)
   const showMobileSectionTabs =
@@ -244,7 +246,7 @@ export function Header() {
     return () => window.removeEventListener('resize', syncHeaderHeight);
   }, [isReaderPage, showMobileSectionTabs, mobileSearchOpen]);
 
-  // Watch / battle / manga reader: no header bar — reset layout offset
+  // Game battle / manga reader: no header bar — reset layout offset
   useEffect(() => {
     if (!hideChrome && !isReaderPage) return;
     document.documentElement.style.setProperty('--site-header-height', '0px');
@@ -370,11 +372,16 @@ export function Header() {
     setSearchOpen(false);
   }, []);
 
-  // Watch / battle / manga reader: no sticky header chrome
+  // Manga reader / game battle: no sticky header chrome (watch keeps the header)
   if (hideChrome || isReaderPage) {
     return (
       <>
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          activeTab={activeTab}
+          showGameTab={showGameTab}
+        />
         <AuthModal
           isOpen={authModalOpen}
           onClose={closeAuthModal}
@@ -432,17 +439,19 @@ export function Header() {
       >
         Manga
       </Link>
-      <Link
-        href={ROUTES.GAME}
-        className={cn(
-          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
-          activeTab === 'game'
-            ? 'bg-orange-600 text-white'
-            : 'text-gray-400 hover:text-white'
-        )}
-      >
-        Game
-      </Link>
+      {showGameTab && (
+        <Link
+          href={ROUTES.GAME}
+          className={cn(
+            'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+            activeTab === 'game'
+              ? 'bg-orange-600 text-white'
+              : 'text-gray-400 hover:text-white'
+          )}
+        >
+          Game
+        </Link>
+      )}
     </div>
   );
 
@@ -793,7 +802,12 @@ export function Header() {
       </div>
     </header>
 
-    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
+    <Sidebar
+      isOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+      activeTab={activeTab}
+      showGameTab={showGameTab}
+    />
     <AuthModal
       isOpen={authModalOpen}
       onClose={closeAuthModal}

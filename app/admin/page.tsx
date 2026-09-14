@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAdminAccess } from '@/components/admin/AdminShell';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/constants/routes';
-import { ClipboardList, Loader2, Mail, Users } from 'lucide-react';
+import { ClipboardList, Loader2, Mail, Swords, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type Stats = {
@@ -130,7 +130,7 @@ function OverviewBody({
         <StatCard label="Signups (7 days)" value={String(stats.recentSignups)} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <QuickLink
           href={ROUTES.ADMIN_USERS}
           icon={<Users className="h-4 w-4" />}
@@ -145,6 +145,11 @@ function OverviewBody({
           href={ROUTES.ADMIN_EMAIL}
           icon={<Mail className="h-4 w-4" />}
           label="Send email"
+        />
+        <QuickLink
+          href={ROUTES.ADMIN_GAME_DEMO}
+          icon={<Swords className="h-4 w-4" />}
+          label="Game demo"
         />
       </div>
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { SITE_NAME } from '@/constants/site';
+import { GameDemoGate } from '@/components/game/GameDemoGate';
 import './game.css';
 
 export const metadata: Metadata = {
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <GameDemoGate>{children}</GameDemoGate>;
 }
