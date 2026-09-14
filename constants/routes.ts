@@ -23,6 +23,10 @@ export const ROUTES = {
     tab ? `/profile?section=${section}&tab=${tab}` : `/profile?section=${section}`,
   SETTINGS: '/settings',
   ADMIN: '/admin',
+  ADMIN_USERS: '/admin/users',
+  ADMIN_USER: (uid: string) => `/admin/users/${encodeURIComponent(uid)}`,
+  ADMIN_AUDITS: '/admin/audits',
+  ADMIN_EMAIL: '/admin/email',
   MANGA: '/manga',
   MANGA_GENRE: (genre: string) => `/manga?genres=${encodeURIComponent(genre)}`,
   MANGA_DETAIL: (id: string, mangadexId?: string) => {

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { writeAdminAudit } from '@/lib/admin-audit';
 import { isEmailConfigured, sendEngagementEmail } from '@/lib/email';
 
 const MAX_RECIPIENTS = 100;
@@ -116,6 +117,19 @@ export async function POST(request: NextRequest) {
       }
       if (DELAY_MS > 0) await sleep(DELAY_MS);
     }
+
+    await writeAdminAudit(db, {
+      actorUid: auth.uid,
+      actorEmail: auth.email,
+      action: 'send_email',
+      meta: {
+        subject,
+        sendToAll,
+        sent,
+        failed,
+        total: recipients.length,
+      },
+    });
 
     return NextResponse.json({
       success: true,
