@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/social-post",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/purge-audits",
+      "schedule": "15 3 * * *"
     }
   ],
   "functions": {
@@ -14,6 +18,9 @@
     },
     "app/api/cron/social-post/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/cron/purge-audits/route.ts": {
+      "maxDuration": 60
     }
   },
   "headers": [
