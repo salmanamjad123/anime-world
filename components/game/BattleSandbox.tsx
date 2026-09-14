@@ -15,12 +15,14 @@ import { battleStrategyTip } from '@/lib/game/strategy';
 import {
   type ArenaRoom,
   cancelRoom,
+  commitTurnWrite,
   joinRoom,
+  patchMySide,
   rememberedSeat,
   seatFor,
+  shouldApplyRemoteMatch,
   subscribeRoom,
   surrenderRoom,
-  writeMatch,
 } from '@/lib/game/rooms';
 import {
   WEAVE_EXCHANGE_COST,
@@ -38,7 +40,7 @@ import {
   queueArt,
   queueError,
   remainingWeaveAfterQueue,
-  tickTimer,
+  secondsRemaining,
   unqueueArt,
   type MatchState,
   type SideId,
@@ -75,15 +77,37 @@ function normalizeMatch(match: MatchState): MatchState {
     }
     sides[sideId] = { ...side, units };
   });
+  const secondsLeft = match.secondsLeft ?? 60;
   return {
     ...match,
     sides,
     activeSide: match.activeSide ?? 'player',
+    matchRev: match.matchRev ?? 0,
+    turnDeadlineAt: match.turnDeadlineAt ?? Date.now() + secondsLeft * 1000,
+    secondsLeft,
     combatEvents: match.combatEvents ?? [],
     endReason: match.endReason ?? null,
     lastGranted: match.lastGranted ?? { player: [], foe: [] },
     channels: match.channels ?? [],
   };
+}
+
+/** Apply a room write result without clobbering a newer local commit. */
+function mergeRoomMatch(local: MatchState | null, remoteRaw: MatchState): MatchState {
+  const remote = normalizeMatch(remoteRaw);
+  if (!local) return remote;
+  if (!shouldApplyRemoteMatch(local, remote)) return local;
+  // Same/newer rev but we already advanced the turn locally — keep local.
+  if (
+    remote.echo < local.echo ||
+    (remote.echo === local.echo &&
+      remote.activeSide !== local.activeSide &&
+      (local.matchRev ?? 0) >= (remote.matchRev ?? 0) &&
+      !remote.winner)
+  ) {
+    return local;
+  }
+  return remote;
 }
 
 export function BattleSandbox({
@@ -117,10 +141,35 @@ export function BattleSandbox({
   const lockingRef = useRef(false);
   const lockEchoRef = useRef<() => void>(() => {});
   const joiningRef = useRef(false);
+  const writeChainRef = useRef(Promise.resolve());
+  const autoLockKeyRef = useRef('');
+  const matchRef = useRef<MatchState | null>(null);
   const rngRef = useRef(() => Math.random());
   const lastSfxKey = useRef('');
   const endSfxDone = useRef(false);
+  const [clockMs, setClockMs] = useState(() => Date.now());
   const pvp = Boolean(roomCode);
+
+  matchRef.current = match;
+
+  const applyMatch = (next: MatchState | null) => {
+    if (!next) return;
+    const normalized = normalizeMatch(next);
+    matchRef.current = normalized;
+    setMatch(normalized);
+  };
+
+  const applyMergedRemote = (remote: MatchState) => {
+    const merged = mergeRoomMatch(matchRef.current, remote);
+    matchRef.current = merged;
+    setMatch(merged);
+  };
+
+  const enqueueRoomWrite = (task: () => Promise<void>) => {
+    writeChainRef.current = writeChainRef.current.then(task).catch(() => {
+      /* keep chain alive */
+    });
+  };
 
   const goLobby = () => {
     if (onExit) onExit();
@@ -142,7 +191,13 @@ export function BattleSandbox({
     return subscribeRoom(roomCode, (next) => {
       setRoom(next);
       setRoomError(null);
-      if (next.match) setMatch(normalizeMatch(next.match));
+      if (!next.match) return;
+      const remote = normalizeMatch(next.match);
+      setMatch((local) => {
+        const merged = mergeRoomMatch(local, remote);
+        matchRef.current = merged ?? local;
+        return merged;
+      });
     });
   }, [roomCode]);
 
@@ -156,7 +211,9 @@ export function BattleSandbox({
     return pickShadeTeam(teamIds, FIGHTERS).map((fighter) => fighter.id);
   }, [pvp, room?.guestTeam, shadeIds, teamIds]);
 
-  const mySide: SideId = pvp && room && user ? seatFor(room, user.uid) ?? 'player' : 'player';
+  const seatedSide = pvp && room && user ? seatFor(room, user.uid) : null;
+  const mySide: SideId = seatedSide ?? 'player';
+  const seatMissing = Boolean(pvp && room && user && !seatedSide);
   const foeSide = otherSide(mySide);
 
   useEffect(() => {
@@ -265,28 +322,75 @@ export function BattleSandbox({
 
   const lockEcho = () => {
     if (lockingRef.current) return;
+    if (seatMissing) {
+      setNotice('Seat not assigned — rejoin the gate.');
+      return;
+    }
     lockingRef.current = true;
     setPending(null);
     setNotice(null);
-    setMatch((current) => {
-      if (!current || current.phase !== 'pick' || current.winner) {
-        lockingRef.current = false;
-        return current;
-      }
-      if ((current.activeSide ?? 'player') !== mySide) {
-        lockingRef.current = false;
-        return current;
-      }
-      const resolved = commitTurn(current, mySide, rngRef.current);
-      if (pvp && roomCode) void writeMatch(roomCode, resolved);
+    const current = matchRef.current;
+    if (!current || current.phase !== 'pick' || current.winner) {
       lockingRef.current = false;
-      return resolved;
-    });
+      return;
+    }
+    if ((current.activeSide ?? 'player') !== mySide) {
+      lockingRef.current = false;
+      return;
+    }
+    const expected = {
+      echo: current.echo,
+      activeSide: mySide,
+      matchRev: current.matchRev ?? 0,
+    };
+    const resolved = commitTurn(current, mySide, rngRef.current);
+    // Optimistic bump so stale remote queue echoes cannot overwrite us.
+    const optimistic = normalizeMatch({ ...resolved, matchRev: expected.matchRev + 1 });
+    matchRef.current = optimistic;
+    setMatch(optimistic);
+
+    if (pvp && roomCode) {
+      enqueueRoomWrite(async () => {
+        const result = await commitTurnWrite(roomCode, mySide, expected, resolved);
+        if (result.match) applyMergedRemote(result.match);
+        else if (result.reason === 'stale' || result.reason === 'not-your-turn') {
+          setNotice('Turn sync lagged — board refreshed.');
+        }
+        lockingRef.current = false;
+      });
+      return;
+    }
+    lockingRef.current = false;
   };
 
   useEffect(() => {
     lockEchoRef.current = lockEcho;
   });
+
+  // Clear lock gate when the turn hands off (PvP only — bot uses lockingRef during think).
+  useEffect(() => {
+    if (pvp) lockingRef.current = false;
+  }, [pvp, match?.activeSide, match?.echo]);
+
+  // Shared clock for deadline countdown (both seats see the same timer).
+  useEffect(() => {
+    if (match?.phase !== 'pick' || match.winner) return;
+    const id = window.setInterval(() => setClockMs(Date.now()), 250);
+    return () => window.clearInterval(id);
+  }, [match?.phase, match?.winner, match?.echo, match?.activeSide]);
+
+  // Auto-lock once when the absolute deadline hits on our turn.
+  useEffect(() => {
+    if (!match || match.phase !== 'pick' || match.winner) return;
+    if ((match.activeSide ?? 'player') !== mySide) return;
+    if (seatMissing) return;
+    const left = secondsRemaining(match, clockMs);
+    if (left > 0) return;
+    const key = `${match.seed}-${match.echo}-${match.activeSide}-${match.matchRev ?? 0}`;
+    if (autoLockKeyRef.current === key) return;
+    autoLockKeyRef.current = key;
+    lockEchoRef.current();
+  }, [clockMs, match, mySide, seatMissing]);
 
   // First battle: open the guided coach once.
   useEffect(() => {
@@ -341,26 +445,6 @@ export function BattleSandbox({
       lockingRef.current = false;
     };
   }, [pvp, match?.activeSide, match?.echo, match?.phase, match?.winner]);
-
-  const pickPhase = match?.phase;
-  const activeSide = match?.activeSide;
-  const echo = match?.echo;
-
-  useEffect(() => {
-    if (pickPhase !== 'pick' || !match) return;
-    if ((activeSide ?? 'player') !== mySide) return;
-    const id = window.setInterval(() => {
-      setMatch((current) => {
-        if (!current || current.phase !== 'pick' || current.winner) return current;
-        if ((current.activeSide ?? 'player') !== mySide) return current;
-        const ticked = tickTimer(current);
-        if (ticked.secondsLeft > 0) return ticked;
-        window.setTimeout(() => lockEchoRef.current(), 0);
-        return ticked;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [pickPhase, activeSide, echo, mySide, match]);
 
   const myTeamIds = pvp && room ? (mySide === 'player' ? room.hostTeam : room.guestTeam ?? teamIds) : teamIds;
   const selected =
@@ -510,6 +594,11 @@ export function BattleSandbox({
 
   const tryQueue = (fighter: Fighter, art: Art, targetId: string | null) => {
     if (match.phase !== 'pick' || match.winner) return;
+    if (lockingRef.current) return;
+    if (seatMissing) {
+      setNotice('Seat not assigned — rejoin the gate.');
+      return;
+    }
     if ((match.activeSide ?? 'player') !== mySide) {
       setNotice("Not your turn.");
       return;
@@ -517,8 +606,25 @@ export function BattleSandbox({
     const queued = me.queue.some((item) => item.fighterId === fighter.id && item.artId === art.id);
     if (queued) {
       const next = unqueueArt(match, mySide, fighter.id, art.id);
-      setMatch(next);
-      if (pvp && roomCode) void writeMatch(roomCode, next, { mine: mySide });
+      applyMatch(next);
+      if (pvp && roomCode) {
+        enqueueRoomWrite(async () => {
+          const latest = matchRef.current;
+          if (!latest || (latest.activeSide ?? 'player') !== mySide || latest.winner) return;
+          const expected = {
+            echo: latest.echo,
+            activeSide: mySide,
+            matchRev: latest.matchRev ?? 0,
+          };
+          const result = await patchMySide(roomCode, mySide, expected, {
+            queue: latest.sides[mySide].queue,
+            weave: latest.sides[mySide].weave,
+          });
+          if (result.match) {
+            applyMergedRemote(result.match);
+          }
+        });
+      }
       setPending(null);
       return;
     }
@@ -539,8 +645,25 @@ export function BattleSandbox({
     }
     void playUiClick();
     const next = queueArt(match, mySide, fighter.id, art.id, targetId);
-    setMatch(next);
-    if (pvp && roomCode) void writeMatch(roomCode, next, { mine: mySide });
+    applyMatch(next);
+    if (pvp && roomCode) {
+      enqueueRoomWrite(async () => {
+        const latest = matchRef.current;
+        if (!latest || (latest.activeSide ?? 'player') !== mySide || latest.winner) return;
+        const expected = {
+          echo: latest.echo,
+          activeSide: mySide,
+          matchRev: latest.matchRev ?? 0,
+        };
+        const result = await patchMySide(roomCode, mySide, expected, {
+          queue: latest.sides[mySide].queue,
+          weave: latest.sides[mySide].weave,
+        });
+        if (result.match) {
+          applyMergedRemote(result.match);
+        }
+      });
+    }
     setPending(null);
     setSelectedId(fighter.id);
     if (targetId) {
@@ -572,9 +695,15 @@ export function BattleSandbox({
     if (andLeave) window.setTimeout(() => goLobby(), 350);
   };
 
-  const myTurn = match.phase === 'pick' && (match.activeSide ?? 'player') === mySide && !match.winner;
-  const opponentTurn = match.phase === 'pick' && (match.activeSide ?? 'player') !== mySide && !match.winner;
-  const timerLabel = `${String(Math.floor(match.secondsLeft / 10))}${String(match.secondsLeft % 10)}`;
+  const myTurn =
+    match.phase === 'pick' &&
+    (match.activeSide ?? 'player') === mySide &&
+    !match.winner &&
+    !seatMissing;
+  const opponentTurn =
+    match.phase === 'pick' && (match.activeSide ?? 'player') !== mySide && !match.winner;
+  const displaySeconds = secondsRemaining(match, clockMs);
+  const timerLabel = `${String(Math.floor(displaySeconds / 10))}${String(displaySeconds % 10)}`;
   const selectedArt =
     pending?.art ??
     (selected
@@ -719,10 +848,28 @@ export function BattleSandbox({
                       type="button"
                       title={`Trade ${WEAVE_EXCHANGE_COST} Weave for 1 ${ENERGY_META[color].label}`}
                       onClick={() => {
+                        if (lockingRef.current) return;
                         void playUiClick();
                         const next = exchangeWeave(match, mySide, color);
-                        setMatch(next);
-                        if (pvp && roomCode) void writeMatch(roomCode, next, { mine: mySide });
+                        applyMatch(next);
+                        if (pvp && roomCode) {
+                          enqueueRoomWrite(async () => {
+                            const latest = matchRef.current;
+                            if (!latest || (latest.activeSide ?? 'player') !== mySide || latest.winner) return;
+                            const expected = {
+                              echo: latest.echo,
+                              activeSide: mySide,
+                              matchRev: latest.matchRev ?? 0,
+                            };
+                            const result = await patchMySide(roomCode, mySide, expected, {
+                              queue: latest.sides[mySide].queue,
+                              weave: latest.sides[mySide].weave,
+                            });
+                            if (result.match) {
+                              applyMergedRemote(result.match);
+                            }
+                          });
+                        }
                         setNotice(next.log[next.log.length - 1] ?? null);
                       }}
                       className="rounded border border-amber-200/25 bg-black/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100 hover:border-amber-300/50 hover:bg-black/65"
@@ -753,7 +900,7 @@ export function BattleSandbox({
                   <p
                     className={cn(
                       'font-mono text-3xl font-black leading-none',
-                      match.secondsLeft <= 10 ? 'text-red-400' : 'text-amber-200'
+                      match.secondsLeft <= 10 || displaySeconds <= 10 ? 'text-red-400' : 'text-amber-200'
                     )}
                   >
                     {timerLabel}

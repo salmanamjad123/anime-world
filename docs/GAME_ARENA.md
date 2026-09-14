@@ -3,8 +3,8 @@
 **Working title:** Village Arena  
 **Route:** `/game`  
 **Header label:** Game  
-**Ruleset version:** `v0.3`  
-**Status:** Lobby, bot battles, and private room-code PvP shipped. Ranked matchmaking is next.
+**Ruleset version:** `v0.4`  
+**Status:** Lobby, bot battles, and private room-code PvP with revision-gated sync. Ranked matchmaking is next.
 
 This document is the source of truth for building a scalable, responsive, ranked 3v3 arena on Anime Village. UI layout is inspired by Naruto-Arena’s lobby and battle chrome. **Characters, names, jutsu, villages, and art are original.** Do not copy licensed IP.
 

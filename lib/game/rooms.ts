@@ -1,8 +1,22 @@
 'use client';
 
-import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
+  setDoc,
+  type Unsubscribe,
+} from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/lib/firebase/config';
-import { createMatch, forfeitMatch, otherSide, type MatchState, type SideId } from '@/lib/game/engine';
+import {
+  createMatch,
+  forfeitMatch,
+  otherSide,
+  type MatchState,
+  type SideId,
+  type SideState,
+} from '@/lib/game/engine';
 import { TEAM_SIZE, getFighter } from '@/lib/game/roster';
 
 function assertTeam(team: string[]) {
@@ -48,6 +62,19 @@ export type RoomPlayer = {
   uid: string;
   name: string;
   team: string[];
+};
+
+export type MatchWriteResult = {
+  ok: boolean;
+  reason?: 'missing' | 'stale' | 'ended' | 'not-your-turn';
+  match: MatchState | null;
+  room: ArenaRoom | null;
+};
+
+export type TurnExpect = {
+  echo: number;
+  activeSide: SideId;
+  matchRev: number;
 };
 
 function generateCode(): string {
@@ -105,6 +132,57 @@ async function writeCloud(room: ArenaRoom): Promise<boolean> {
     writeLocal(room);
     return false;
   }
+}
+
+function bumpRev(match: MatchState): MatchState {
+  return { ...match, matchRev: (match.matchRev ?? 0) + 1 };
+}
+
+function statusOf(match: MatchState, current: RoomStatus): RoomStatus {
+  if (match.winner) return 'ended';
+  if (current === 'waiting') return 'waiting';
+  return 'battle';
+}
+
+/**
+ * Apply a room mutation with CAS. Prefers Firestore transactions so two
+ * clients cannot last-write-wins each other. Falls back to localStorage.
+ */
+async function mutateRoom(
+  code: string,
+  mutate: (room: ArenaRoom) => ArenaRoom | null
+): Promise<ArenaRoom | null> {
+  const normalized = normalizeGateCode(code);
+  if (isFirebaseConfigured() && db) {
+    try {
+      const ref = doc(db, COLLECTION, normalized);
+      const next = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return null;
+        const room = snap.data() as ArenaRoom;
+        const updated = mutate(room);
+        if (!updated) return null;
+        const packed = serialize({ ...updated, transport: 'firestore' as const });
+        tx.set(ref, packed);
+        return packed;
+      });
+      if (next) {
+        writeLocal({ ...next, transport: 'local' });
+        return next;
+      }
+      // Transaction returned null (CAS reject) — still return current for callers.
+      return null;
+    } catch {
+      /* fall through to local */
+    }
+  }
+
+  const room = readLocal(normalized);
+  if (!room) return null;
+  const updated = mutate(room);
+  if (!updated) return null;
+  writeLocal(updated);
+  return updated;
 }
 
 export async function getRoom(code: string): Promise<ArenaRoom | null> {
@@ -184,47 +262,211 @@ export async function joinRoom(code: string, guest: RoomPlayer): Promise<{ room:
   return { room: { ...next, transport: cloud ? 'firestore' : 'local' }, cloud };
 }
 
-export async function writeMatch(code: string, match: MatchState, opts?: { mine?: SideId }): Promise<void> {
-  const room = await getRoom(code);
-  if (!room) return;
-  let nextMatch = match;
-  // Never merge over an ended match, and never clobber the other side while picking.
-  if (
-    opts?.mine &&
-    room.match &&
-    !match.winner &&
-    !room.match.winner &&
-    room.match.echo === match.echo &&
-    room.match.phase === 'pick' &&
-    match.phase === 'pick'
-  ) {
-    const other = otherSide(opts.mine);
-    nextMatch = {
-      ...match,
+function expectStillCurrent(match: MatchState, expected: TurnExpect, mine: SideId): MatchWriteResult['reason'] | null {
+  if (match.winner || match.phase !== 'pick') return 'ended';
+  if ((match.activeSide ?? 'player') !== expected.activeSide) return 'not-your-turn';
+  if (match.echo !== expected.echo) return 'stale';
+  if ((match.activeSide ?? 'player') !== mine) return 'not-your-turn';
+  // Allow remote rev ahead only if we somehow lagged; reject if remote is behind
+  // our base (impossible) or if remote jumped past our base without matching turn.
+  if ((match.matchRev ?? 0) < expected.matchRev) return 'stale';
+  return null;
+}
+
+/**
+ * Mid-turn pick write: only patches this seat's queue/weave.
+ * Never touches activeSide, echo, units, or the opponent's side.
+ */
+export async function patchMySide(
+  code: string,
+  mine: SideId,
+  expected: TurnExpect,
+  side: Pick<SideState, 'queue' | 'weave'>
+): Promise<MatchWriteResult> {
+  let rejectReason: MatchWriteResult['reason'] | undefined;
+  const updated = await mutateRoom(code, (room) => {
+    if (!room.match) {
+      rejectReason = 'missing';
+      return null;
+    }
+    const reason = expectStillCurrent(room.match, expected, mine);
+    if (reason) {
+      rejectReason = reason;
+      return null;
+    }
+    // Same turn but another of our patches already landed — still apply on top
+    // if echo/activeSide match and rev is >= expected.
+    if ((room.match.matchRev ?? 0) > expected.matchRev) {
+      // Only accept if still our turn (already checked). Patch onto latest.
+    }
+    const nextMatch = bumpRev({
+      ...room.match,
       sides: {
-        ...match.sides,
-        [other]: room.match.sides[other],
+        ...room.match.sides,
+        [mine]: {
+          ...room.match.sides[mine],
+          queue: side.queue,
+          weave: side.weave,
+        },
       },
-      // Prefer the latest combatEvents from the writer who just resolved.
-      combatEvents: match.combatEvents?.length ? match.combatEvents : room.match.combatEvents ?? [],
+    });
+    return {
+      ...room,
+      match: nextMatch,
+      status: statusOf(nextMatch, room.status),
+      updatedAt: Date.now(),
     };
+  });
+
+  if (!updated?.match) {
+    const room = await getRoom(code);
+    return { ok: false, reason: rejectReason ?? 'stale', match: room?.match ?? null, room };
   }
-  const next: ArenaRoom = {
-    ...room,
-    match: nextMatch,
-    status: statusOf(nextMatch, room.status),
-    updatedAt: Date.now(),
-  };
-  const cloud = await writeCloud(next);
-  if (!cloud) writeLocal(next);
+  return { ok: true, match: updated.match, room: updated };
+}
+
+/**
+ * Turn commit: only accepted when echo/activeSide/matchRev still match.
+ * This is the only client path allowed to advance activeSide / echo / HP.
+ */
+export async function commitTurnWrite(
+  code: string,
+  mine: SideId,
+  expected: TurnExpect,
+  resolved: MatchState
+): Promise<MatchWriteResult> {
+  let rejectReason: MatchWriteResult['reason'] | undefined;
+  const updated = await mutateRoom(code, (room) => {
+    if (!room.match) {
+      rejectReason = 'missing';
+      return null;
+    }
+    if (room.match.winner || room.match.phase === 'ended') {
+      rejectReason = 'ended';
+      return null;
+    }
+    if ((room.match.activeSide ?? 'player') !== mine || mine !== expected.activeSide) {
+      rejectReason = 'not-your-turn';
+      return null;
+    }
+    if (room.match.echo !== expected.echo) {
+      rejectReason = 'stale';
+      return null;
+    }
+    // Commit must be based on the latest rev for this turn. If queue patches
+    // bumped rev after we snapshot expected, accept when still same turn and
+    // remote rev >= expected (we already serialized writes on the client).
+    if ((room.match.matchRev ?? 0) < expected.matchRev) {
+      rejectReason = 'stale';
+      return null;
+    }
+    const nextMatch = bumpRev({
+      ...resolved,
+      // Preserve any newer opponent pick fields if they somehow wrote (shouldn't
+      // during our turn) — keep resolved as authority for combat/turn.
+      matchRev: room.match.matchRev ?? 0,
+    });
+    return {
+      ...room,
+      match: nextMatch,
+      status: statusOf(nextMatch, room.status),
+      // Extend TTL while a live battle is progressing.
+      expiresAt: Math.max(room.expiresAt, Date.now() + ROOM_TTL_MS),
+      updatedAt: Date.now(),
+    };
+  });
+
+  if (!updated?.match) {
+    const room = await getRoom(code);
+    return { ok: false, reason: rejectReason ?? 'stale', match: room?.match ?? null, room };
+  }
+  return { ok: true, match: updated.match, room: updated };
+}
+
+/**
+ * @deprecated Prefer patchMySide / commitTurnWrite. Kept for surrender + legacy.
+ * Still CAS-bumps matchRev and refuses to rewind echo/activeSide vs room.
+ */
+export async function writeMatch(code: string, match: MatchState, opts?: { mine?: SideId }): Promise<void> {
+  await mutateRoom(code, (room) => {
+    if (!room.match) {
+      return {
+        ...room,
+        match: bumpRev(match),
+        status: statusOf(match, room.status),
+        updatedAt: Date.now(),
+      };
+    }
+
+    // Never let a non-winner write rewind an ended match.
+    if (room.match.winner && !match.winner) return null;
+
+    let nextMatch = match;
+    if (
+      opts?.mine &&
+      !match.winner &&
+      !room.match.winner &&
+      room.match.echo === match.echo &&
+      room.match.phase === 'pick' &&
+      match.phase === 'pick' &&
+      (room.match.activeSide ?? 'player') === (match.activeSide ?? 'player')
+    ) {
+      const other = otherSide(opts.mine);
+      nextMatch = {
+        ...match,
+        sides: {
+          ...match.sides,
+          [other]: room.match.sides[other],
+        },
+        activeSide: room.match.activeSide,
+        echo: room.match.echo,
+        turnDeadlineAt: room.match.turnDeadlineAt ?? match.turnDeadlineAt,
+        combatEvents: match.combatEvents?.length ? match.combatEvents : room.match.combatEvents ?? [],
+      };
+    } else if (
+      !match.winner &&
+      room.match.echo > match.echo
+    ) {
+      // Stale full write trying to rewind echo — drop it.
+      return null;
+    } else if (
+      !match.winner &&
+      room.match.echo === match.echo &&
+      (room.match.matchRev ?? 0) > (match.matchRev ?? 0) &&
+      room.match.activeSide !== match.activeSide
+    ) {
+      // Stale write from before a turn commit — drop it.
+      return null;
+    }
+
+    nextMatch = bumpRev({
+      ...nextMatch,
+      matchRev: Math.max(room.match.matchRev ?? 0, match.matchRev ?? 0),
+    });
+
+    return {
+      ...room,
+      match: nextMatch,
+      status: statusOf(nextMatch, room.status),
+      updatedAt: Date.now(),
+    };
+  });
 }
 
 export async function surrenderRoom(code: string, loser: SideId): Promise<MatchState | null> {
+  const updated = await mutateRoom(code, (room) => {
+    if (!room.match || room.match.winner) return null;
+    const nextMatch = bumpRev(forfeitMatch(room.match, loser));
+    return {
+      ...room,
+      match: nextMatch,
+      status: 'ended',
+      updatedAt: Date.now(),
+    };
+  });
+  if (updated?.match) return updated.match;
   const room = await getRoom(code);
-  if (!room?.match || room.match.winner) return room?.match ?? null;
-  const nextMatch = forfeitMatch(room.match, loser);
-  await writeMatch(code, nextMatch);
-  return nextMatch;
+  return room?.match ?? null;
 }
 
 export async function cancelRoom(code: string, uid: string): Promise<void> {
@@ -243,12 +485,6 @@ export async function cancelRoom(code: string, uid: string): Promise<void> {
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(storageKey(normalizeGateCode(code)));
   }
-}
-
-function statusOf(match: MatchState, current: RoomStatus): RoomStatus {
-  if (match.winner) return 'ended';
-  if (current === 'waiting') return 'waiting';
-  return 'battle';
 }
 
 const SEAT_KEY = (code: string) => `va-gate-seat-${code}`;
@@ -274,14 +510,37 @@ export function seatFor(room: ArenaRoom, uid: string): SideId | null {
   return null;
 }
 
+/** Prefer remote match when its rev is newer; never rewind local commits. */
+export function shouldApplyRemoteMatch(local: MatchState | null, remote: MatchState): boolean {
+  if (!local) return true;
+  const localRev = local.matchRev ?? 0;
+  const remoteRev = remote.matchRev ?? 0;
+  if (remoteRev > localRev) return true;
+  if (remoteRev < localRev) return false;
+  // Same rev: prefer remote echo/activeSide if remote has progressed (rare tie).
+  if (remote.echo > local.echo) return true;
+  if (remote.echo < local.echo) return false;
+  if (remote.winner && !local.winner) return true;
+  return true;
+}
+
 export function subscribeRoom(code: string, onRoom: (room: ArenaRoom) => void): () => void {
   const normalized = normalizeGateCode(code);
   let cancelled = false;
   let lastUpdated = 0;
+  let lastRev = -1;
 
   const emit = (room: ArenaRoom | null) => {
     if (!room || cancelled) return;
-    if (room.updatedAt && room.updatedAt < lastUpdated) return;
+    const rev = room.match?.matchRev ?? -1;
+    // Prefer higher matchRev; fall back to updatedAt for waiting rooms.
+    if (room.match) {
+      if (rev < lastRev) return;
+      if (rev === lastRev && room.updatedAt && room.updatedAt < lastUpdated) return;
+      lastRev = rev;
+    } else if (room.updatedAt && room.updatedAt < lastUpdated) {
+      return;
+    }
     lastUpdated = room.updatedAt ?? Date.now();
     onRoom(room);
   };

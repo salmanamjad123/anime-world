@@ -69,6 +69,16 @@ export type MatchState = {
   /** Whose turn it is — actions resolve one side at a time. */
   activeSide: SideId;
   secondsLeft: number;
+  /**
+   * Absolute ms deadline for the active turn. Both clients derive the
+   * countdown from this so the waiting player’s timer stays live.
+   */
+  turnDeadlineAt: number;
+  /**
+   * Monotonic revision bumped on every accepted room write. Used for
+   * optimistic concurrency so stale queue writes cannot rewind a commit.
+   */
+  matchRev: number;
   sides: Record<SideId, SideState>;
   log: string[];
   winner: SideId | 'draw' | null;
@@ -81,6 +91,20 @@ export type MatchState = {
   /** Action / Control damage channels. */
   channels: Channel[];
 };
+
+/** Stamp a fresh turn clock (secondsLeft + absolute deadline). */
+export function stampTurnClock(state: MatchState, seconds = ECHO_SECONDS): void {
+  state.secondsLeft = seconds;
+  state.turnDeadlineAt = Date.now() + seconds * 1000;
+}
+
+/** Seconds remaining from turnDeadlineAt (preferred) or secondsLeft fallback. */
+export function secondsRemaining(state: MatchState, now = Date.now()): number {
+  if (state.turnDeadlineAt && state.turnDeadlineAt > 0) {
+    return Math.max(0, Math.ceil((state.turnDeadlineAt - now) / 1000));
+  }
+  return Math.max(0, state.secondsLeft);
+}
 
 export const ECHO_SECONDS = 60;
 export const MAX_ECHO = 12;
@@ -220,6 +244,8 @@ export function createMatch(playerIds: string[], foeIds: string[], seed = Date.n
     phase: 'pick',
     activeSide: 'player',
     secondsLeft: ECHO_SECONDS,
+    turnDeadlineAt: Date.now() + ECHO_SECONDS * 1000,
+    matchRev: 0,
     sides: {
       player: makeSide(playerIds),
       foe: makeSide(foeIds),
@@ -984,7 +1010,7 @@ function advanceEcho(state: MatchState, rng: () => number) {
     return;
   }
   state.echo += 1;
-  state.secondsLeft = ECHO_SECONDS;
+  stampTurnClock(state);
   state.activeSide = 'player';
   state.sides.player.locked = false;
   state.sides.foe.locked = false;
@@ -1031,7 +1057,7 @@ export function commitTurn(state: MatchState, sideId: SideId, rng: () => number)
 
   if (sideId === 'player') {
     next.activeSide = 'foe';
-    next.secondsLeft = ECHO_SECONDS;
+    stampTurnClock(next);
     next.sides.foe.locked = false;
     next.log.push("Opponent's turn.");
     next.log = next.log.slice(-14);
@@ -1074,7 +1100,13 @@ export function forfeitMatch(state: MatchState, loser: SideId): MatchState {
 export function tickTimer(state: MatchState): MatchState {
   if (state.phase !== 'pick' || state.winner) return state;
   const next = clone(state);
-  next.secondsLeft = Math.max(0, next.secondsLeft - 1);
+  const left = secondsRemaining(next);
+  next.secondsLeft = left;
+  // Keep deadline authoritative; only nudge secondsLeft for legacy UI.
+  if (!next.turnDeadlineAt) {
+    next.secondsLeft = Math.max(0, next.secondsLeft - 1);
+    next.turnDeadlineAt = Date.now() + next.secondsLeft * 1000;
+  }
   return next;
 }
 
