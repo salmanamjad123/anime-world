@@ -404,6 +404,9 @@ export default function WatchPage() {
                   subtitles={allSubtitles}
                   poster={anime.bannerImage || anime.coverImage.large}
                   embedUrl={streamData?.embedUrl}
+                  streamReferer={
+                    streamData?.headers?.Referer || 'https://megaplay.buzz/'
+                  }
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEpisodeEnd}
                   onPlaybackError={handlePlaybackError}

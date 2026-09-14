@@ -180,28 +180,61 @@ export async function downloadAndConvertSubtitle(url: string): Promise<string> {
 }
 
 /**
- * Convert ASS subtitle format to VTT (basic conversion)
+ * Convert ASS subtitle format to VTT (basic conversion — dialogue text only)
  */
-function convertAssToVtt(assContent: string): string {
+export function convertAssToVtt(assContent: string): string {
   let vtt = 'WEBVTT\n\n';
 
-  // Extract dialogue lines from ASS
   const lines = assContent.split('\n');
-  const dialogueLines = lines.filter(line => line.startsWith('Dialogue:'));
+  const dialogueLines = lines.filter((line) => line.startsWith('Dialogue:'));
 
   for (const line of dialogueLines) {
-    // ASS format: Dialogue: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+    // ASS: Dialogue: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
     const parts = line.split(',');
     if (parts.length < 10) continue;
 
     const start = convertAssTime(parts[1]);
     const end = convertAssTime(parts[2]);
-    const text = parts.slice(9).join(',').replace(/\\N/g, '\n').replace(/\{[^}]*\}/g, '');
+    const text = parts
+      .slice(9)
+      .join(',')
+      .replace(/\\N/g, '\n')
+      .replace(/\{[^}]*\}/g, '')
+      .trim();
+    if (!text) continue;
 
     vtt += `${start} --> ${end}\n${text}\n\n`;
   }
 
   return vtt;
+}
+
+/**
+ * Convert any subtitle payload to WebVTT for HTML5 <track>.
+ */
+export function ensureWebVtt(content: string, urlHint = ''): string {
+  const trimmed = String(content || '').replace(/^\uFEFF/, '');
+  const lowerUrl = urlHint.toLowerCase();
+
+  if (
+    lowerUrl.includes('.ass') ||
+    lowerUrl.includes('.ssa') ||
+    trimmed.includes('[Script Info]') ||
+    /Dialogue:/m.test(trimmed)
+  ) {
+    return convertAssToVtt(trimmed);
+  }
+
+  if (
+    lowerUrl.includes('.srt') ||
+    (trimmed.includes('-->') && trimmed.includes(',') && !trimmed.trimStart().startsWith('WEBVTT'))
+  ) {
+    return convertSrtToVtt(trimmed);
+  }
+
+  if (trimmed.trimStart().startsWith('WEBVTT')) return trimmed;
+  if (trimmed.includes('-->')) return convertSrtToVtt(trimmed);
+  return trimmed;
 }
 
 /**

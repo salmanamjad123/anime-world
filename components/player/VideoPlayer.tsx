@@ -28,6 +28,8 @@ interface VideoPlayerProps {
   poster?: string;
   /** Embed URL (megacloud, etc.) - uses iframe, works without proxy like AniWatch */
   embedUrl?: string;
+  /** Referer for subtitle CDN proxy (Megaplay / Anivexa) */
+  streamReferer?: string | null;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   autoPlay?: boolean;
@@ -49,6 +51,7 @@ export function VideoPlayer({
   subtitles = [],
   poster,
   embedUrl,
+  streamReferer,
   onTimeUpdate,
   onEnded,
   autoPlay = false,
@@ -435,9 +438,12 @@ export function VideoPlayer({
         setCurrentSubtitle(defaultLang);
       }
 
-      // Use same-origin proxy for subtitles (browser blocks cross-origin e.g. Railway)
+      // Proxy + ASS→VTT (HTML5 <track> only supports WebVTT)
       const subtitleProxyUrl =
         typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
+      // Megaplay ASS CDNs need megaplay Referer; Anivexa tracks often need provider Referer
+      const subReferer =
+        (streamReferer && streamReferer.trim()) || 'https://megaplay.buzz/';
 
       let addedIndex = 0;
       let defaultTrackAddedIndex = -1;
@@ -450,7 +456,7 @@ export function VideoPlayer({
         trackEl.srclang = subtitle.lang;
 
         const subUrl = subtitle.url.startsWith('http')
-          ? `${subtitleProxyUrl}?url=${encodeURIComponent(subtitle.url)}`
+          ? `${subtitleProxyUrl}?url=${encodeURIComponent(subtitle.url)}&referer=${encodeURIComponent(subReferer)}`
           : subtitle.url;
         trackEl.src = subUrl;
 
@@ -491,7 +497,7 @@ export function VideoPlayer({
         }
       };
     }
-  }, [subtitles]);
+  }, [subtitles, streamReferer]);
 
   // Set volume and playback speed
   useEffect(() => {
@@ -743,14 +749,16 @@ export function VideoPlayer({
     if (!sub?.url) return embedUrl;
     const subtitleProxyUrl =
       typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
+    const subReferer =
+      (streamReferer && streamReferer.trim()) || 'https://megaplay.buzz/';
     const subUrl =
       sub.url.startsWith('http')
-        ? `${subtitleProxyUrl}?url=${encodeURIComponent(sub.url)}`
+        ? `${subtitleProxyUrl}?url=${encodeURIComponent(sub.url)}&referer=${encodeURIComponent(subReferer)}`
         : sub.url;
     const sep = embedUrl.includes('?') ? '&' : '?';
     // Some embeds use sub=, others subtitle= or vtt= - try sub first (most common)
     return `${embedUrl}${sep}sub=${encodeURIComponent(subUrl)}&subtitle=${encodeURIComponent(subUrl)}`;
-  }, [embedUrl, subtitles]);
+  }, [embedUrl, subtitles, streamReferer]);
 
   // Prefer native HLS when available (avoids Megaplay iframe ads).
   const hasNativeSource =
