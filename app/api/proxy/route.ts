@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
+import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 
 // Enable caching for video segments (not playlists)
 const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
@@ -40,18 +41,31 @@ export async function GET(request: NextRequest) {
     }
 
     const url = request.nextUrl.searchParams.get('url');
+    const preferredReferer = request.nextUrl.searchParams.get('referer') || '';
     
     if (!url) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
     }
 
-    // CDN header variants - try alternate Referers on 403 (stormshade, fogtwist, etc.)
-    const headerSets: Record<string, string>[] = [
-      { 'Referer': 'https://megaplay.buzz/', 'Origin': 'https://megaplay.buzz' },
-      { 'Referer': 'https://megacloud.blog/', 'Origin': 'https://hianime.to' },
-      { 'Referer': 'https://hianime.to/', 'Origin': 'https://hianime.to' },
-      { 'Referer': 'https://stormshade84.live/', 'Origin': 'https://stormshade84.live' },
-    ];
+    // Prefer caller Referer (stream headers), then common anime CDNs
+    const headerSets: Record<string, string>[] = [];
+    if (preferredReferer) {
+      try {
+        const origin = new URL(preferredReferer).origin;
+        headerSets.push({ Referer: preferredReferer, Origin: origin });
+      } catch {
+        headerSets.push({ Referer: preferredReferer });
+      }
+    }
+    headerSets.push(
+      { Referer: 'https://megaplay.buzz/', Origin: 'https://megaplay.buzz' },
+      { Referer: 'https://megacloud.blog/', Origin: 'https://hianime.to' },
+      { Referer: 'https://hianime.to/', Origin: 'https://hianime.to' },
+      { Referer: 'https://anizone.to/', Origin: 'https://anizone.to' },
+      { Referer: 'https://aniwaves.ru/', Origin: 'https://aniwaves.ru' },
+      { Referer: 'https://play.echovideo.ru/', Origin: 'https://play.echovideo.ru' },
+      { Referer: 'https://stormshade84.live/', Origin: 'https://stormshade84.live' },
+    );
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
     let response: Response | null = null;
@@ -136,30 +150,53 @@ export async function GET(request: NextRequest) {
           'X-Content-Type-Options': 'nosniff',
         },
       });
-    } else {
-      // For non-playlist content (video segments), return as-is
-      const data = await response.arrayBuffer();
-      
-      // Determine cache duration based on content type
-      const isVideoSegment = url.includes('.ts') || url.includes('.m4s');
-      const cacheControl = ENABLE_CACHE && isVideoSegment
-        ? `public, max-age=${CACHE_MAX_AGE}, immutable`
-        : 'no-cache';
-      
-      return new NextResponse(data, {
+    }
+
+    // Subtitles: browsers only render WebVTT in <track> — convert ASS/SRT
+    const isSubtitle =
+      /\.(ass|ssa|srt|vtt)(\?|$)/i.test(url) ||
+      contentType.toLowerCase().includes('text/vtt') ||
+      contentType.toLowerCase().includes('application/x-subrip') ||
+      contentType.toLowerCase().includes('text/x-ssa');
+
+    if (isSubtitle) {
+      const raw = await response.text();
+      const vtt = ensureWebVtt(raw, url);
+      return new NextResponse(vtt, {
         status: 200,
         headers: {
-          'Content-Type': contentType,
+          'Content-Type': 'text/vtt; charset=utf-8',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': '*',
-          'Cache-Control': cacheControl,
+          'Cache-Control': 'public, max-age=3600',
           'X-Content-Type-Options': 'nosniff',
-          // Add content length
-          'Content-Length': data.byteLength.toString(),
         },
       });
     }
+
+    // For non-playlist content (video segments), return as-is
+    const data = await response.arrayBuffer();
+    
+    // Determine cache duration based on content type
+    const isVideoSegment = url.includes('.ts') || url.includes('.m4s');
+    const cacheControl = ENABLE_CACHE && isVideoSegment
+      ? `public, max-age=${CACHE_MAX_AGE}, immutable`
+      : 'no-cache';
+    
+    return new NextResponse(data, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
+        'Cache-Control': cacheControl,
+        'X-Content-Type-Options': 'nosniff',
+        // Add content length
+        'Content-Length': data.byteLength.toString(),
+      },
+    });
   } catch (error: any) {
     console.error('[Proxy Error]:', error.message, error.stack);
     
