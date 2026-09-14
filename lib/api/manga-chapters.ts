@@ -42,6 +42,14 @@ const CONSUMET_SOURCES = ['mangapill', 'mangareader', 'mangahere'] as const;
 /** Tie-break when chapter counts are equal (prefer official MD) */
 const PROVIDER_PRIORITY = ['mangadex', 'mangapill', 'mangareader', 'mangahere'] as const;
 
+export interface ChapterPageRange {
+  page: number;
+  first: string;
+  last: string;
+  count: number;
+  label: string;
+}
+
 export interface ResolveChaptersResult {
   chapters: MangaChapter[];
   /** Provider used for reading chapter pages */
@@ -55,6 +63,10 @@ export interface ResolveChaptersResult {
   total: number;
   hasMore: boolean;
   unavailableReason?: 'empty' | 'title_mismatch';
+  /** Dropdown labels for all pages (from cached full list; not the chapter payloads) */
+  pageRanges?: ChapterPageRange[];
+  /** First chapter in the full list — for Read Now */
+  firstChapter?: MangaChapter | null;
 }
 
 function isAutoMode(provider: string): boolean {
@@ -323,6 +335,36 @@ export function paginateChapters(
   };
 }
 
+function chapterNumLabel(ch?: MangaChapter | null): string {
+  if (!ch) return '?';
+  if (ch.chapter) return String(ch.chapter);
+  const fromTitle = ch.title?.match(/(\d+(?:\.\d+)?)/);
+  return fromTitle?.[1] ?? '?';
+}
+
+export function buildChapterPageRanges(
+  chapters: MangaChapter[],
+  pageSize: number
+): ChapterPageRange[] {
+  if (chapters.length === 0) return [];
+  const size = Math.max(1, pageSize);
+  const totalPages = Math.ceil(chapters.length / size);
+  return Array.from({ length: totalPages }, (_, i) => {
+    const start = i * size;
+    const slice = chapters.slice(start, start + size);
+    const first = chapterNumLabel(slice[0]);
+    const last = chapterNumLabel(slice[slice.length - 1]);
+    const label = first === last ? `Ch. ${first}` : `Ch. ${first} – ${last}`;
+    return {
+      page: i + 1,
+      first,
+      last,
+      count: slice.length,
+      label,
+    };
+  });
+}
+
 export async function resolveMangaChapters(
   anilistId: string,
   provider: string = DEFAULT_CHAPTER_SOURCE,
@@ -355,6 +397,8 @@ export async function resolveMangaChapters(
       total: 0,
       hasMore: false,
       unavailableReason: 'empty',
+      pageRanges: [],
+      firstChapter: null,
     };
   }
 
@@ -368,7 +412,10 @@ export async function resolveMangaChapters(
     5 * 60 * 1000
   );
 
+  const pageSize =
+    all || limit <= 0 ? DEFAULT_CHAPTER_PAGE_SIZE : limit || DEFAULT_CHAPTER_PAGE_SIZE;
   const paged = paginateChapters(full.chapters, page, limit);
+  const pageRanges = buildChapterPageRanges(full.chapters, pageSize);
 
   return {
     ...paged,
@@ -377,6 +424,8 @@ export async function resolveMangaChapters(
     mangadexId: full.mangadexId,
     source: full.source,
     unavailableReason: full.unavailableReason,
+    pageRanges,
+    firstChapter: full.chapters[0] ?? null,
   };
 }
 

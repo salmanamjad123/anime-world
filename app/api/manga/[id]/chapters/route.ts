@@ -46,6 +46,8 @@ export async function GET(
       total: result.total,
       hasMore: result.hasMore,
       unavailableReason: result.unavailableReason,
+      pageRanges: result.pageRanges ?? [],
+      firstChapter: result.firstChapter ?? null,
     });
   } catch (error) {
     console.error('[API Error] /api/manga/[id]/chapters:', error);

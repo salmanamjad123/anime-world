@@ -9,11 +9,11 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
-import { useMangaInfo, useMangaChaptersAll } from '@/hooks/useManga';
+import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
 import { getPreferredTitle, stripHtml, getScoreColor } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { BookOpen, Star, ChevronDown, ArrowLeft, Plus } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
@@ -22,22 +22,6 @@ import { setMangaListItem, removeFromMangaList } from '@/lib/firebase/manga-fire
 import { AddToMangaListDropdown } from '@/components/manga/AddToMangaListDropdown';
 
 const CHAPTER_PAGE_SIZE = 60;
-
-function chapterLabel(ch?: MangaChapter | null): string {
-  if (!ch) return '?';
-  if (ch.chapter) return String(ch.chapter);
-  const fromTitle = ch.title?.match(/(\d+(?:\.\d+)?)/);
-  return fromTitle?.[1] ?? '?';
-}
-
-function formatChapterRange(chapters: MangaChapter[], page: number, pageSize: number): string {
-  const start = (page - 1) * pageSize;
-  const slice = chapters.slice(start, start + pageSize);
-  if (slice.length === 0) return `Page ${page}`;
-  const first = chapterLabel(slice[0]);
-  const last = chapterLabel(slice[slice.length - 1]);
-  return first === last ? `Ch. ${first}` : `Ch. ${first} – ${last}`;
-}
 
 function isRedundantChapterTitle(title: string | undefined, chapter?: string): boolean {
   if (!title?.trim()) return true;
@@ -69,39 +53,24 @@ export default function MangaDetailPage() {
   const manga = infoData?.manga;
   const resolvedMangadexId = mangadexId ?? manga?.mangadexId ?? null;
   const {
-    data: chaptersData,
+    chapters,
+    provider: resolvedProviderFromApi,
+    mode: chapterMode,
+    total: chaptersTotal,
+    pageRanges,
+    firstChapter,
+    unavailableReason,
     isFetching: isChaptersLoading,
     isLoading: isChaptersInitialLoading,
-  } = useMangaChaptersAll(mangaId, provider, resolvedMangadexId);
+    isPlaceholderData,
+  } = useMangaChapters(mangaId, provider, resolvedMangadexId, chapterPage);
   const { user } = useUserStore();
   const { openAuthModal } = useAuthModalStore();
   const { addToList, removeFromList, getListStatus } = useMangaListStore();
 
-  const allChapters: MangaChapter[] = chaptersData?.chapters || [];
-  const resolvedProvider = chaptersData?.provider || provider;
-  const unavailableReason = chaptersData?.unavailableReason;
-  const chapterMode = chaptersData?.mode ?? provider;
-  const chaptersTotal = chaptersData?.total ?? allChapters.length;
+  const resolvedProvider = resolvedProviderFromApi || provider;
   const listStatus = getListStatus(mangaId);
-
-  const totalPages = Math.max(1, Math.ceil(allChapters.length / CHAPTER_PAGE_SIZE));
-
-  const pageOptions = useMemo(() => {
-    if (allChapters.length === 0) return [];
-    return Array.from({ length: totalPages }, (_, i) => {
-      const page = i + 1;
-      return {
-        page,
-        label: formatChapterRange(allChapters, page, CHAPTER_PAGE_SIZE),
-        count: Math.min(CHAPTER_PAGE_SIZE, allChapters.length - i * CHAPTER_PAGE_SIZE),
-      };
-    });
-  }, [allChapters, totalPages]);
-
-  const chapters = useMemo(() => {
-    const start = (chapterPage - 1) * CHAPTER_PAGE_SIZE;
-    return allChapters.slice(start, start + CHAPTER_PAGE_SIZE);
-  }, [allChapters, chapterPage]);
+  const totalPages = Math.max(1, pageRanges.length || Math.ceil(chaptersTotal / CHAPTER_PAGE_SIZE) || 1);
 
   useEffect(() => {
     setChapterPage(1);
@@ -175,7 +144,8 @@ export default function MangaDetailPage() {
   };
 
   const handleReadFirst = () => {
-    if (allChapters.length > 0) handleReadChapter(allChapters[0]);
+    const first = firstChapter || chapters[0];
+    if (first) handleReadChapter(first);
   };
 
   return (
@@ -266,7 +236,7 @@ export default function MangaDetailPage() {
                   variant="primary"
                   size="lg"
                   onClick={handleReadFirst}
-                  disabled={isChaptersLoading || allChapters.length === 0}
+                  disabled={isChaptersLoading || (!firstChapter && chapters.length === 0)}
                   isLoading={isChaptersLoading}
                   className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700"
                 >
@@ -312,8 +282,8 @@ export default function MangaDetailPage() {
           <div className="lg:col-span-2">
             {/* Chapters */}
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6 mb-6 relative">
-              {isChaptersLoading && allChapters.length > 0 && (
-                <div className="absolute inset-0 bg-gray-900/50 rounded-lg flex items-center justify-center z-10">
+              {isChaptersLoading && chapters.length > 0 && !isPlaceholderData && (
+                <div className="absolute inset-0 bg-gray-900/40 rounded-lg flex items-center justify-center z-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500" />
                 </div>
               )}
@@ -340,16 +310,16 @@ export default function MangaDetailPage() {
                   )}
                 </div>
 
-                {pageOptions.length > 0 && (
+                {pageRanges.length > 0 && (
                   <label className="relative inline-flex items-center shrink-0">
                     <span className="sr-only">Chapter page</span>
                     <select
                       value={chapterPage}
                       onChange={(e) => setChapterPage(Number(e.target.value))}
-                      disabled={isChaptersLoading || totalPages <= 1}
+                      disabled={isChaptersInitialLoading || totalPages <= 1}
                       className="appearance-none pl-3 pr-9 py-2 rounded-lg bg-gray-900/80 border border-gray-600/80 text-sm text-gray-100 hover:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500/60 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-w-[10.5rem] max-w-[16rem]"
                     >
-                      {pageOptions.map((opt) => (
+                      {pageRanges.map((opt) => (
                         <option key={opt.page} value={opt.page}>
                           {totalPages > 1
                             ? `${opt.label} · ${opt.page}/${totalPages}`
@@ -369,21 +339,25 @@ export default function MangaDetailPage() {
                     variant={provider === id ? 'primary' : 'ghost'}
                     size="sm"
                     onClick={() => setProvider(id)}
-                    disabled={isChaptersLoading}
+                    disabled={isChaptersLoading && !isPlaceholderData}
                   >
                     {label}
                   </Button>
                 ))}
               </div>
 
-              {isChaptersInitialLoading && allChapters.length === 0 ? (
+              {isChaptersInitialLoading && chapters.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-500 mb-3" />
                   <p className="text-gray-400 text-sm">Loading chapters...</p>
                 </div>
               ) : chapters.length > 0 ? (
-                <div className="max-h-[60vh] overflow-y-auto rounded-lg pr-1">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <div
+                  className={`max-h-[60vh] overflow-y-auto rounded-lg pr-1 ${
+                    isPlaceholderData && isChaptersLoading ? 'opacity-60' : ''
+                  }`}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {chapters.map((chapter) => {
                       const num = chapter.chapter;
                       const titleExtra = isRedundantChapterTitle(chapter.title, num)
@@ -406,7 +380,7 @@ export default function MangaDetailPage() {
                         </button>
                       );
                     })}
-                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
