@@ -8,10 +8,9 @@
 import {
   useQuery,
   useQueryClient,
-  useInfiniteQuery,
   keepPreviousData,
 } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import type { MangaChapter, MangaSearchResult } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
 import { getMangaPageImageUrl } from '@/lib/utils/image-url';
@@ -64,6 +63,14 @@ export type MangaChaptersPage = {
   total: number;
   hasMore: boolean;
   unavailableReason?: 'empty' | 'title_mismatch';
+  pageRanges?: Array<{
+    page: number;
+    first: string;
+    last: string;
+    count: number;
+    label: string;
+  }>;
+  firstChapter?: MangaChapter | null;
 };
 
 async function fetchMangaChaptersPage(
@@ -150,56 +157,59 @@ export function useMangaInfo(id: string | null, mangadexId?: string | null) {
 }
 
 /**
- * Paginated chapters for the detail page (Load more).
- * Flattens pages into `chapters` for rendering.
+ * Single-page chapters for the detail UI (server-paginated).
+ * Response includes `pageRanges` for the dropdown without shipping all chapters.
  */
 export function useMangaChapters(
   id: string | null,
   provider = 'auto',
-  mangadexId?: string | null
+  mangadexId?: string | null,
+  page = 1
 ) {
-  const query = useInfiniteQuery({
-    queryKey: ['manga', 'chapters', id, provider, mangadexId],
-    queryFn: ({ pageParam }) =>
-      fetchMangaChaptersPage(id!, provider, pageParam, mangadexId ?? undefined),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['manga', 'chapters', 'page', id, provider, mangadexId, page],
+    queryFn: () =>
+      fetchMangaChaptersPage(id!, provider, page, mangadexId ?? undefined),
     enabled: !!id,
+    placeholderData: keepPreviousData,
     staleTime: CACHE_DURATIONS.MANGA_LIST * 1000,
   });
 
-  const chapters = useMemo(
-    () => query.data?.pages.flatMap((p) => p.chapters) ?? [],
-    [query.data]
-  );
-
-  const first = query.data?.pages[0];
+  // Prefetch adjacent pages after first success (hits server cache)
+  useEffect(() => {
+    if (!id || !query.data) return;
+    const totalPages = Math.max(
+      1,
+      Math.ceil((query.data.total || 0) / (query.data.limit || CHAPTER_PAGE_SIZE))
+    );
+    const neighbors = [page - 1, page + 1].filter((p) => p >= 1 && p <= totalPages);
+    for (const p of neighbors) {
+      void queryClient.prefetchQuery({
+        queryKey: ['manga', 'chapters', 'page', id, provider, mangadexId, p],
+        queryFn: () =>
+          fetchMangaChaptersPage(id, provider, p, mangadexId ?? undefined),
+        staleTime: CACHE_DURATIONS.MANGA_LIST * 1000,
+      });
+    }
+  }, [id, provider, mangadexId, page, query.data, queryClient]);
 
   return {
     ...query,
-    chapters,
-    provider: first?.provider ?? provider,
-    mode: first?.mode ?? provider,
-    mangadexId: first?.mangadexId,
-    source: first?.source,
-    total: first?.total ?? chapters.length,
-    hasMore: query.hasNextPage,
+    chapters: query.data?.chapters ?? [],
+    provider: query.data?.provider ?? provider,
+    mode: query.data?.mode ?? provider,
+    mangadexId: query.data?.mangadexId,
+    source: query.data?.source,
+    total: query.data?.total ?? 0,
+    pageRanges: query.data?.pageRanges ?? [],
+    firstChapter: query.data?.firstChapter ?? null,
+    unavailableReason: query.data?.unavailableReason,
+    hasMore: query.data?.hasMore ?? false,
     isFetching: query.isFetching,
     isLoading: query.isLoading,
-    fetchNextPage: query.fetchNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    data: first
-      ? {
-          chapters,
-          provider: first.provider,
-          mode: first.mode ?? provider,
-          mangadexId: first.mangadexId,
-          source: first.source,
-          total: first.total,
-          hasMore: Boolean(query.hasNextPage),
-          unavailableReason: first.unavailableReason,
-        }
-      : undefined,
+    isPlaceholderData: query.isPlaceholderData,
   };
 }
 

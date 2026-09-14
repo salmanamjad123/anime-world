@@ -42,8 +42,6 @@ export function Header() {
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-  const mobileTabRowRef = useRef<HTMLDivElement>(null);
-  const mobileTabInnerRef = useRef<HTMLDivElement>(null);
   const mobileTabProgressRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
   const scrollTickingRef = useRef(false);
@@ -56,8 +54,11 @@ export function Header() {
   const { user } = useUserStore();
 
   const activeTab = pathname.startsWith('/manga') ? 'manga' : 'anime';
-  const isWatchPage = pathname.startsWith('/watch/');
-  const isReaderPage = pathname.includes('/read') || isWatchPage;
+  // Hide sticky site header chrome only on manga reader (watch keeps the header)
+  const isReaderPage = pathname.includes('/read');
+  // Mobile: Anime/Manga toggle only on section homes (not detail/search/profile/watch)
+  const showMobileSectionTabs =
+    !isReaderPage && (pathname === ROUTES.HOME || pathname === ROUTES.MANGA);
   const profileLinks =
     activeTab === 'manga'
       ? {
@@ -213,7 +214,7 @@ export function Header() {
       const header = headerRef.current;
       if (!header) return;
 
-      if (window.innerWidth < 768 && !isReaderPage) {
+      if (window.innerWidth < 768 && showMobileSectionTabs) {
         const p = mobileTabProgressRef.current;
         const visibleTab = MOBILE_TAB_ROW_HEIGHT * (1 - p);
         document.documentElement.style.setProperty(
@@ -232,16 +233,7 @@ export function Header() {
     syncHeaderHeight();
     window.addEventListener('resize', syncHeaderHeight);
     return () => window.removeEventListener('resize', syncHeaderHeight);
-  }, [isReaderPage, mobileSearchOpen]);
-
-  // Watch pages: no header bar — reset layout offset for full-bleed player
-  useEffect(() => {
-    if (!isWatchPage) return;
-    document.documentElement.style.setProperty('--site-header-height', '0px');
-    return () => {
-      document.documentElement.style.removeProperty('--site-header-height');
-    };
-  }, [isWatchPage]);
+  }, [isReaderPage, showMobileSectionTabs, mobileSearchOpen]);
 
   // Mobile: tabs slide up into the top row
   useEffect(() => {
@@ -254,36 +246,16 @@ export function Header() {
     };
 
     const resetTabStyles = () => {
-      const tabRow = mobileTabRowRef.current;
-      const tabInner = mobileTabInnerRef.current;
-      if (tabRow) {
-        tabRow.style.height = '';
-        tabRow.style.marginBottom = '';
-      }
-      if (tabInner) {
-        tabInner.style.transform = '';
-      }
       if (headerRef.current) {
         headerRef.current.style.removeProperty('--tab-scroll-progress');
       }
     };
 
+    // Only update the CSS var — tab row margin/transform read it in JSX so React
+    // re-renders (e.g. opening mobile search) cannot wipe the collapsed scroll styles.
     const applyTabProgress = (progress: number) => {
       const p = Math.min(Math.max(progress, 0), 1);
       mobileTabProgressRef.current = p;
-      const shift = p * MOBILE_TAB_ROW_HEIGHT;
-
-      const tabRow = mobileTabRowRef.current;
-      const tabInner = mobileTabInnerRef.current;
-
-      if (tabRow) {
-        tabRow.style.height = `${MOBILE_TAB_ROW_HEIGHT}px`;
-        tabRow.style.marginBottom = `${-shift}px`;
-      }
-
-      if (tabInner) {
-        tabInner.style.transform = `translate3d(0, ${-shift}px, 0)`;
-      }
 
       if (headerRef.current) {
         headerRef.current.style.setProperty('--tab-scroll-progress', p.toFixed(4));
@@ -293,7 +265,7 @@ export function Header() {
     };
 
     const readScrollProgress = () => {
-      if (isReaderPage || window.innerWidth >= 768) return 0;
+      if (!showMobileSectionTabs || window.innerWidth >= 768) return 0;
       return Math.min(Math.max(window.scrollY / MOBILE_TAB_SCROLL_RANGE, 0), 1);
     };
 
@@ -354,7 +326,7 @@ export function Header() {
       resetTabStyles();
       applyTabProgress(0);
     };
-  }, [isReaderPage]);
+  }, [showMobileSectionTabs]);
 
   // Close dropdown when clicking outside (exclude search toggle button)
   useEffect(() => {
@@ -375,8 +347,8 @@ export function Header() {
 
   const showDropdown = searchOpen && (searchQuery.length >= 1 || searchResults.length > 0);
 
-  // Watch pages: no sticky header chrome — Megaplay embed is full-width (same idea as manga read)
-  if (isWatchPage) {
+  // Manga reader: no sticky site header (page has its own reader chrome)
+  if (isReaderPage) {
     return (
       <>
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activeTab={activeTab} />
@@ -661,16 +633,21 @@ export function Header() {
           </div>
           </div>
 
-          {/* Mobile: tabs slide up behind logo/search row on scroll (hidden on reader pages) */}
-          {!isReaderPage && (
+          {/* Mobile: Anime/Manga toggle only on home pages */}
+          {showMobileSectionTabs && (
           <div
-            ref={mobileTabRowRef}
             className="md:hidden relative z-0 overflow-hidden [contain:layout_paint]"
-            style={{ height: MOBILE_TAB_ROW_HEIGHT }}
+            style={{
+              height: MOBILE_TAB_ROW_HEIGHT,
+              // Collapses with --tab-scroll-progress (set on <header>); survives React re-renders
+              marginBottom: `calc(var(--tab-scroll-progress, 0) * -${MOBILE_TAB_ROW_HEIGHT}px)`,
+            }}
           >
             <div
-              ref={mobileTabInnerRef}
-              className="max-w-xs mx-auto px-0 pb-3 pt-1 [backface-visibility:hidden] [transform:translateZ(0)]"
+              className="max-w-xs mx-auto px-0 pb-3 pt-1 [backface-visibility:hidden] will-change-transform"
+              style={{
+                transform: `translate3d(0, calc(var(--tab-scroll-progress, 0) * -${MOBILE_TAB_ROW_HEIGHT}px), 0)`,
+              }}
             >
               {renderTabToggle()}
             </div>
@@ -678,11 +655,17 @@ export function Header() {
           )}
         </div>
 
-        {/* Mobile Search Bar - absolute overlay below header, takes extra space */}
+        {/* Mobile Search Bar — attached to visible header bottom (accounts for tab collapse) */}
         {mobileSearchOpen && (
           <div
             ref={searchRef}
-            className="md:hidden absolute top-full left-0 right-0 z-[110] w-full px-4 py-3 border-t border-gray-800 bg-gray-900 shadow-2xl"
+            className="md:hidden absolute left-0 right-0 z-[110] w-full px-4 py-3 border-t border-gray-800 bg-gray-900 shadow-2xl"
+            style={{
+              // Stick to visible header bottom (main row + remaining tab strip when present)
+              top: showMobileSectionTabs
+                ? `calc(${MOBILE_MAIN_ROW_HEIGHT}px + (1 - var(--tab-scroll-progress, 0)) * ${MOBILE_TAB_ROW_HEIGHT}px)`
+                : MOBILE_MAIN_ROW_HEIGHT,
+            }}
           >
             <div className="flex gap-2 w-full">
               {showFilter && (
