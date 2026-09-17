@@ -110,11 +110,12 @@ export const ECHO_SECONDS = 60;
 export const MAX_ECHO = 12;
 /** Max banked Weave. Unused pips never expire — only spend or refuse new grants when full. */
 export const WEAVE_CAP = 10;
-export const BLOODIED_HP = 35;
-export const VEIL_COUNTER = 10;
-export const COMBO_BONUS = 6;
-export const FOCUS_BONUS = 8;
-export const TRINITY_SHRED = 10;
+/** ~30% of FIGHTER_HP (160) — bloodied is late-game, not mid-chip. */
+export const BLOODIED_HP = 48;
+export const VEIL_COUNTER = 8;
+export const COMBO_BONUS = 3;
+export const FOCUS_BONUS = 4;
+export const TRINITY_SHRED = 8;
 /** Trade this many banked pips for 1 chosen color (Naruto-Arena exchange). */
 export const WEAVE_EXCHANGE_COST = 5;
 const COLORED: EnergyId[] = ['strike', 'tide', 'pulse', 'blood'];
@@ -758,7 +759,7 @@ function dealDamage(
 
   let amount = baseAmount;
   if (ctx.combo[sourceSide]) amount += COMBO_BONUS;
-  if ((sourceUnit?.hp ?? 100) <= BLOODIED_HP) amount = Math.round(amount * 1.2);
+  if ((sourceUnit?.hp ?? 160) <= BLOODIED_HP) amount = Math.round(amount * 1.1);
   if ((sourceUnit?.tidebind ?? 0) > 0) amount = Math.round(amount * 0.75);
   const priorHits = ctx.hitsOn[targetId] ?? 0;
   if (priorHits > 0) amount += FOCUS_BONUS;

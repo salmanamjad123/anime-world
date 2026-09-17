@@ -53,6 +53,8 @@ export type Art = {
   effects: Effect[];
   universal?: boolean;
   persistence?: ArtPersistence;
+  /** Optional dedicated jutsu tile under /public/game/skills/... */
+  icon?: string;
 };
 
 export type Fighter = {

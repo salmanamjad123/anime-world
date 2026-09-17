@@ -1,4 +1,9 @@
+'use client';
+
+import { useState } from 'react';
+import Image from 'next/image';
 import type { Art, Effect } from '@/types/game';
+import { fighterPortrait, skillArtPath } from '@/lib/game/roster';
 import { cn } from '@/lib/utils';
 
 export type SkillFamily = 'damage' | 'heal' | 'shield' | 'stun' | 'status' | 'drain' | 'defend' | 'dodge';
@@ -27,18 +32,38 @@ export function skillFamily(art: Art): SkillFamily {
   return 'damage';
 }
 
+/** NA-style class tags for the detail panel. */
+export function artClasses(art: Art): string[] {
+  const family = skillFamily(art);
+  const tags: string[] = [];
+  if (family === 'damage') tags.push('Melee', 'Physical');
+  if (family === 'heal') tags.push('Heal', 'Medical');
+  if (family === 'shield' || family === 'defend') tags.push('Guard');
+  if (family === 'dodge') tags.push('Evasion');
+  if (family === 'stun') tags.push('Control', 'Stun');
+  if (family === 'drain') tags.push('Drain');
+  if (family === 'status') tags.push('Status');
+  if (art.target === 'all-enemies' || art.target === 'all-allies') tags.push('AoE');
+  if (art.effects.some((e) => e.type === 'DAMAGE' && e.kind === 'pierce')) tags.push('Pierce');
+  if (art.effects.some((e) => e.type === 'DAMAGE' && e.kind === 'affliction')) tags.push('Affliction');
+  if (art.persistence === 'action') tags.push('Action');
+  if (art.persistence === 'control') tags.push('Control');
+  if ((art.cooldown ?? 0) === 0) tags.push('Static');
+  return tags.length > 0 ? tags : ['Jutsu'];
+}
+
 const FAMILY_META: Record<
   SkillFamily,
-  { label: string; bg: string; ring: string; title: string }
+  { label: string; bg: string; ring: string; title: string; tint: string }
 > = {
-  damage: { label: 'ATK', bg: 'from-red-700 to-orange-600', ring: 'ring-red-400/50', title: 'Attack' },
-  heal: { label: 'HEAL', bg: 'from-emerald-700 to-lime-600', ring: 'ring-emerald-400/50', title: 'Heal' },
-  shield: { label: 'SHD', bg: 'from-sky-700 to-cyan-600', ring: 'ring-sky-400/50', title: 'Shield' },
-  stun: { label: 'STUN', bg: 'from-violet-700 to-fuchsia-600', ring: 'ring-violet-400/50', title: 'Stun' },
-  status: { label: 'FX', bg: 'from-amber-700 to-yellow-600', ring: 'ring-amber-400/50', title: 'Status' },
-  drain: { label: 'DRN', bg: 'from-rose-800 to-pink-700', ring: 'ring-rose-400/50', title: 'Drain' },
-  defend: { label: 'GRD', bg: 'from-slate-600 to-slate-800', ring: 'ring-slate-300/40', title: 'Guard' },
-  dodge: { label: 'DGE', bg: 'from-teal-700 to-cyan-600', ring: 'ring-teal-300/50', title: 'Dodge' },
+  damage: { label: 'ATK', bg: 'from-red-800/90 to-orange-700/90', ring: 'ring-red-400/50', title: 'Attack', tint: 'rgba(185,28,28,0.45)' },
+  heal: { label: 'HEAL', bg: 'from-emerald-800/90 to-lime-700/90', ring: 'ring-emerald-400/50', title: 'Heal', tint: 'rgba(21,128,61,0.45)' },
+  shield: { label: 'SHD', bg: 'from-sky-800/90 to-cyan-700/90', ring: 'ring-sky-400/50', title: 'Shield', tint: 'rgba(3,105,161,0.45)' },
+  stun: { label: 'STUN', bg: 'from-violet-800/90 to-fuchsia-700/90', ring: 'ring-violet-400/50', title: 'Stun', tint: 'rgba(109,40,217,0.45)' },
+  status: { label: 'FX', bg: 'from-amber-800/90 to-yellow-700/90', ring: 'ring-amber-400/50', title: 'Status', tint: 'rgba(180,83,9,0.45)' },
+  drain: { label: 'DRN', bg: 'from-rose-900/90 to-pink-800/90', ring: 'ring-rose-400/50', title: 'Drain', tint: 'rgba(159,18,57,0.45)' },
+  defend: { label: 'GRD', bg: 'from-slate-700/90 to-slate-900/90', ring: 'ring-slate-300/40', title: 'Guard', tint: 'rgba(51,65,85,0.5)' },
+  dodge: { label: 'DGE', bg: 'from-teal-800/90 to-cyan-700/90', ring: 'ring-teal-300/50', title: 'Dodge', tint: 'rgba(15,118,110,0.45)' },
 };
 
 function Glyph({ family }: { family: SkillFamily }) {
@@ -46,7 +71,6 @@ function Glyph({ family }: { family: SkillFamily }) {
     return (
       <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
         <path d="M4 16 L12 4 L14 10 L20 8 L12 20 L10 14 Z" fill="currentColor" />
-        <path d="M7 17 L17 7" stroke="#7f1d1d" strokeWidth="1.4" />
       </svg>
     );
   }
@@ -57,7 +81,7 @@ function Glyph({ family }: { family: SkillFamily }) {
       </svg>
     );
   }
-  if (family === 'shield') {
+  if (family === 'shield' || family === 'defend') {
     return (
       <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
         <path d="M12 3 L20 7 V12 C20 17 16.5 20.5 12 22 C7.5 20.5 4 17 4 12 V7 Z" fill="currentColor" />
@@ -78,14 +102,6 @@ function Glyph({ family }: { family: SkillFamily }) {
       </svg>
     );
   }
-  if (family === 'defend') {
-    return (
-      <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
-        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2.4" />
-        <circle cx="12" cy="12" r="3.2" fill="currentColor" />
-      </svg>
-    );
-  }
   if (family === 'dodge') {
     return (
       <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
@@ -96,13 +112,14 @@ function Glyph({ family }: { family: SkillFamily }) {
   return (
     <svg viewBox="0 0 24 24" className="h-[55%] w-[55%]" aria-hidden>
       <circle cx="12" cy="12" r="7" fill="currentColor" />
-      <circle cx="12" cy="12" r="3" fill="#1c1008" />
     </svg>
   );
 }
 
 type Props = {
   art: Art;
+  /** When set, uses fighter portrait / dedicated skill art (NA-style tiles). */
+  fighterId?: string;
   size?: number;
   active?: boolean;
   dim?: boolean;
@@ -110,14 +127,33 @@ type Props = {
   className?: string;
 };
 
-export function SkillIcon({ art, size = 44, active, dim, cooldown = 0, className }: Props) {
+export function SkillIcon({
+  art,
+  fighterId,
+  size = 44,
+  active,
+  dim,
+  cooldown = 0,
+  className,
+}: Props) {
   const family = skillFamily(art);
   const meta = FAMILY_META[family];
+  const [srcIndex, setSrcIndex] = useState(0);
+
+  const candidates: string[] = [];
+  if (art.icon) candidates.push(art.icon);
+  if (fighterId) {
+    candidates.push(skillArtPath(fighterId, art.id));
+    candidates.push(fighterPortrait(fighterId));
+  }
+  const src = candidates[srcIndex];
+  const useArt = Boolean(src);
+
   return (
     <span
       className={cn(
-        'relative inline-flex shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-amber-50 shadow-md ring-1',
-        meta.bg,
+        'relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-sm text-amber-50 shadow-md ring-1',
+        !useArt && `bg-gradient-to-br ${meta.bg}`,
         meta.ring,
         active && 'ring-2 ring-amber-200 scale-105',
         dim && 'opacity-40 grayscale',
@@ -126,12 +162,29 @@ export function SkillIcon({ art, size = 44, active, dim, cooldown = 0, className
       style={{ width: size, height: size }}
       title={`${art.name} · ${meta.title}`}
     >
-      <Glyph family={family} />
-      <span className="absolute bottom-0.5 right-0.5 rounded bg-black/55 px-0.5 text-[8px] font-black leading-none">
+      {useArt && src ? (
+        <>
+          <Image
+            src={src}
+            alt={art.name}
+            fill
+            sizes={`${size}px`}
+            className="object-cover object-top"
+            onError={() => setSrcIndex((i) => i + 1)}
+          />
+          <span
+            className="pointer-events-none absolute inset-0"
+            style={{ background: `linear-gradient(160deg, transparent 35%, ${meta.tint})` }}
+          />
+        </>
+      ) : (
+        <Glyph family={family} />
+      )}
+      <span className="absolute bottom-0.5 right-0.5 rounded bg-black/65 px-0.5 text-[7px] font-black leading-none tracking-wide">
         {meta.label}
       </span>
       {cooldown > 0 && (
-        <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/65 text-sm font-black text-amber-100">
+        <span className="absolute inset-0 flex items-center justify-center bg-black/70 text-sm font-black text-amber-100">
           {cooldown}
         </span>
       )}
@@ -171,7 +224,7 @@ function effectLine(effect: Effect): string {
         return `Grants dodge — the next damaging hit on ${targetWords(effect.target)} is fully avoided.`;
       }
       if (effect.status === 'veil') {
-        return `Veil on ${targetWords(effect.target)} — blocks hits and counters for 10.`;
+        return `Veil on ${targetWords(effect.target)} — blocks hits and counters for 8.`;
       }
       if (effect.status === 'dr') {
         return `Damage reduction −${effect.amount ?? 8} for ${effect.echoes} Echo(es) on ${targetWords(effect.target)}.`;

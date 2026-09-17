@@ -46,3 +46,37 @@ export function WeaveCost({ cost, size = 14 }: { cost: EnergyCost; size?: number
     </span>
   );
 }
+
+/** Naruto Arena–style top bank: one pip + ×count per color. */
+export function WeaveBank({
+  weave,
+  size = 22,
+}: {
+  weave: EnergyId[];
+  size?: number;
+}) {
+  const order: EnergyId[] = ['strike', 'tide', 'pulse', 'blood', 'any'];
+  const counts = order.map((id) => ({
+    id,
+    count: weave.filter((e) => e === id).length,
+  }));
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
+      {counts.map(({ id, count }) => (
+        <div key={id} className="flex items-center gap-0.5" title={`${ENERGY_META[id].label}: ${count}`}>
+          <WeavePip energy={id} size={size} dim={count === 0} />
+          <span
+            className={cn(
+              'min-w-[0.95rem] font-mono text-xs font-black tabular-nums',
+              count === 0 ? 'text-amber-100/35' : 'text-amber-50'
+            )}
+          >
+            ×{count}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+

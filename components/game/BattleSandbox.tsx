@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Flag, CircleHelp, Copy, Check } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { FighterArt } from '@/components/game/FighterArt';
-import { WeaveCost, WeavePip } from '@/components/game/WeavePips';
+import { WeaveCost, WeaveBank } from '@/components/game/WeavePips';
 import { HowToPlay, TUTORIAL_KEYS } from '@/components/game/HowToPlay';
 import { MusicToggle } from '@/components/game/MusicToggle';
-import { SkillIcon, describeArtEffects, skillFamily, targetHint } from '@/components/game/SkillIcon';
+import { describeArtEffects, targetHint } from '@/components/game/SkillIcon';
+import { SkillTile } from '@/components/game/SkillTile';
+import { artClasses } from '@/lib/game/skill-art';
 import { ENERGY_META, FIGHTERS, TEAM_SIZE, getFighter, getFighterArts } from '@/lib/game/roster';
 import { pickShadeTeam } from '@/lib/game/team-rules';
 import { battleStrategyTip } from '@/lib/game/strategy';
@@ -790,7 +792,9 @@ export function BattleSandbox({
           ? `OPPONENT'S TURN — ${botStatus}`
           : `OPPONENT'S TURN — ${foeName} is thinking`
         : '…';
+  const foeTeam = resolveFighters(foe.fighterIds);
   const readyLabel = opponentTurn ? (botStatus ?? "Opponent's turn") : 'Press when ready';
+
 
   return (
     <>
@@ -803,44 +807,70 @@ export function BattleSandbox({
           setHelp(false);
         }}
       />
-      <div className="game-battle relative min-h-screen overflow-x-hidden bg-[#14301f] text-amber-50">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(74,222,128,0.18),transparent_50%),linear-gradient(180deg,#1c4d2a_0%,#14301f_55%,#0c1f14_100%)]" />
-        <div className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col gap-2 p-2 sm:p-3">
-          <header className="grid items-center gap-2 rounded-xl border border-emerald-900/60 bg-black/45 px-3 py-2 sm:grid-cols-[1fr_auto_1fr]">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black uppercase tracking-wider">{displayName}</p>
-              <p className="text-[10px] uppercase text-emerald-200/70">
-                {gameTitle} · {pvp ? `Private ${room?.code}` : lastMode === 'ranked' ? 'Ranked' : 'Quick Duel'} · Echo{' '}
-                {match.echo}/{match.maxEcho}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-1">
-                <span className="text-[10px] uppercase text-amber-200/60">Jutsu bank</span>
-                {leftover.map((energy, index) => (
-                  <WeavePip key={`${energy}-${index}`} energy={energy} size={16} />
-                ))}
-                {leftover.length === 0 && <span className="text-[10px] text-amber-200/50">empty</span>}
+      <div className="game-battle relative min-h-screen overflow-x-hidden bg-[#0d2818] text-amber-50">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(74,222,128,0.12),transparent_45%),linear-gradient(180deg,#1a3d28_0%,#0d2818_55%,#081810_100%)]" />
+
+        <div className="relative mx-auto flex max-w-[1280px] flex-col gap-1 p-2 pb-2 sm:p-3">
+          <header className="grid items-center gap-x-2 gap-y-1 rounded border border-[#8a6a3b]/70 bg-black/55 px-2 py-1 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,0.9fr)]">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-sm border border-amber-200/40">
+                {selected ? (
+                  <FighterArt fighter={selected} sizes="32px" />
+                ) : (
+                  <span className="block h-full w-full bg-emerald-950" />
+                )}
               </div>
-              {(match.lastGranted?.[mySide]?.length ?? 0) > 0 && (
-                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/70">
-                  <span>+Echo</span>
-                  {match.lastGranted[mySide].map((energy, index) => (
-                    <WeavePip key={`g-${energy}-${index}`} energy={energy} size={12} />
-                  ))}
-                  <span className="normal-case tracking-normal text-amber-100/50">
-                    ·{' '}
-                    {match.echo <= 1
-                      ? mySide === 'player'
-                        ? 'Ash Rule: you 1 · foe 3'
-                        : 'Ash Rule: you 3 · foe 1'
-                      : '1 per living'}{' '}
-                    · bank for 3-cost spikes
-                  </span>
-                </div>
-              )}
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black uppercase leading-tight tracking-wide">{displayName}</p>
+                <p className="truncate text-[9px] uppercase leading-tight tracking-wider text-amber-200/65">
+                  {gameTitle || 'Academy'} · {match.echo}/{match.maxEcho}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-0.5">
+              <div
+                className={cn(
+                  'w-full max-w-md rounded-sm px-2 py-0.5 text-center text-[10px] font-black uppercase tracking-[0.16em]',
+                  myTurn && 'bg-red-700 text-white',
+                  opponentTurn && 'bg-sky-800 text-sky-50',
+                  !myTurn && !opponentTurn && 'bg-black/50 text-amber-100/80'
+                )}
+              >
+                {turnBanner}
+              </div>
+              <div className="flex h-1.5 w-full max-w-md overflow-hidden rounded-sm bg-black/60">
+                <div
+                  className={cn('h-full transition-all', displaySeconds <= 10 ? 'bg-red-500' : 'bg-red-700')}
+                  style={{ width: `${Math.max(4, (displaySeconds / 60) * 100)}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+                <WeaveBank weave={leftover} size={16} />
+                <p
+                  className={cn(
+                    'font-mono text-lg font-black leading-none',
+                    displaySeconds <= 10 ? 'text-red-400' : 'text-amber-200'
+                  )}
+                >
+                  {timerLabel}
+                </p>
+                <button
+                  type="button"
+                  onClick={lockEcho}
+                  disabled={!myTurn}
+                  className={cn(
+                    'rounded-sm px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white disabled:opacity-40',
+                    myTurn ? 'bg-gradient-to-r from-red-700 via-orange-600 to-red-700 ring-1 ring-amber-200/40' : 'bg-stone-700'
+                  )}
+                >
+                  {myTurn ? 'Press when ready' : readyLabel}
+                </button>
+              </div>
               {myTurn && me.weave.length >= WEAVE_EXCHANGE_COST && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span className="text-[9px] uppercase tracking-wider text-amber-200/55">
-                    Exchange {WEAVE_EXCHANGE_COST}→1
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                  <span className="text-[8px] uppercase tracking-wider text-amber-200/55">
+                    Ex {WEAVE_EXCHANGE_COST}→1
                   </span>
                   {EXCHANGE_COLORS.map((color) => (
                     <button
@@ -865,14 +895,12 @@ export function BattleSandbox({
                               queue: latest.sides[mySide].queue,
                               weave: latest.sides[mySide].weave,
                             });
-                            if (result.match) {
-                              applyMergedRemote(result.match);
-                            }
+                            if (result.match) applyMergedRemote(result.match);
                           });
                         }
                         setNotice(next.log[next.log.length - 1] ?? null);
                       }}
-                      className="rounded border border-amber-200/25 bg-black/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100 hover:border-amber-300/50 hover:bg-black/65"
+                      className="rounded border border-amber-200/25 bg-black/45 px-1 py-px text-[8px] font-bold uppercase text-amber-100"
                       style={{ boxShadow: `inset 0 0 0 1px ${ENERGY_META[color].color}55` }}
                     >
                       {ENERGY_META[color].short}
@@ -882,278 +910,201 @@ export function BattleSandbox({
               )}
             </div>
 
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={cn(
-                  'rounded-lg px-3 py-1 text-center text-[11px] font-black uppercase tracking-[0.18em]',
-                  myTurn && 'bg-red-700 text-white animate-pulse',
-                  opponentTurn && 'bg-sky-800 text-sky-50',
-                  match.winner && 'bg-black/50 text-amber-100/80',
-                  !myTurn && !opponentTurn && !match.winner && 'bg-black/50 text-amber-100/80'
+            <div className="flex min-w-0 items-center justify-end gap-1.5">
+              <div className="min-w-0 text-right">
+                <p className="truncate text-xs font-black uppercase leading-tight tracking-wide">{foeName}</p>
+                <p className="truncate text-[9px] uppercase leading-tight tracking-wider text-amber-200/65">
+                  {opponentTurn ? 'Acting' : 'Waiting'} · {pvp ? room?.code : 'Shade'}
+                </p>
+              </div>
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-sm border border-red-300/40">
+                {foeTeam[0] ? (
+                  <FighterArt fighter={foeTeam[0]} sizes="32px" />
+                ) : (
+                  <span className="block h-full w-full bg-red-950" />
                 )}
-              >
-                {turnBanner}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-center">
-                  <p className="text-[9px] uppercase tracking-widest text-amber-200/60">Timer</p>
-                  <p
-                    className={cn(
-                      'font-mono text-3xl font-black leading-none',
-                      match.secondsLeft <= 10 || displaySeconds <= 10 ? 'text-red-400' : 'text-amber-200'
-                    )}
-                  >
-                    {timerLabel}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={lockEcho}
-                  disabled={!myTurn}
-                  className={cn(
-                    'rounded-lg px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg disabled:opacity-40',
-                    myTurn
-                      ? 'bg-gradient-to-r from-red-700 via-orange-600 to-red-700 ring-2 ring-amber-200/50'
-                      : 'bg-stone-700'
-                  )}
-                >
-                  {myTurn ? 'Attack / Ready' : readyLabel}
-                </button>
-              </div>
-            </div>
-
-            <div className="min-w-0 text-right">
-              <p className="truncate text-sm font-black uppercase tracking-wider">{foeName}</p>
-              <p className="text-[10px] uppercase text-emerald-200/70">
-                {opponentTurn ? 'Acting now' : 'Waiting'}
-              </p>
             </div>
           </header>
 
-          {pending && (
-            <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-amber-400/40 bg-amber-950/50 px-3 py-1.5 text-center text-xs font-bold text-amber-100">
-              <span>
-                {pending.art.target === 'enemy'
-                  ? `Aim ${pending.art.name} → tap ENEMY (right)`
-                  : pending.art.target === 'ally'
-                    ? `Aim ${pending.art.name} → tap ALLY (left)`
-                    : `Aim ${pending.art.name}`}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPending(null);
-                  setNotice(null);
-                }}
-                className="rounded bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200 hover:bg-black/60"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-          {botStatus && (
-            <p className="rounded-lg border border-sky-400/30 bg-sky-950/40 px-3 py-1.5 text-center text-xs font-bold text-sky-100">
-              {botStatus}
-            </p>
-          )}
+          <div className="relative shrink-0">
+            {showcase && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[32%] opacity-15 lg:block">
+                <div className="relative h-full min-h-[160px] w-full">
+                  <FighterArt fighter={showcase} sizes="280px" className="h-full w-full" />
+                </div>
+              </div>
+            )}
 
-          <div className="grid flex-1 gap-2 lg:grid-cols-[1fr_minmax(200px,0.65fr)_1fr]">
-            <section className="space-y-2">
-              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
-                Your team · 1 jutsu / fighter{pending?.art.target === 'ally' ? ' · heal target' : ''}
+            <div className="relative z-[1] mb-1 flex justify-between gap-2 px-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-200/70">
+                Your village · pick jutsu
               </p>
-              <ul className="space-y-2">
-                {me.fighterIds.map((id) => {
-                  const fighter = getFighter(id);
-                  if (!fighter) return null;
-                  return (
-                    <FighterRow
-                      key={id}
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-red-200/70">
+                Enemy · tap to target
+              </p>
+            </div>
+
+            <ul className="relative z-[1] space-y-3">
+              {me.fighterIds.map((id, index) => {
+                const fighter = getFighter(id);
+                const foeId = foe.fighterIds[index];
+                const foeFighter = foeId ? getFighter(foeId) : null;
+                if (!fighter) return null;
+                return (
+                  <li key={id} className="grid grid-cols-1 items-end gap-3 lg:grid-cols-2">
+                    <AllyRow
                       fighter={fighter}
                       unit={me.units[id]}
-                      side="player"
                       selected={selected?.id === id}
                       highlight={targeting.some((unit) => unit.id === id)}
                       targeted={aimTargetIds.has(id)}
                       queuedArtIds={me.queue.filter((item) => item.fighterId === id).map((item) => item.artId)}
+                      focusedArtId={
+                        pending?.fighterId === id
+                          ? pending.art.id
+                          : selected?.id === id
+                            ? selectedArt?.id
+                            : undefined
+                      }
                       canAct={myTurn}
+                      leftover={leftover}
                       onSelect={() => clickUnit(mySide, id)}
                       onArt={(art) => tryQueue(fighter, art, null)}
                     />
-                  );
-                })}
-              </ul>
-            </section>
-
-            <div className="relative order-first flex min-h-[200px] flex-col items-center justify-center gap-2 lg:order-none">
-              {showcase && (
-                <div
-                  className={cn(
-                    'relative h-[220px] w-[170px] overflow-hidden rounded-2xl border-2 shadow-2xl sm:h-[280px] sm:w-[210px]',
-                    aimedFoe ? 'border-red-400 ring-2 ring-red-400/50' : 'border-amber-200/40'
-                  )}
-                >
-                  <FighterArt fighter={showcase} sizes="210px" priority />
-                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-6 text-center text-xs font-black">
-                    {aimedFoe ? `Target · ${showcase.name}` : showcase.name}
-                  </span>
-                </div>
-              )}
-              <p className="max-w-[240px] text-center text-[11px] leading-snug text-amber-100/75">{notice ?? strategy}</p>
-              {me.queue.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-1.5">
-                  {me.queue.map((item) => {
-                    const owner = getFighter(item.fighterId);
-                    if (!owner) return null;
-                    const art = getFighterArts(owner).find((a) => a.id === item.artId);
-                    if (!art) return null;
-                    const targetName = item.targetId ? getFighter(item.targetId)?.name : null;
-                    return (
-                      <div
-                        key={`${item.fighterId}-${item.artId}`}
-                        className="flex flex-col items-center gap-0.5 rounded-lg border border-orange-400/40 bg-black/50 px-1.5 py-1"
-                      >
-                        <SkillIcon art={art} size={36} active />
-                        {targetName && (
-                          <span className="max-w-[72px] truncate text-[8px] font-bold uppercase tracking-wide text-red-200">
-                            → {targetName}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <section className="space-y-2">
-              <p className="px-1 text-right text-[10px] font-bold uppercase tracking-[0.2em] text-red-200/70">
-                Enemy team · powers visible · tap to attack
-                {pending?.art.target === 'enemy' ? ' (glowing)' : ''}
-              </p>
-              <ul className="space-y-2">
-                {foe.fighterIds.map((id) => {
-                  const fighter = getFighter(id);
-                  if (!fighter) return null;
-                  return (
-                    <FighterRow
-                      key={id}
-                      fighter={fighter}
-                      unit={foe.units[id]}
-                      side="foe"
-                      selected={false}
-                      highlight={targeting.some((unit) => unit.id === id)}
-                      targeted={aimTargetIds.has(id)}
-                      queuedArtIds={foe.queue.filter((item) => item.fighterId === id).map((item) => item.artId)}
-                      canAct={false}
-                      onSelect={() => clickUnit(foeSide, id)}
-                      onArt={() => undefined}
-                    />
-                  );
-                })}
-              </ul>
-            </section>
+                    {foeFighter && foeId ? (
+                      <EnemyRow
+                        fighter={foeFighter}
+                        unit={foe.units[foeId]}
+                        highlight={targeting.some((unit) => unit.id === foeId)}
+                        targeted={aimTargetIds.has(foeId)}
+                        onSelect={() => clickUnit(foeSide, foeId)}
+                      />
+                    ) : (
+                      <div />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
-          <footer className="sticky bottom-0 z-10 space-y-2 rounded-xl border border-[#8a6a3b] bg-[#2a180c]/95 p-2 shadow-2xl backdrop-blur-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => surrender()}
-                className="inline-flex items-center justify-center gap-1 rounded-lg bg-red-900 px-3 py-2 text-xs font-bold uppercase tracking-widest"
-              >
-                <Flag className="h-3.5 w-3.5" />
-                {match.winner ? 'Leave' : 'Surrender'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setHelp(true)}
-                className="inline-flex items-center justify-center gap-1 rounded-lg bg-black/40 px-3 py-2 text-xs font-bold uppercase tracking-widest"
-              >
-                <CircleHelp className="h-3.5 w-3.5" />
-                Help
-              </button>
-              <MusicToggle className="border-white/10 bg-black/40" />
-              {selected && (
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-200">Powers — {selected.name}</p>
-              )}
-            </div>
+          {strategy && (
+            <p className="shrink-0 truncate px-1 text-center text-[10px] text-amber-100/55">{strategy}</p>
+          )}
 
-            {selected && selectedUnit && (
-              <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <div className="flex flex-wrap gap-2">
-                  {getFighterArts(selected).map((art) => {
-                    const cd = selectedUnit.cooldowns[art.id] ?? 0;
-                    const queued = me.queue.some((item) => item.fighterId === selected.id && item.artId === art.id);
-                    const fighterBusy =
-                      !queued && me.queue.some((item) => item.fighterId === selected.id);
-                    const affordable = queued || canAfford(leftover, art.energy);
-                    const focused = pending?.art.id === art.id || selectedArt?.id === art.id;
-                    return (
-                      <button
-                        key={art.id}
-                        type="button"
-                        onClick={() => tryQueue(selected, art, null)}
-                        disabled={!myTurn || fighterBusy || (cd > 0 && !queued)}
-                        title={fighterBusy ? 'This fighter already queued a jutsu this Echo' : undefined}
-                        className={cn(
-                          'flex min-w-[7.5rem] flex-1 items-start gap-2 rounded-lg border px-2 py-2 text-left disabled:opacity-40',
-                          queued
-                            ? 'border-orange-400 bg-orange-800/80'
-                            : focused
-                              ? 'border-amber-200 bg-amber-950/70'
-                              : 'border-amber-200/20 bg-black/35 hover:bg-black/50',
-                          !affordable && 'opacity-50'
-                        )}
-                      >
-                        <SkillIcon art={art} size={42} active={queued || focused} cooldown={queued ? 0 : cd} />
-                        <span className="min-w-0">
-                          <span className="flex items-center justify-between gap-1">
-                            <span className="truncate text-xs font-bold">{art.name}</span>
-                            <WeaveCost cost={art.energy} size={11} />
-                          </span>
-                          <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-amber-100/55">
-                            {skillFamily(art)} · CD {art.cooldown || 0}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selectedArt && (
-                  <div className="rounded-lg border border-amber-200/25 bg-black/40 p-3">
-                    <div className="flex items-start gap-3">
-                      <SkillIcon art={selectedArt} size={52} active />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-300">Power detail</p>
-                        <h3 className="text-base font-black text-amber-50">{selectedArt.name}</h3>
-                        <p className="mt-1 text-sm leading-snug text-amber-100/85">{selectedArt.description}</p>
-                      </div>
-                    </div>
-                    <ul className="mt-2 space-y-1 border-t border-amber-200/15 pt-2 text-[12px] text-amber-100/80">
-                      {describeArtEffects(selectedArt).map((line) => (
-                        <li key={line} className="flex gap-2">
-                          <span className="text-orange-300">•</span>
-                          <span>{line}</span>
-                        </li>
-                      ))}
-                      <li className="flex gap-2 text-amber-200/90">
-                        <span className="text-orange-300">•</span>
-                        <span>{targetHint(selectedArt)}</span>
-                      </li>
-                      <li className="flex gap-2">
-                        <span className="text-orange-300">•</span>
-                        <span className="inline-flex flex-wrap items-center gap-1">
-                          Cost <WeaveCost cost={selectedArt.energy} size={12} /> · Cooldown {selectedArt.cooldown || 0}{' '}
-                          Echo(es)
-                        </span>
-                      </li>
-                    </ul>
+          {/* NA bottom tray — sits directly under the roster */}
+          <footer className="z-10 mt-1 shrink-0 border-t border-[#8a6a3b] bg-gradient-to-b from-[#c4a574] to-[#a8844a] p-2 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] sm:p-2.5">
+            <div className="mx-auto flex max-w-[1280px] flex-col gap-2 sm:flex-row sm:items-stretch">
+              {/* Left rail — like NA surrender / settings + selected fighter */}
+              <div className="flex shrink-0 items-end gap-2 sm:w-[150px] sm:flex-col sm:items-stretch">
+                {selected && (
+                  <div className="relative hidden h-[110px] w-[88px] overflow-hidden rounded-sm border-2 border-[#5c3d1e] shadow-md sm:block">
+                    <FighterArt fighter={selected} sizes="88px" priority />
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => surrender()}
+                  className="rounded-sm border border-[#5c3d1e] bg-[#6b1d1d] px-3 py-2 text-[11px] font-black uppercase tracking-widest text-[#f5e6c8] shadow"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Flag className="h-3.5 w-3.5" />
+                    {match.winner ? 'Leave' : 'Surrender'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHelp(true)}
+                  className="rounded-sm border border-[#5c3d1e] bg-[#3d2914] px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[#f5e6c8] shadow"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <CircleHelp className="h-3.5 w-3.5" />
+                    Help
+                  </span>
+                </button>
+                <MusicToggle className="border-[#5c3d1e] bg-[#3d2914]/90 text-[#f5e6c8]" />
               </div>
-            )}
+
+              {/* Detail scroll — skill icon LEFT, copy flows horizontally (NA) */}
+              <div className="game-parchment min-h-[128px] min-w-0 flex-1 overflow-hidden rounded-sm border-2 border-[#5c3d1e] p-3">
+                {selectedArt && selected ? (
+                  <div className="flex h-full gap-3 sm:gap-4">
+                    <div className="shrink-0">
+                      <div className="overflow-hidden rounded-sm border-2 border-[#8a6a3b] bg-[#1c1008] shadow-inner">
+                        <SkillTile
+                          art={selectedArt}
+                          fighterId={selected.id}
+                          size={96}
+                          active
+                          showName={false}
+                          className="!max-w-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b3f18]">
+                            {selected.name}
+                          </p>
+                          <h3 className="text-xl font-black uppercase leading-tight tracking-wide text-[#b91c1c] sm:text-2xl">
+                            {selectedArt.name}
+                          </h3>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[#6b3f18]">
+                            Energy
+                          </span>
+                          <WeaveCost cost={selectedArt.energy} size={18} />
+                        </div>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-[#2a180c]">
+                        {selectedArt.description}
+                      </p>
+                      {describeArtEffects(selectedArt).length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5 text-[12px] leading-snug text-[#3d2914]/90">
+                          {describeArtEffects(selectedArt).slice(0, 3).map((line) => (
+                            <li key={line}>• {line}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="mt-auto flex flex-wrap items-end justify-between gap-2 pt-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#6b3f18]">
+                          Classes: {artClasses(selectedArt).join(', ')}
+                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-[#6b3f18]">
+                          Cooldown: {selectedArt.cooldown || 0}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-[11px] italic text-[#5c3d1e]/90">{targetHint(selectedArt)}</p>
+                    </div>
+                  </div>
+                ) : selected ? (
+                  <div className="flex h-full items-center gap-4">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-sm border-2 border-[#8a6a3b]">
+                      <FighterArt fighter={selected} sizes="96px" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-black uppercase text-[#b91c1c]">{selected.name}</h3>
+                      <p className="mt-1 text-sm text-[#2a180c]">
+                        {selected.epithet} · {selected.role}. Tap a jutsu on their row to inspect it.
+                      </p>
+                      {selectedUnit && (
+                        <p className="mt-2 font-mono text-xs text-[#3d2914]">
+                          HP {selectedUnit.hp}/{selectedUnit.maxHp}
+                          {selectedUnit.shield > 0 ? ` · shield ${selectedUnit.shield}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="flex h-full items-center text-sm text-[#3d2914]/80">
+                    Select a fighter or jutsu to inspect.
+                  </p>
+                )}
+              </div>
+            </div>
           </footer>
         </div>
 
@@ -1215,60 +1166,103 @@ export function BattleSandbox({
   );
 }
 
-function StatusBadges({ unit, align = 'start' }: { unit: UnitState; align?: 'start' | 'end' }) {
-  const badges: { key: string; label: string; className: string }[] = [];
-  if (unit.stun > 0) badges.push({ key: 'stun', label: `Stun ${unit.stun}`, className: 'bg-violet-700/90 text-violet-50' });
-  if (unit.veil > 0) badges.push({ key: 'veil', label: `Veil ${unit.veil}`, className: 'bg-slate-600/90 text-slate-50' });
-  if ((unit.dodge ?? 0) > 0) {
-    badges.push({ key: 'dodge', label: `Dodge ${unit.dodge}`, className: 'bg-cyan-700/90 text-cyan-50' });
-  }
-  if ((unit.dr ?? 0) > 0) {
-    badges.push({
+
+function StatusPips({
+  unit,
+  align = 'start',
+  extras,
+}: {
+  unit: UnitState;
+  align?: 'start' | 'end';
+  extras?: { key: string; node: ReactNode; title: string }[];
+}) {
+  const pips: { key: string; label: string; className: string; title: string }[] = [];
+  if (unit.stun > 0)
+    pips.push({ key: 'stun', label: 'ST', className: 'bg-violet-700 text-violet-50', title: `Stun ${unit.stun}` });
+  if (unit.dodge > 0)
+    pips.push({ key: 'dodge', label: 'DG', className: 'bg-teal-700 text-teal-50', title: 'Dodge' });
+  if (unit.veil > 0)
+    pips.push({ key: 'veil', label: 'VL', className: 'bg-slate-600 text-slate-50', title: `Veil ${unit.veil}` });
+  if (unit.dr > 0)
+    pips.push({
       key: 'dr',
-      label: `DR ${unit.drAmount || 8}`,
-      className: 'bg-stone-600/90 text-amber-50',
+      label: 'DR',
+      className: 'bg-sky-800 text-sky-50',
+      title: `DR −${unit.drAmount} (${unit.dr})`,
     });
-  }
-  if (unit.burn > 0) badges.push({ key: 'burn', label: `Burn ${unit.burn}`, className: 'bg-orange-700/90 text-orange-50' });
-  if (unit.mark > 0) badges.push({ key: 'mark', label: `Mark ${unit.mark}`, className: 'bg-rose-800/90 text-rose-50' });
-  if (unit.tidebind > 0) {
-    badges.push({ key: 'bind', label: `Bind ${unit.tidebind}`, className: 'bg-sky-800/90 text-sky-50' });
-  }
-  if (!badges.length) return null;
+  if (unit.mark > 0)
+    pips.push({ key: 'mark', label: 'MK', className: 'bg-amber-700 text-amber-50', title: `Mark ${unit.mark}` });
+  if (unit.burn > 0)
+    pips.push({ key: 'burn', label: 'BR', className: 'bg-orange-700 text-orange-50', title: `Burn ${unit.burn}` });
+  if (unit.tidebind > 0)
+    pips.push({
+      key: 'tide',
+      label: 'BD',
+      className: 'bg-cyan-800 text-cyan-50',
+      title: `Bind ${unit.tidebind}`,
+    });
+  if (unit.shield > 0)
+    pips.push({
+      key: 'sh',
+      label: `+${unit.shield}`,
+      className: 'bg-emerald-800 text-emerald-50',
+      title: `Shield ${unit.shield}`,
+    });
+
   return (
-    <div className={cn('mt-1 flex flex-wrap gap-0.5', align === 'end' && 'justify-end')}>
-      {badges.map((badge) => (
+    <div
+      className={cn(
+        'flex h-8 min-h-[2rem] flex-wrap items-end gap-0.5 pb-0.5',
+        align === 'end' && 'justify-end'
+      )}
+    >
+      {extras?.map((item) => (
         <span
-          key={badge.key}
-          className={cn('rounded px-1 py-px text-[8px] font-black uppercase tracking-wide', badge.className)}
+          key={item.key}
+          title={item.title}
+          className="inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-sm border border-amber-200/40 bg-black/60"
         >
-          {badge.label}
+          {item.node}
+        </span>
+      ))}
+      {pips.map((pip) => (
+        <span
+          key={pip.key}
+          title={pip.title}
+          className={cn(
+            'inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-sm px-0.5 text-[9px] font-black leading-none',
+            pip.className
+          )}
+        >
+          {pip.label}
         </span>
       ))}
     </div>
   );
 }
 
-function FighterRow({
+function AllyRow({
   fighter,
   unit,
-  side,
   selected,
   highlight,
   targeted,
   queuedArtIds,
+  focusedArtId,
   canAct,
+  leftover,
   onSelect,
   onArt,
 }: {
   fighter: Fighter;
   unit: UnitState;
-  side: SideId;
   selected: boolean;
   highlight: boolean;
   targeted: boolean;
   queuedArtIds: string[];
+  focusedArtId?: string;
   canAct: boolean;
+  leftover: EnergyId[];
   onSelect: () => void;
   onArt: (art: Art) => void;
 }) {
@@ -1276,120 +1270,166 @@ function FighterRow({
   const arts = getFighterArts(fighter);
   const pct = Math.round((unit.hp / unit.maxHp) * 100);
   const bloodied = isBloodied(unit);
+  const tile = 64;
+  const queuedArts = arts.filter((art) => queuedArtIds.includes(art.id));
 
   return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            onSelect();
-          }
-        }}
-        className={cn(
-          'relative grid cursor-pointer items-center gap-2 rounded-lg border bg-black/40 p-1.5 transition hover:bg-black/55',
-          side === 'foe'
-            ? 'grid-cols-[minmax(0,1fr)_72px] sm:grid-cols-[minmax(0,1fr)_88px]'
-            : 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[88px_minmax(0,1fr)]',
-          targeted && side === 'foe' && 'border-red-500 bg-red-950/50 ring-2 ring-red-400 shadow-[0_0_20px_rgba(248,113,113,0.35)]',
-          targeted && side === 'player' && 'border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-300/70',
-          !targeted && selected && 'border-orange-400 ring-1 ring-orange-400/40',
-          !targeted && !selected && 'border-emerald-900/70',
-          highlight && !targeted && 'ring-2 ring-amber-300 animate-pulse',
-          sealed && 'opacity-45'
-        )}
-      >
-        {targeted && (
-          <span
-            className={cn(
-              'absolute -top-2 z-[2] rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow',
-              side === 'foe' ? 'right-2 bg-red-600' : 'left-2 bg-emerald-600'
-            )}
-          >
-            {side === 'foe' ? 'Target' : 'Buffed'}
-          </span>
-        )}
-        {side === 'player' && (
+    <div className="pt-0">
+      {/* items-end: parchment lines up with bottom of portrait + HP; status strip sits above */}
+      <div className={cn('flex items-end gap-2', sealed && 'opacity-45')}>
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            'relative w-[88px] shrink-0 text-left sm:w-[96px]',
+            selected && 'drop-shadow-[0_0_6px_rgba(251,191,36,0.55)]'
+          )}
+        >
           <div
             className={cn(
-              'relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-md sm:h-20 sm:w-[88px]',
-              targeted && 'ring-2 ring-emerald-300'
+              'relative h-[88px] w-[88px] overflow-hidden rounded-sm border-2 border-black sm:h-[96px] sm:w-[96px]',
+              targeted && 'ring-2 ring-emerald-400',
+              highlight && !targeted && 'ring-2 ring-amber-300 animate-pulse'
             )}
           >
-            <FighterArt fighter={fighter} sizes="88px" />
+            <FighterArt fighter={fighter} sizes="96px" />
           </div>
-        )}
-        <div className={cn('min-w-0', side === 'foe' && 'text-right')}>
-          <p className="truncate text-xs font-black uppercase">{fighter.name}</p>
-          <p className="text-[9px] uppercase tracking-wider text-amber-100/50">{fighter.role}</p>
-          <div className="mt-1 h-2.5 overflow-hidden rounded bg-emerald-950">
-            <div className={cn('h-full', pct > 30 ? 'bg-emerald-400' : 'bg-red-500')} style={{ width: `${pct}%` }} />
+          <div className="relative mt-0 h-3 overflow-hidden rounded-sm border border-white/40 bg-white/90">
+            <div
+              className={cn('h-full', pct > 50 ? 'bg-emerald-500' : pct > 25 ? 'bg-amber-400' : 'bg-red-500')}
+              style={{ width: `${pct}%` }}
+            />
+            <span className="absolute inset-0 flex items-center justify-center font-mono text-[9px] font-bold leading-none text-black/80 drop-shadow-sm">
+              {unit.hp}/{unit.maxHp}
+              {bloodied ? '!' : ''}
+            </span>
           </div>
-          <p className="mt-0.5 font-mono text-[10px]">
-            {unit.hp}/{unit.maxHp}
-            {unit.shield > 0 ? ` +${unit.shield}` : ''}
-            {bloodied ? ' · bloodied' : ''}
-          </p>
-          <StatusBadges unit={unit} align={side === 'foe' ? 'end' : 'start'} />
-          <div className={cn('mt-1.5 flex flex-nowrap gap-1', side === 'foe' && 'justify-end')}>
-            {arts.map((art) => {
-              const queued = queuedArtIds.includes(art.id);
-              const fighterBusy = !queued && queuedArtIds.length > 0;
-              const cd = queued ? 0 : unit.cooldowns[art.id] ?? 0;
-              return (
-                <button
-                  key={art.id}
-                  type="button"
-                  title={
-                    fighterBusy
-                      ? 'Already queued a jutsu this Echo'
-                      : `${art.name}${cd > 0 ? ` · CD ${cd}` : ''}`
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onArt(art);
-                  }}
-                  disabled={!canAct || sealed || fighterBusy || (cd > 0 && !queued)}
-                  className={cn(
-                    'flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded border px-0.5 py-1 disabled:opacity-50',
-                    queued
-                      ? 'border-orange-400 bg-orange-900/70'
-                      : 'border-amber-200/15 bg-black/35 hover:bg-black/55',
-                    !canAct && 'cursor-default hover:bg-black/35'
-                  )}
-                >
-                  <SkillIcon art={art} size={30} active={queued} cooldown={cd} />
-                  <span className="w-full truncate text-center text-[8px] font-bold leading-tight sm:text-[9px]">
-                    {art.name}
-                  </span>
-                  <span className="inline-flex items-center justify-center gap-0.5">
-                    <WeaveCost cost={art.energy} size={9} />
-                  </span>
-                </button>
-              );
-            })}
+        </button>
+
+        {/* Width = cards only; status strip above parchment (NA used-power lane) */}
+        <div className="flex w-fit max-w-full flex-col">
+          <StatusPips
+            unit={unit}
+            extras={queuedArts.map((art) => ({
+              key: art.id,
+              title: `Queued · ${art.name}`,
+              node: (
+                <SkillTile art={art} fighterId={fighter.id} size={24} active showName={false} />
+              ),
+            }))}
+          />
+
+          <div className={cn('game-jutsu-scroll', selected && 'is-selected')}>
+            <div className="game-jutsu-scroll-inner">
+              <span
+                className="inline-flex shrink-0 items-center justify-center rounded-sm border border-black/40 bg-[#2a2a2a] text-lg font-black text-amber-100/40"
+                style={{ width: tile, height: tile }}
+                title="Aim / select slot"
+              >
+                {queuedArtIds.length > 0 ? '✓' : '?'}
+              </span>
+
+              {arts.map((art) => {
+                const queued = queuedArtIds.includes(art.id);
+                const cd = unit.cooldowns[art.id] ?? 0;
+                const fighterBusy = !queued && queuedArtIds.length > 0;
+                const affordable = queued || canAfford(leftover, art.energy);
+                const focused = focusedArtId === art.id;
+                return (
+                  <button
+                    key={art.id}
+                    type="button"
+                    disabled={!canAct || sealed || fighterBusy || (cd > 0 && !queued)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect();
+                      onArt(art);
+                    }}
+                    className={cn(
+                      'inline-flex shrink-0 items-center justify-center p-0 leading-none disabled:opacity-40',
+                      !affordable && 'opacity-50'
+                    )}
+                    style={{ width: tile, height: tile }}
+                    title={art.name}
+                  >
+                    <SkillTile
+                      art={art}
+                      fighterId={fighter.id}
+                      size={tile}
+                      active={queued || focused}
+                      cooldown={queued ? 0 : cd}
+                      showName={false}
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-        {side === 'foe' && (
+      </div>
+    </div>
+  );
+}
+
+
+function EnemyRow({
+  fighter,
+  unit,
+  highlight,
+  targeted,
+  onSelect,
+}: {
+  fighter: Fighter;
+  unit: UnitState;
+  highlight: boolean;
+  targeted: boolean;
+  onSelect: () => void;
+}) {
+  const sealed = unit.hp <= 0;
+  const pct = Math.round((unit.hp / unit.maxHp) * 100);
+
+  return (
+    <div className="flex justify-end">
+      <div className={cn('flex items-end gap-2', sealed && 'opacity-45')}>
+        <div className="flex flex-col items-end">
+          <StatusPips unit={unit} align="end" />
+        </div>
+        <button
+          type="button"
+          onClick={onSelect}
+          className="relative w-[88px] shrink-0 sm:w-[96px]"
+        >
           <div
             className={cn(
-              'relative h-[72px] w-[72px] shrink-0 justify-self-end overflow-hidden rounded-md border border-emerald-800/80 bg-emerald-950/40 sm:h-20 sm:w-[88px]',
-              targeted && 'border-red-400 ring-2 ring-red-400',
-              highlight && !targeted && 'ring-2 ring-amber-300'
+              'relative h-[88px] w-[88px] overflow-hidden rounded-sm border-2 border-black sm:h-[96px] sm:w-[96px]',
+              targeted && 'ring-2 ring-red-400',
+              highlight && !targeted && 'ring-2 ring-amber-300 animate-pulse'
             )}
           >
-            <FighterArt fighter={fighter} sizes="88px" />
+            {sealed ? (
+              <span className="flex h-full w-full items-center justify-center bg-black/80 text-3xl font-black text-white/50">
+                ✕
+              </span>
+            ) : (
+              <FighterArt fighter={fighter} sizes="96px" />
+            )}
             {targeted && (
-              <span className="absolute inset-x-0 bottom-0 bg-red-700/90 py-0.5 text-center text-[8px] font-black uppercase tracking-wider text-white">
-                Aimed
+              <span className="absolute right-0.5 top-0.5 rounded bg-red-600 px-1 text-[8px] font-black uppercase text-white">
+                Target
               </span>
             )}
           </div>
-        )}
+          <div className="relative mt-0 h-3 overflow-hidden rounded-sm border border-white/40 bg-white/90">
+            <div
+              className={cn('h-full', pct > 50 ? 'bg-emerald-500' : pct > 25 ? 'bg-amber-400' : 'bg-red-500')}
+              style={{ width: `${pct}%` }}
+            />
+            <span className="absolute inset-0 flex items-center justify-center font-mono text-[9px] font-bold leading-none text-black/80">
+              {sealed ? '0' : unit.hp}/{unit.maxHp}
+            </span>
+          </div>
+        </button>
       </div>
-    </li>
+    </div>
   );
 }

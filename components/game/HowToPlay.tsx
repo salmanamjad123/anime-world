@@ -26,19 +26,19 @@ const LOBBY_STEPS = [
 const BATTLE_STEPS = [
   {
     title: 'Your team is on the left',
-    body: 'Tap YOUR portraits to choose who casts. Each living fighter may queue only 1 jutsu per Echo — then press Attack. You have 60 seconds.',
+    body: 'Each ally shows 4 jutsu tiles. Queue one jutsu per living fighter, then press when ready. You have 60 seconds.',
   },
   {
-    title: 'Enemies are on the right',
-    body: 'Enemy jutsu are fully visible. Pick an ATK power and tap a glowing enemy. Pierce ignores DR; Affliction ignores DR and shields.',
+    title: 'Enemies show portraits only',
+    body: 'Enemy kits stay hidden. Pick an ATK jutsu, then tap a glowing enemy portrait. Pierce ignores DR; Affliction ignores DR and shields.',
   },
   {
-    title: 'Bank Weave, then spike',
-    body: 'Ash Rule: first side starts with 1 pip, second with 3. Later Echoes: 1 per living ally. Finishers need 3 Weave and sit on long cooldown — bank, then spike.',
+    title: 'Bank Weave up top',
+    body: 'Ash Rule: first side starts with 1 pip, second with 3. Later Echoes: 1 per living ally. Finishers need 3 Weave — bank, then spike.',
   },
   {
-    title: 'Respect cooldowns',
-    body: 'Dodge/veil is CD 4 (cannot chain). Stuns need 2+ Echoes before reuse. Exchange 5→1 color when the bank is stuck. Focus one enemy to seal.',
+    title: 'Read the detail scroll',
+    body: 'Bottom-right shows the selected jutsu or fighter. Respect cooldowns: dodge/veil is CD 4. Focus one enemy to seal over several Echoes.',
   },
 ];
 
@@ -137,5 +137,5 @@ export function HowToPlay({ open, onClose, variant = 'lobby' }: Props) {
 
 export const TUTORIAL_KEYS = {
   lobby: 'va-help-seen-v2',
-  battle: 'va-battle-guide-seen-v3',
+  battle: 'va-battle-guide-seen-v4',
 } as const;

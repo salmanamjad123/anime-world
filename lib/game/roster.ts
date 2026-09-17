@@ -1,12 +1,19 @@
 import type { Art, EnergyId, FactionId, FactionMeta, Fighter } from '@/types/game';
 
-export const RULESET_VERSION = 'v1.1';
+export const RULESET_VERSION = 'v1.2-na';
 
 export function fighterPortrait(id: string): string {
   return `/game/fighters/${id}.png`;
 }
+
+/** Optional dedicated jutsu art; falls back to fighter portrait in SkillIcon. */
+export function skillArtPath(fighterId: string, artId: string): string {
+  return `/game/skills/${fighterId}/${artId}.png`;
+}
+
 export const TEAM_SIZE = 3;
-export const FIGHTER_HP = 100;
+/** Higher HP + softer chips = longer NA-style matches. */
+export const FIGHTER_HP = 160;
 
 export const FACTIONS: Record<FactionId, FactionMeta> = {
   ashen: {
@@ -1260,6 +1267,24 @@ function costWords(energy: Art['energy']): string {
   return parts.join(' + ') || 'free';
 }
 
+function scaleDamage(amount: number, slot: number): number {
+  // NA pacing on 160 HP: chip ~9, mid ~14–18, finisher ~26–30
+  if (slot === 0) return Math.max(7, Math.min(11, Math.round(amount * 0.58)));
+  if (slot === 3) return Math.max(22, Math.min(30, Math.round(amount * 0.68)));
+  if (slot === 1) return Math.max(10, Math.min(18, Math.round(amount * 0.62)));
+  return Math.max(8, Math.min(16, Math.round(amount * 0.6)));
+}
+
+function scaleHeal(amount: number, slot: number): number {
+  if (slot === 3) return Math.max(18, Math.min(26, Math.round(amount * 0.72)));
+  if (amount >= 20) return Math.max(14, Math.min(22, Math.round(amount * 0.7)));
+  return Math.max(8, Math.min(16, Math.round(amount * 0.7)));
+}
+
+function scaleShield(amount: number): number {
+  return Math.max(4, Math.min(12, Math.round(amount * 0.75)));
+}
+
 function rebalanceArt(art: Art, slot: number, faction: FactionId): Art {
   const energy = { ...art.energy };
   let cooldown = art.cooldown;
@@ -1309,24 +1334,49 @@ function rebalanceArt(art: Art, slot: number, faction: FactionId): Art {
   // Big single heals can't be free every turn.
   if (bigHeal) cooldown = Math.max(cooldown, slot === 0 ? 0 : 1);
 
+  const effects = art.effects.map((effect) => {
+    if (effect.type === 'DAMAGE') {
+      return { ...effect, amount: scaleDamage(effect.amount, slot) };
+    }
+    if (effect.type === 'HEAL') {
+      return { ...effect, amount: scaleHeal(effect.amount, slot) };
+    }
+    if (effect.type === 'SHIELD') {
+      return { ...effect, amount: scaleShield(effect.amount) };
+    }
+    return effect;
+  });
+
+  const dmgLine = effects.find((e) => e.type === 'DAMAGE');
+  const healLine = effects.find((e) => e.type === 'HEAL');
   let description = art.description;
+  if (dmgLine && dmgLine.type === 'DAMAGE') {
+    description = description.replace(/\b\d+\s*(?:pierce\s+)?damage/i, `${dmgLine.amount} damage`);
+  }
+  if (healLine && healLine.type === 'HEAL') {
+    description = description.replace(/heal(?:s| ally)?\s*\d+/i, (m) =>
+      m.replace(/\d+/, String(healLine.amount))
+    );
+  }
+
   if (slot === 3) {
-    description = `${art.description.replace(/\.\s*$/, '')} · ${costWords(energy)} · CD ${cooldown}.`;
+    description = `${description.replace(/\.\s*$/, '')} · ${costWords(energy)} · CD ${cooldown}.`;
   } else if (isDodgeOrVeil && cooldown >= 4) {
-    description = `${art.description.replace(/\.\s*$/, '')} · CD ${cooldown} (no chain).`;
+    description = `${description.replace(/\.\s*$/, '')} · CD ${cooldown} (no chain).`;
   }
 
   return {
     ...art,
     energy,
     cooldown,
+    effects,
     description: description.trim(),
   };
 }
 
 function rebalanceFighter(fighter: Fighter): Fighter {
   const skills = fighter.skills.map((skill, slot) => rebalanceArt(skill, slot, fighter.faction)) as Fighter['skills'];
-  return { ...fighter, skills };
+  return { ...fighter, hp: FIGHTER_HP, skills };
 }
 
 /** Balanced NA-style kits (3-cost finishers, CD locks on defense/stun). */
