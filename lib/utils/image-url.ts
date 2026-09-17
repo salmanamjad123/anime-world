@@ -127,6 +127,27 @@ export function getImageProxyReferers(url: string): string[] {
         origin + '/',
       ];
     }
+    if (hostname.includes('mangapark') || hostname.includes('parkmanga')) {
+      return [
+        'https://mangapark.net/',
+        'https://www.mangapark.net/',
+        origin + '/',
+      ];
+    }
+    if (
+      hostname.includes('mangasee') ||
+      hostname.includes('msee') ||
+      hostname.includes('gg.asuracomic') ||
+      hostname.includes('asuracomic') ||
+      hostname.includes('asurascans')
+    ) {
+      return [
+        'https://mangasee123.com/',
+        'https://asuracomic.net/',
+        'https://asuratoon.com/',
+        origin + '/',
+      ];
+    }
     if (
       hostname.includes('mangakakalot') ||
       hostname.includes('manganato') ||
@@ -143,6 +164,9 @@ export function getImageProxyReferers(url: string): string[] {
     // Generic scraper CDNs — try common manga sites before the CDN origin
     // (CDN-as-Referer often 403s and must not be first)
     return [
+      'https://mangapark.net/',
+      'https://mangasee123.com/',
+      'https://asuracomic.net/',
       'https://mangapill.com/',
       'https://mangareader.to/',
       'https://www.mangahere.cc/',
@@ -153,6 +177,8 @@ export function getImageProxyReferers(url: string): string[] {
     /* fall through */
   }
   return [
+    'https://mangapark.net/',
+    'https://mangasee123.com/',
     'https://mangapill.com/',
     'https://mangareader.to/',
     'https://www.mangahere.cc/',

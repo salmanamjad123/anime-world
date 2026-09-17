@@ -36,9 +36,14 @@ export async function GET(
     let resolvedProvider = provider;
 
     if (chapters.length === 0) {
-      const providersToTry = ['mangapill', 'mangareader', 'mangahere', 'mangadex'].filter(
-        (p) => p !== provider
-      );
+      const providersToTry = [
+        'mangapark',
+        'mangasee123',
+        'mangahere',
+        'mangapill',
+        'mangareader',
+        'mangadex',
+      ].filter((p) => p !== provider);
       for (const p of providersToTry) {
         const info = await getMangaInfo(mangaId, p);
         if (info?.chapters?.length) {

@@ -127,6 +127,8 @@ export async function findMangaDexByAnilistId(
 
 /**
  * Get chapter feed for a MangaDex manga — only chapters with readable pages.
+ * MangaDex caps `limit` at 100; requesting more returns 100 and our old
+ * `data.length < limit` check stopped after the first page (~46 readable EN).
  */
 async function fetchMangaDexChapterFeed(
   mangaId: string,
@@ -135,9 +137,10 @@ async function fetchMangaDexChapterFeed(
   try {
     const all: MangaDexChapter[] = [];
     let offset = 0;
-    const limit = 500;
+    const limit = 100; // MangaDex API maximum
+    const maxPages = 30; // up to 3000 chapter rows before dedupe
 
-    for (let page = 0; page < 4; page++) {
+    for (let page = 0; page < maxPages; page++) {
       const params: Record<string, string | number | string[]> = {
         limit,
         offset,
@@ -163,6 +166,7 @@ async function fetchMangaDexChapterFeed(
       all.push(...data);
       offset += data.length;
       const total = res.data?.total ?? all.length;
+      // Last page: fewer than limit returned, or we've reached API total
       if (offset >= total || data.length < limit) break;
     }
 
@@ -193,7 +197,7 @@ export async function getMangaDexChapters(
   mangaId: string,
   lang = 'en'
 ): Promise<MangaChapter[]> {
-  const key = `mangadex:chapters:v3:${mangaId}:${lang}`;
+  const key = `mangadex:chapters:v4:${mangaId}:${lang}`;
   return getCachedWhen(
     key,
     async () => {

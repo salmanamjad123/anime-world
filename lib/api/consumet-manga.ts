@@ -8,10 +8,23 @@ import { CONSUMET_API_URL } from '@/constants/api';
 import { getChapterCached } from './chapter-cache';
 import { getCached, CACHE_TTL } from '@/lib/cache';
 import { getMangaHereChapterPages, isMangaHereChapterId } from './mangahere';
+import {
+  mangaProviderResultMatches,
+  normalizeMangaTitle,
+} from '@/lib/utils/manga-title-match';
 import type { MangaInfoConsumet, MangaChapterPage, MangaChapter, Manga, MangaStatus } from '@/types';
 
 const DEFAULT_PROVIDER = 'mangapill';
-const MANGA_PROVIDERS = ['mangapill', 'mangadex', 'mangareader', 'mangahere'] as const;
+/** AniList-mapped Consumet scrapers (mangapark / mangasee123 help manhwa a lot) */
+const MANGA_PROVIDERS = [
+  'mangapill',
+  'mangadex',
+  'mangareader',
+  'mangahere',
+  'mangapark',
+  'mangasee123',
+  'mangakakalot',
+] as const;
 
 function mapConsumetStatus(status?: string): MangaStatus | undefined {
   if (!status) return undefined;
@@ -89,6 +102,10 @@ function extractChapterNumber(
   const fromSlug = id.match(/chapter[_-]?0*(\d+(?:\.\d+)?)/i);
   if (fromSlug?.[1]) return fromSlug[1];
 
+  // MangaPark / MangaSee style numeric tails
+  const fromTail = id.match(/(?:^|[-_/])0*(\d+(?:\.\d+)?)(?:$|[-_/])/);
+  if (fromTail?.[1] && Number(fromTail[1]) < 10000) return fromTail[1];
+
   return undefined;
 }
 
@@ -97,10 +114,15 @@ function normalizeChapters(raw: unknown): MangaChapter[] {
     id?: string;
     title?: string;
     chapter?: string | number;
+    chapterNumber?: string | number;
   }): MangaChapter | null => {
     const id = String(ch.id ?? '');
     if (!id) return null;
-    const chapter = extractChapterNumber(id, ch.title, ch.chapter);
+    const chapter = extractChapterNumber(
+      id,
+      ch.title,
+      ch.chapter ?? ch.chapterNumber
+    );
     return {
       id,
       ...(ch.title ? { title: ch.title } : {}),
@@ -112,13 +134,148 @@ function normalizeChapters(raw: unknown): MangaChapter[] {
     return raw.map(mapOne).filter((ch): ch is MangaChapter => ch != null);
   }
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    const obj = raw as Record<string, { id?: string; title?: string; chapter?: string | number }>;
+    const obj = raw as Record<
+      string,
+      {
+        id?: string;
+        title?: string;
+        chapter?: string | number;
+        chapterNumber?: string | number;
+      }
+    >;
     return Object.values(obj)
       .filter((ch) => ch && typeof ch === 'object' && ch.id)
       .map(mapOne)
       .filter((ch): ch is MangaChapter => ch != null);
   }
   return [];
+}
+
+function sortChaptersAsc(chapters: MangaChapter[]): MangaChapter[] {
+  return [...chapters].sort((a, b) => {
+    const na = Number(a.chapter);
+    const nb = Number(b.chapter);
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+type SearchHit = { id: string; title: string };
+
+async function searchConsumetManga(
+  provider: string,
+  query: string
+): Promise<SearchHit[]> {
+  try {
+    const url = `${CONSUMET_API_URL}/manga/${provider}/${encodeURIComponent(query)}`;
+    const res = await axiosInstance.get(url, {
+      timeout: 12000,
+      validateStatus: (s) => s < 500,
+    });
+    const results = res.data?.results;
+    if (!Array.isArray(results)) return [];
+    return results
+      .map((r: { id?: string; title?: string }) => ({
+        id: String(r.id ?? ''),
+        title: String(r.title ?? ''),
+      }))
+      .filter((r: SearchHit) => r.id && r.title);
+  } catch (err) {
+    console.warn(`[Consumet Manga] search ${provider}:`, (err as Error).message);
+    return [];
+  }
+}
+
+async function getConsumetMangaInfoBySiteId(
+  provider: string,
+  siteId: string
+): Promise<MangaInfoConsumet | null> {
+  const key = `manga:info:site:v1:${provider}:${siteId}`;
+  return getCached(
+    key,
+    async () => {
+      try {
+        const url = `${CONSUMET_API_URL}/manga/${provider}/info`;
+        const res = await axiosInstance.get(url, {
+          params: { id: siteId },
+          timeout: 15000,
+          validateStatus: (s) => s < 500,
+        });
+        const data = res.data;
+        if (!data) return null;
+        const chapters = sortChaptersAsc(
+          normalizeChapters(data.chapters ?? data.chapter ?? [])
+        );
+        return {
+          ...data,
+          title: data.title ?? siteId,
+          chapters: chapters.length > 0 ? chapters : undefined,
+        } as MangaInfoConsumet;
+      } catch (err) {
+        console.warn(
+          `[Consumet Manga] info ${provider}/${siteId}:`,
+          (err as Error).message
+        );
+        return null;
+      }
+    },
+    CACHE_TTL.MANGA_CHAPTERS_LIST
+  );
+}
+
+/**
+ * Resolve chapters by searching the scraper by title (bypasses bad AniList→site maps).
+ * Fixes cases like Solo Leveling AniList id mapping to Ragnarok / novel on scrapers.
+ */
+export async function getMangaInfoByTitleSearch(
+  provider: string,
+  expectedTitles: string[],
+  options?: { format?: string | null }
+): Promise<MangaInfoConsumet | null> {
+  const query =
+    expectedTitles.find((t) => /[a-zA-Z]/.test(t)) || expectedTitles[0];
+  if (!query?.trim()) return null;
+
+  const formatKey = options?.format ? String(options.format).toUpperCase() : '';
+  const cacheKey = `manga:search-resolve:v2:${provider}:${formatKey}:${normalizeMangaTitle(query).slice(0, 80)}`;
+  return getCached(
+    cacheKey,
+    async () => {
+      const hits = await searchConsumetManga(provider, query.trim());
+      if (hits.length === 0) return null;
+
+      for (const hit of hits) {
+        if (
+          !mangaProviderResultMatches(
+            expectedTitles,
+            hit.title,
+            hit.id,
+            options
+          )
+        ) {
+          continue;
+        }
+        const info = await getConsumetMangaInfoBySiteId(provider, hit.id);
+        if (!info?.chapters?.length) continue;
+        if (
+          !mangaProviderResultMatches(
+            expectedTitles,
+            info.title || hit.title,
+            info.chapters.slice(0, 5).map((c) => c.id),
+            options
+          )
+        ) {
+          continue;
+        }
+        return {
+          ...info,
+          title: info.title || hit.title,
+        };
+      }
+      return null;
+    },
+    CACHE_TTL.MANGA_CHAPTERS_LIST
+  );
 }
 
 /**
@@ -140,7 +297,9 @@ export async function getMangaInfo(
         });
         const data = response.data;
         if (!data) return null;
-        const chapters = normalizeChapters(data.chapters ?? data.chapter ?? []);
+        const chapters = sortChaptersAsc(
+          normalizeChapters(data.chapters ?? data.chapter ?? [])
+        );
         return {
           ...data,
           chapters: chapters.length > 0 ? chapters : undefined,
@@ -205,6 +364,11 @@ async function fetchChapterPages(
     }
     // Consumet mangahere/read is broken (500) and burns 20–35s on failure — skip it.
     return [];
+  }
+
+  if (provider === 'asurascans') {
+    const { getAsuraChapterPages } = await import('./asura-scans');
+    return getAsuraChapterPages(chapterId);
   }
 
   // Prefer provider-specific route (meta/anilist-manga/read often breaks on scraper ids)

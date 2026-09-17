@@ -29,6 +29,8 @@ export interface Manga {
   popularity?: number;
   status?: MangaStatus;
   format?: MangaFormat;
+  /** AniList ISO country: JP manga, KR manhwa, CN/TW manhua */
+  countryOfOrigin?: string;
   chapters?: number;
   volumes?: number;
   startDate?: {

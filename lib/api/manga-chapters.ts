@@ -4,10 +4,12 @@
  *
  * - provider=auto: fetch all sources in parallel, pick longest title-verified list
  * - explicit tab: only that source (no silent swap)
+ * - Manhwa (KR) / manhua (CN/TW): prefer MangaPark, MangaSee, MangaHere, AsuraScans
  */
 
 import { getMangaById } from '@/lib/api/anilist-manga';
-import { getMangaInfo, MANGA_PROVIDERS } from '@/lib/api/consumet-manga';
+import { getMangaInfo, getMangaInfoByTitleSearch, MANGA_PROVIDERS } from '@/lib/api/consumet-manga';
+import { getAsuraChaptersForTitles } from '@/lib/api/asura-scans';
 import {
   findMangaDexByAnilistId,
   getMangaDexChapters,
@@ -25,6 +27,9 @@ import {
 export const CHAPTER_UI_SOURCES = [
   'auto',
   'mangadex',
+  'mangapark',
+  'mangasee123',
+  'asurascans',
   'mangapill',
   'mangareader',
   'mangahere',
@@ -37,10 +42,44 @@ export type ChapterSource = ChapterUiSource;
 export const DEFAULT_CHAPTER_SOURCE: ChapterSource = 'auto';
 export const DEFAULT_CHAPTER_PAGE_SIZE = 60;
 
-const CONSUMET_SOURCES = ['mangapill', 'mangareader', 'mangahere'] as const;
+/** AniList-mapped Consumet scrapers */
+const CONSUMET_SOURCES = [
+  'mangapill',
+  'mangareader',
+  'mangahere',
+  'mangapark',
+  'mangasee123',
+] as const;
 
-/** Tie-break when chapter counts are equal (prefer official MD) */
-const PROVIDER_PRIORITY = ['mangadex', 'mangapill', 'mangareader', 'mangahere'] as const;
+/** Stronger for Korean / Chinese titles */
+const MANHWA_FRIENDLY_SOURCES = [
+  'mangapark',
+  'mangasee123',
+  'mangahere',
+  'asurascans',
+] as const;
+
+/** Tie-break when chapter counts are equal (JP manga) */
+const PROVIDER_PRIORITY = [
+  'mangadex',
+  'mangapark',
+  'mangasee123',
+  'asurascans',
+  'mangahere',
+  'mangapill',
+  'mangareader',
+] as const;
+
+/** Prefer scrapers over sparse MangaDex for KR/CN */
+const MANHWA_PROVIDER_PRIORITY = [
+  'mangahere',
+  'mangapark',
+  'mangasee123',
+  'asurascans',
+  'mangapill',
+  'mangareader',
+  'mangadex',
+] as const;
 
 export interface ChapterPageRange {
   page: number;
@@ -57,7 +96,7 @@ export interface ResolveChaptersResult {
   /** Requested mode (auto vs explicit tab) */
   mode: string;
   mangadexId?: string | null;
-  source?: 'mangadex' | 'consumet' | 'none';
+  source?: 'mangadex' | 'consumet' | 'asura' | 'none';
   page: number;
   limit: number;
   total: number;
@@ -75,6 +114,23 @@ function isAutoMode(provider: string): boolean {
 
 function isConsumetProvider(provider: string): boolean {
   return (CONSUMET_SOURCES as readonly string[]).includes(provider);
+}
+
+/** KR manhwa / CN·TW manhua — need scraper-heavy sources */
+export function isManhwaOrManhua(
+  manga: Pick<Manga, 'countryOfOrigin' | 'tags'>
+): boolean {
+  const country = (manga.countryOfOrigin || '').toUpperCase();
+  if (country === 'KR' || country === 'CN' || country === 'TW') return true;
+  const tags = manga.tags ?? [];
+  return tags.some((t) => {
+    const n = (t.name || '').toLowerCase();
+    return n === 'manhwa' || n === 'manhua' || n.includes('webtoon');
+  });
+}
+
+function priorityList(preferManhwa: boolean): readonly string[] {
+  return preferManhwa ? MANHWA_PROVIDER_PRIORITY : PROVIDER_PRIORITY;
 }
 
 async function resolveMangaDexId(
@@ -128,33 +184,83 @@ type ConsumetFetchResult = {
 async function chaptersFromConsumetProvider(
   anilistId: string,
   provider: string,
-  expectedTitles: string[]
+  expectedTitles: string[],
+  expectedChapterCount?: number | null,
+  format?: string | null
 ): Promise<ConsumetFetchResult> {
   if (!isConsumetProvider(provider)) {
     return { chapters: [], provider, rejected: 'empty' };
   }
 
+  const matchOpts = { format };
+
   try {
     const info = await getMangaInfo(anilistId, provider);
-    if (!info?.chapters?.length) {
-      return { chapters: [], provider, rejected: 'empty' };
+    const mappedChapters = info?.chapters ?? [];
+    const sampleIds = mappedChapters.slice(0, 8).map((ch) => ch.id).filter(Boolean);
+    const mappedOk =
+      mappedChapters.length > 0 &&
+      mangaProviderResultMatches(expectedTitles, info?.title, sampleIds, matchOpts);
+
+    const sparse =
+      !!expectedChapterCount &&
+      expectedChapterCount >= 40 &&
+      mappedChapters.length > 0 &&
+      mappedChapters.length < expectedChapterCount * 0.45;
+
+    // Bad AniList→site maps (Solo Leveling → Ragnarok / novel) or incomplete lists:
+    // resolve via scraper title search instead.
+    if (!mappedOk || sparse || mappedChapters.length === 0) {
+      const searched = await getMangaInfoByTitleSearch(
+        provider,
+        expectedTitles,
+        matchOpts
+      );
+      const searchChapters = searched?.chapters ?? [];
+      if (searchChapters.length > 0) {
+        if (
+          !mappedOk ||
+          searchChapters.length > mappedChapters.length ||
+          (sparse && searchChapters.length >= mappedChapters.length)
+        ) {
+          console.info(
+            `[Manga chapters] ${provider}: using title-search (${searchChapters.length} ch)` +
+              (mappedOk ? ` over sparse AniList map (${mappedChapters.length})` : ' after AniList map rejected')
+          );
+          return { chapters: searchChapters, provider };
+        }
+      }
     }
 
-    const sampleId = info.chapters[0]?.id;
-    if (!mangaProviderResultMatches(expectedTitles, info.title, sampleId)) {
+    if (!mappedOk) {
       console.warn(
         `[Manga chapters] Rejected ${provider} title mismatch for ${anilistId}:`,
-        typeof info.title === 'string' ? info.title : info.title,
+        sampleIds[0] || (typeof info?.title === 'string' ? info?.title : info?.title),
         'vs',
         expectedTitles[0]
       );
       return { chapters: [], provider, rejected: 'title_mismatch' };
     }
 
-    return { chapters: info.chapters, provider };
+    return { chapters: mappedChapters, provider };
   } catch (err) {
     console.warn(`[Manga chapters] Consumet ${provider}:`, (err as Error).message);
     return { chapters: [], provider, rejected: 'empty' };
+  }
+}
+
+async function chaptersFromAsura(
+  expectedTitles: string[]
+): Promise<ConsumetFetchResult> {
+  try {
+    const result = await getAsuraChaptersForTitles(expectedTitles);
+    if (!result?.chapters.length) {
+      return { chapters: [], provider: 'asurascans', rejected: 'empty' };
+    }
+    return { chapters: result.chapters, provider: 'asurascans' };
+  } catch (err) {
+    console.warn('[Manga chapters] AsuraScans:', (err as Error).message);
+    return { chapters: [], provider: 'asurascans', rejected: 'empty' };
   }
 }
 
@@ -163,33 +269,43 @@ interface FullChapterList {
   provider: string;
   mode: string;
   mangadexId?: string | null;
-  source: 'mangadex' | 'consumet' | 'none';
+  source: 'mangadex' | 'consumet' | 'asura' | 'none';
   unavailableReason?: 'empty' | 'title_mismatch';
 }
 
 type Candidate = {
   chapters: MangaChapter[];
   provider: string;
-  source: 'mangadex' | 'consumet';
+  source: 'mangadex' | 'consumet' | 'asura';
   mangadexId?: string | null;
 };
 
-function pickBestCandidate(candidates: Candidate[]): Candidate | null {
+function pickBestCandidate(
+  candidates: Candidate[],
+  preferManhwa: boolean
+): Candidate | null {
   if (candidates.length === 0) return null;
+  const order = priorityList(preferManhwa);
 
   return candidates.reduce((best, cur) => {
     if (cur.chapters.length > best.chapters.length) return cur;
     if (cur.chapters.length < best.chapters.length) return best;
-    const curPri = PROVIDER_PRIORITY.indexOf(cur.provider as (typeof PROVIDER_PRIORITY)[number]);
-    const bestPri = PROVIDER_PRIORITY.indexOf(best.provider as (typeof PROVIDER_PRIORITY)[number]);
+    const curPri = order.indexOf(cur.provider);
+    const bestPri = order.indexOf(best.provider);
     const curRank = curPri >= 0 ? curPri : 99;
     const bestRank = bestPri >= 0 ? bestPri : 99;
     return curRank < bestRank ? cur : best;
   });
 }
 
+function sourceOf(provider: string): 'mangadex' | 'consumet' | 'asura' {
+  if (provider === 'mangadex') return 'mangadex';
+  if (provider === 'asurascans') return 'asura';
+  return 'consumet';
+}
+
 /**
- * Auto mode: query MangaDex + scrapers in parallel, return the longest verified list.
+ * Auto mode: MangaDex + scrapers + AsuraScans in parallel; manhwa prefers scraper sources.
  */
 async function resolveAutoChapterList(
   anilistId: string,
@@ -197,15 +313,39 @@ async function resolveAutoChapterList(
   mangadexIdHint?: string | null
 ): Promise<FullChapterList> {
   const expectedTitles = collectAniListMangaTitles(manga);
+  const preferManhwa = isManhwaOrManhua(manga);
+  const format = manga.format ?? null;
 
-  const [mdResult, ...consumetResults] = await Promise.all([
+  const consumetToQuery: string[] = preferManhwa
+    ? [
+        ...new Set([
+          ...MANHWA_FRIENDLY_SOURCES.filter((p) => p !== 'asurascans'),
+          // Skip mangapill for manhwa auto — often maps light-novel text editions
+          ...CONSUMET_SOURCES.filter((p) => p !== 'mangapill'),
+        ]),
+      ]
+    : [...CONSUMET_SOURCES];
+
+  const expectedCount = manga.chapters ?? null;
+
+  const [mdResult, ...scrapers] = await Promise.all([
     chaptersFromMangaDex(anilistId, manga, mangadexIdHint),
-    ...CONSUMET_SOURCES.map((p) =>
-      chaptersFromConsumetProvider(anilistId, p, expectedTitles)
+    ...consumetToQuery.map((p) =>
+      chaptersFromConsumetProvider(
+        anilistId,
+        p,
+        expectedTitles,
+        expectedCount,
+        format
+      )
     ),
+    chaptersFromAsura(expectedTitles),
   ]);
 
+  const consumetResults = scrapers;
+
   const candidates: Candidate[] = [];
+  const seenProviders = new Set<string>();
 
   if (mdResult.chapters.length > 0) {
     candidates.push({
@@ -214,20 +354,21 @@ async function resolveAutoChapterList(
       source: 'mangadex',
       mangadexId: mdResult.mangadexId,
     });
+    seenProviders.add('mangadex');
   }
 
   for (const r of consumetResults) {
-    if (r.chapters.length > 0) {
-      candidates.push({
-        chapters: r.chapters,
-        provider: r.provider,
-        source: 'consumet',
-        mangadexId: mdResult.mangadexId,
-      });
-    }
+    if (r.chapters.length === 0 || seenProviders.has(r.provider)) continue;
+    seenProviders.add(r.provider);
+    candidates.push({
+      chapters: r.chapters,
+      provider: r.provider,
+      source: sourceOf(r.provider),
+      mangadexId: mdResult.mangadexId,
+    });
   }
 
-  const winner = pickBestCandidate(candidates);
+  const winner = pickBestCandidate(candidates, preferManhwa);
   if (winner) {
     return {
       chapters: winner.chapters,
@@ -279,13 +420,45 @@ async function resolveFullChapterList(
     };
   }
 
+  if (provider === 'asurascans') {
+    const asura = await chaptersFromAsura(expectedTitles);
+    const { mangadexId } = await chaptersFromMangaDex(
+      anilistId,
+      manga,
+      mangadexIdHint
+    );
+    if (asura.chapters.length > 0) {
+      return {
+        chapters: asura.chapters,
+        provider: 'asurascans',
+        mode,
+        mangadexId,
+        source: 'asura',
+      };
+    }
+    return {
+      chapters: [],
+      provider: 'asurascans',
+      mode,
+      mangadexId,
+      source: 'none',
+      unavailableReason: asura.rejected ?? 'empty',
+    };
+  }
+
   const consumet = await chaptersFromConsumetProvider(
     anilistId,
     provider,
-    expectedTitles
+    expectedTitles,
+    manga.chapters ?? null,
+    manga.format ?? null
   );
   if (consumet.chapters.length > 0) {
-    const { mangadexId } = await chaptersFromMangaDex(anilistId, manga, mangadexIdHint);
+    const { mangadexId } = await chaptersFromMangaDex(
+      anilistId,
+      manga,
+      mangadexIdHint
+    );
     return {
       chapters: consumet.chapters,
       provider: consumet.provider,
@@ -295,7 +468,11 @@ async function resolveFullChapterList(
     };
   }
 
-  const { mangadexId } = await chaptersFromMangaDex(anilistId, manga, mangadexIdHint);
+  const { mangadexId } = await chaptersFromMangaDex(
+    anilistId,
+    manga,
+    mangadexIdHint
+  );
 
   return {
     chapters: [],
@@ -402,7 +579,8 @@ export async function resolveMangaChapters(
     };
   }
 
-  const cacheKey = `manga:chapters:full:v5:${anilistId}:${mode}:${mangadexIdHint ?? ''}`;
+  // v10: reject light-novel editions; manhwa auto skips mangapill
+  const cacheKey = `manga:chapters:full:v10:${anilistId}:${mode}:${mangadexIdHint ?? ''}`;
 
   const full = await getCachedWhen(
     cacheKey,
@@ -429,4 +607,4 @@ export async function resolveMangaChapters(
   };
 }
 
-export { MANGA_PROVIDERS };
+export { MANGA_PROVIDERS, MANHWA_FRIENDLY_SOURCES };

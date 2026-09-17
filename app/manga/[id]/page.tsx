@@ -83,6 +83,9 @@ export default function MangaDetailPage() {
   const CHAPTER_TABS = [
     { id: 'auto', label: 'Auto' },
     { id: 'mangadex', label: 'MangaDex' },
+    { id: 'mangapark', label: 'MangaPark' },
+    { id: 'mangasee123', label: 'MangaSee' },
+    { id: 'asurascans', label: 'Asura' },
     { id: 'mangapill', label: 'MangaPill' },
     { id: 'mangareader', label: 'MangaReader' },
     { id: 'mangahere', label: 'MangaHere' },

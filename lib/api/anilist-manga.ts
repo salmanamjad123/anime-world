@@ -41,6 +41,7 @@ const MANGA_FIELDS = `
   popularity
   status
   format
+  countryOfOrigin
   chapters
   volumes
   startDate {
