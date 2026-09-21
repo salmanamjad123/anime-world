@@ -13,7 +13,7 @@ interface MangaPageImageProps {
   className?: string;
   /** Load immediately (first pages above the fold) */
   priority?: boolean;
-  /** Single-page modal: fit within viewport height */
+  /** Page-view modal: full-width image, natural height (parent scrolls) */
   fitInView?: boolean;
   /** Optional CDN Referer from provider (headerForImage) */
   referer?: string;
@@ -91,7 +91,7 @@ export function MangaPageImage({
       ref={containerRef}
       className={cn(
         'relative w-full bg-gray-800/40',
-        fitInView ? 'flex items-center justify-center min-h-0 h-full' : 'min-h-[120px]'
+        fitInView ? 'min-h-0' : 'min-h-[120px]'
       )}
     >
       {displaySrc && !failed ? (
@@ -101,7 +101,7 @@ export function MangaPageImage({
           alt={alt}
           className={cn(
             fitInView
-              ? 'max-w-full max-h-[calc(100vh-12rem)] object-contain mx-auto block'
+              ? 'block h-auto w-full max-w-none select-none [image-rendering:auto]'
               : 'w-full h-auto block',
             className
           )}
@@ -132,7 +132,10 @@ export function MangaPageImage({
         </div>
       ) : (
         <div
-          className="w-full aspect-[2/3] max-h-[85vh] animate-pulse bg-gray-800/80"
+          className={cn(
+            'w-full animate-pulse bg-gray-800/80',
+            fitInView ? 'min-h-[50vh]' : 'aspect-[2/3] max-h-[85vh]'
+          )}
           aria-hidden
         />
       )}

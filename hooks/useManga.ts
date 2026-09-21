@@ -238,6 +238,7 @@ export function useChapterPages(
     queryKey: ['manga', 'chapter', chapterId, provider],
     queryFn: () => fetchChapterPages(chapterId!, provider!, options?.refresh),
     enabled: !!chapterId && !!provider,
+    placeholderData: keepPreviousData,
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
   });
@@ -254,11 +255,27 @@ export function usePrefetchChapterPages(
     if (!chapterId || !provider) return;
 
     const run = () => {
-      void queryClient.prefetchQuery({
-        queryKey: ['manga', 'chapter', chapterId, provider],
-        queryFn: () => fetchChapterPages(chapterId, provider),
-        staleTime: 30 * 60 * 1000,
-      });
+      void queryClient
+        .prefetchQuery({
+          queryKey: ['manga', 'chapter', chapterId, provider],
+          queryFn: () => fetchChapterPages(chapterId, provider),
+          staleTime: 30 * 60 * 1000,
+        })
+        .then(() => {
+          const cached = queryClient.getQueryData<{ pages?: Array<{ img?: string }> }>([
+            'manga',
+            'chapter',
+            chapterId,
+            provider,
+          ]);
+          const urls = cached?.pages?.slice(0, 4).map((p) => p.img).filter(Boolean) as string[];
+          if (!urls?.length) return;
+          for (const url of urls) {
+            const img = new Image();
+            img.decoding = 'async';
+            img.src = getMangaPageImageUrl(url);
+          }
+        });
     };
 
     if (typeof requestIdleCallback !== 'undefined') {

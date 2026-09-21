@@ -10,15 +10,16 @@ import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
-import { getPreferredTitle, stripHtml, getScoreColor } from '@/lib/utils';
+import { getPreferredTitle, stripHtml, getScoreColor, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { BookOpen, Star, ChevronDown, ArrowLeft, Plus } from 'lucide-react';
+import { BookOpen, Star, ChevronDown, ArrowLeft, Plus, Bookmark } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { useMangaListStore } from '@/store/useMangaListStore';
-import { setMangaListItem, removeFromMangaList } from '@/lib/firebase/manga-firestore';
+import { useReadingHistoryStore } from '@/store/useReadingHistoryStore';
+import { setMangaListItem, removeFromMangaList, setSavedChapter, removeSavedChapter } from '@/lib/firebase/manga-firestore';
 import { AddToMangaListDropdown } from '@/components/manga/AddToMangaListDropdown';
 
 const CHAPTER_PAGE_SIZE = 60;
@@ -67,9 +68,19 @@ export default function MangaDetailPage() {
   const { user } = useUserStore();
   const { openAuthModal } = useAuthModalStore();
   const { addToList, removeFromList, getListStatus } = useMangaListStore();
+  const {
+    getProgress,
+    getReadCount,
+    isChapterRead,
+    isChapterSaved,
+    saveChapter,
+    unsaveChapter,
+  } = useReadingHistoryStore();
 
   const resolvedProvider = resolvedProviderFromApi || provider;
   const listStatus = getListStatus(mangaId);
+  const readingProgress = getProgress(mangaId);
+  const readCount = getReadCount(mangaId);
   const totalPages = Math.max(1, pageRanges.length || Math.ceil(chaptersTotal / CHAPTER_PAGE_SIZE) || 1);
 
   useEffect(() => {
@@ -122,6 +133,30 @@ export default function MangaDetailPage() {
 
   const handleReadChapter = (chapter: MangaChapter) => {
     router.push(ROUTES.MANGA_READ(mangaId, chapter.id, resolvedProvider, resolvedMangadexId ?? undefined));
+  };
+
+  const handleToggleSaveChapter = (chapter: MangaChapter) => {
+    const saved = isChapterSaved(mangaId, chapter.id);
+    if (saved) {
+      unsaveChapter(mangaId, chapter.id);
+      if (user?.uid) {
+        removeSavedChapter(user.uid, mangaId, chapter.id).catch(() => {});
+      }
+      return;
+    }
+    const item = {
+      mangaId,
+      chapterId: chapter.id,
+      chapterNumber: chapter.chapter,
+      chapterTitle: chapter.title,
+      mangaTitle: title,
+      mangaImage: coverImage,
+      provider: resolvedProvider,
+    };
+    saveChapter(item);
+    if (user?.uid) {
+      setSavedChapter(user.uid, { ...item, savedAt: new Date() }).catch(() => {});
+    }
   };
 
   const handleListSelect = async (status: ListStatus) => {
@@ -296,6 +331,12 @@ export default function MangaDetailPage() {
                   <h2 className="text-xl md:text-2xl font-bold text-white">Chapters</h2>
                   {chaptersTotal > 0 && (
                     <p className="text-gray-500 text-xs mt-0.5">
+                      {readCount > 0 && (
+                        <span className="text-amber-400/90">
+                          {readCount} / {chaptersTotal} read
+                          {' · '}
+                        </span>
+                      )}
                       {chapterMode === 'auto' && resolvedProvider !== 'auto' ? (
                         <>
                           Best available · {chaptersTotal} chapters via{' '}
@@ -366,21 +407,65 @@ export default function MangaDetailPage() {
                       const titleExtra = isRedundantChapterTitle(chapter.title, num)
                         ? null
                         : chapter.title;
+                      const read = isChapterRead(mangaId, chapter.id);
+                      const current = readingProgress?.chapterId === chapter.id;
+                      const saved = isChapterSaved(mangaId, chapter.id);
                       return (
-                        <button
-                          key={chapter.id}
-                          onClick={() => handleReadChapter(chapter)}
-                          className="bg-gray-700/50 hover:bg-amber-600/20 hover:border-amber-500/50 rounded-md px-3 py-2 transition-all text-left border border-transparent"
-                        >
-                          <div className="text-white text-sm font-semibold leading-tight">
-                            {num ? `Ch. ${num}` : chapter.title || 'Chapter'}
-                          </div>
-                          {titleExtra && (
-                            <div className="text-gray-400 text-xs mt-0.5 line-clamp-1 leading-snug">
-                              {titleExtra}
+                        <div key={chapter.id} className="relative group/ch">
+                          <button
+                            onClick={() => handleReadChapter(chapter)}
+                            className={cn(
+                              'w-full rounded-md px-3 py-2 pr-8 transition-all text-left border',
+                              current &&
+                                'bg-amber-600/20 border-amber-500/50 hover:bg-amber-600/30',
+                              read &&
+                                !current &&
+                                'bg-gray-800/70 border-gray-700/50 hover:border-gray-600',
+                              !read &&
+                                !current &&
+                                'bg-gray-700/50 border-transparent hover:bg-amber-600/20 hover:border-amber-500/50'
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                'text-sm font-semibold leading-tight',
+                                current ? 'text-amber-300' : read ? 'text-gray-500' : 'text-white'
+                              )}
+                            >
+                              {num ? `Ch. ${num}` : chapter.title || 'Chapter'}
+                              {current && (
+                                <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+                                  Continue
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </button>
+                            {titleExtra && (
+                              <div
+                                className={cn(
+                                  'text-xs mt-0.5 line-clamp-1 leading-snug',
+                                  read && !current ? 'text-gray-600' : 'text-gray-400'
+                                )}
+                              >
+                                {titleExtra}
+                              </div>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleToggleSaveChapter(chapter);
+                            }}
+                            title={saved ? 'Remove saved chapter' : 'Save chapter'}
+                            className={cn(
+                              'absolute top-1.5 right-1.5 p-1 rounded text-gray-500 hover:text-amber-400 transition-colors',
+                              saved && 'text-amber-400'
+                            )}
+                          >
+                            <Bookmark className={cn('w-3.5 h-3.5', saved && 'fill-current')} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>

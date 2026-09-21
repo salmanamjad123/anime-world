@@ -74,6 +74,22 @@ export interface ReadingProgress {
   completed: boolean;
   lastRead: Date;
   provider?: string;
+  /** Chapter IDs marked read for this manga */
+  readChapterIds?: string[];
+}
+
+/**
+ * Bookmarked chapter (saved to read later)
+ */
+export interface SavedChapter {
+  mangaId: string;
+  chapterId: string;
+  chapterNumber?: string;
+  chapterTitle?: string;
+  mangaTitle: string;
+  mangaImage: string;
+  provider?: string;
+  savedAt: Date;
 }
 
 /**

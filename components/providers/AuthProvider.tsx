@@ -14,6 +14,7 @@ import { getWatchlist, getWatchHistory, trimContinueWatchingToMax } from '@/lib/
 import {
   getMangaList,
   getReadingHistory,
+  getSavedChapters,
   trimContinueReadingToMax,
 } from '@/lib/firebase/manga-firestore';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
@@ -26,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { syncWithFirebase: syncWatchlist, clearList } = useWatchlistStore();
   const { syncWithFirebase: syncHistory, clearHistory } = useHistoryStore();
   const { syncWithFirebase: syncMangaList } = useMangaListStore();
-  const { syncWithFirebase: syncReadingHistory } = useReadingHistoryStore();
+  const { syncWithFirebase: syncReadingHistory, syncSavedChapters } = useReadingHistoryStore();
   const listsSyncedForUid = useRef<string | null>(null);
 
   useEffect(() => {
@@ -82,16 +83,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           void (async () => {
             try {
-              const [watchlist, history, mangaList, readingHistory] = await Promise.all([
+              const [watchlist, history, mangaList, readingHistory, savedChapters] = await Promise.all([
                 getWatchlist(firebaseUser.uid),
                 getWatchHistory(firebaseUser.uid),
                 getMangaList(firebaseUser.uid),
                 getReadingHistory(firebaseUser.uid),
+                getSavedChapters(firebaseUser.uid),
               ]);
               syncWatchlist(watchlist);
               syncHistory(history);
               syncMangaList(mangaList);
               syncReadingHistory(readingHistory);
+              syncSavedChapters(savedChapters);
               trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
               trimContinueReadingToMax(firebaseUser.uid).catch(() => {});
             } catch (error) {
@@ -118,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncHistory,
     syncMangaList,
     syncReadingHistory,
+    syncSavedChapters,
     clearList,
     clearHistory,
   ]);

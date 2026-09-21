@@ -21,14 +21,24 @@ import {
   ArrowLeft,
   Square,
   X,
+  Bookmark,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MangaChapter, MangaChapterPage } from '@/types';
 import { useReadingHistoryStore } from '@/store/useReadingHistoryStore';
 import { useUserStore } from '@/store/useUserStore';
-import { updateReadingProgress } from '@/lib/firebase/manga-firestore';
-import { getPreferredTitle } from '@/lib/utils';
+import {
+  updateReadingProgress,
+  markMangaChapterRead,
+  setSavedChapter,
+  removeSavedChapter,
+} from '@/lib/firebase/manga-firestore';
+import { cn, getPreferredTitle } from '@/lib/utils';
 import { MangaPageImage } from '@/components/manga/MangaPageImage';
+
+const PAGE_VIEW_ZOOM_STEPS = [100, 125, 150, 200, 250] as const;
 
 export default function MangaReadPage() {
   const params = useParams();
@@ -41,13 +51,22 @@ export default function MangaReadPage() {
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pageViewOpen, setPageViewOpen] = useState(false);
+  const [pageViewZoom, setPageViewZoom] = useState(100);
   const [scrollViewPage, setScrollViewPage] = useState(1);
   const pageRefs = useRef<Map<number, HTMLDivElement | null>>(new Map());
+  const pageViewScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumedRef = useRef(false);
 
   const { user } = useUserStore();
-  const { updateProgress, getProgress } = useReadingHistoryStore();
+  const {
+    updateProgress,
+    getProgress,
+    markChapterRead,
+    saveChapter,
+    unsaveChapter,
+    isChapterSaved,
+  } = useReadingHistoryStore();
   const { data: infoData } = useMangaInfo(mangaId, mangadexId);
   const manga = infoData?.manga;
   const resolvedMangadexId = mangadexId ?? manga?.mangadexId ?? null;
@@ -59,14 +78,27 @@ export default function MangaReadPage() {
       : providerParam !== 'auto'
         ? providerParam
         : null;
-  const { data: chapterData, isLoading, isError, refetch } = useChapterPages(
-    chapterId,
-    readProvider
-  );
+  const {
+    data: chapterData,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+    isError,
+    refetch,
+  } = useChapterPages(chapterId, readProvider);
 
-  const chapters: MangaChapter[] = chaptersData?.chapters || [];
+  const chapters: MangaChapter[] = useMemo(() => {
+    const list = chaptersData?.chapters || [];
+    return [...list].sort((a, b) => {
+      const na = Number(a.chapter);
+      const nb = Number(b.chapter);
+      if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }, [chaptersData?.chapters]);
   const pages = chapterData?.pages || [];
   const currentChapter = chapters.find((c) => c.id === chapterId);
+  const chapterSaved = !!(chapterId && isChapterSaved(mangaId, chapterId));
 
   const currentIndex = chapters.findIndex((c) => c.id === chapterId);
   const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null;
@@ -89,9 +121,38 @@ export default function MangaReadPage() {
     resumedRef.current = false;
   }, [chapterId]);
 
+  useEffect(() => {
+    setPageViewZoom(100);
+    pageViewScrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [currentPageIndex, chapterId]);
+
+  const pageViewZoomIn = useCallback(() => {
+    setPageViewZoom((z) => {
+      const next = PAGE_VIEW_ZOOM_STEPS.find((s) => s > z);
+      return next ?? PAGE_VIEW_ZOOM_STEPS[PAGE_VIEW_ZOOM_STEPS.length - 1];
+    });
+  }, []);
+
+  const pageViewZoomOut = useCallback(() => {
+    setPageViewZoom((z) => {
+      let idx = PAGE_VIEW_ZOOM_STEPS.findIndex((s) => s >= z);
+      if (idx === -1) idx = PAGE_VIEW_ZOOM_STEPS.length - 1;
+      return PAGE_VIEW_ZOOM_STEPS[Math.max(0, idx - 1)];
+    });
+  }, []);
+
+  const cyclePageViewZoom = useCallback(() => {
+    setPageViewZoom((z) => {
+      let idx = PAGE_VIEW_ZOOM_STEPS.findIndex((s) => s >= z);
+      if (idx === -1) idx = 0;
+      const nextIdx = (idx + 1) % PAGE_VIEW_ZOOM_STEPS.length;
+      return PAGE_VIEW_ZOOM_STEPS[nextIdx];
+    });
+  }, []);
+
   // Resume from saved page or ?page= query param
   useEffect(() => {
-    if (pages.length === 0 || resumedRef.current) return;
+    if (pages.length === 0 || resumedRef.current || isPlaceholderData) return;
 
     const pageParam = searchParams.get('page');
     const saved = getProgress(mangaId);
@@ -110,11 +171,11 @@ export default function MangaReadPage() {
       });
     }
     resumedRef.current = true;
-  }, [pages.length, chapterId, mangaId, searchParams, getProgress]);
+  }, [pages.length, chapterId, mangaId, searchParams, getProgress, isPlaceholderData]);
 
   // Save reading progress
   useEffect(() => {
-    if (!chapterId || pages.length === 0 || !manga) return;
+    if (!chapterId || pages.length === 0 || !manga || isPlaceholderData) return;
 
     const pageIndex = pageViewOpen ? currentPageIndex : scrollViewPage - 1;
     const mangaTitle = getPreferredTitle(manga.title);
@@ -157,6 +218,7 @@ export default function MangaReadPage() {
     user?.uid,
     updateProgress,
     getProgress,
+    isPlaceholderData,
   ]);
 
   useEffect(() => {
@@ -183,28 +245,63 @@ export default function MangaReadPage() {
     return () => observer.disconnect();
   }, [pages]);
 
+  const goToChapter = useCallback(
+    (target: MangaChapter | null) => {
+      if (!target || !chapterId) return;
+      markChapterRead(mangaId, chapterId);
+      if (user?.uid) {
+        markMangaChapterRead(user.uid, mangaId, chapterId).catch(() => {});
+      }
+      router.replace(
+        ROUTES.MANGA_READ(mangaId, target.id, navProvider, resolvedMangadexId ?? undefined)
+      );
+    },
+    [chapterId, mangaId, markChapterRead, navProvider, resolvedMangadexId, router, user?.uid]
+  );
+
   const handlePrevPage = useCallback(() => {
     if (currentPageIndex > 0) {
       setCurrentPageIndex((i) => i - 1);
     } else if (prevChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, navProvider, resolvedMangadexId ?? undefined));
+      goToChapter(prevChapter);
     }
-  }, [currentPageIndex, prevChapter, mangaId, navProvider, router, resolvedMangadexId]);
+  }, [currentPageIndex, prevChapter, goToChapter]);
 
   const handleNextPage = useCallback(() => {
     if (currentPageIndex < pages.length - 1) {
       setCurrentPageIndex((i) => i + 1);
     } else if (nextChapter) {
-      router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, navProvider, resolvedMangadexId ?? undefined));
+      goToChapter(nextChapter);
     }
-  }, [currentPageIndex, pages.length, nextChapter, mangaId, navProvider, router, resolvedMangadexId]);
+  }, [currentPageIndex, pages.length, nextChapter, goToChapter]);
 
-  const handlePrevChapter = () => {
-    if (prevChapter) router.push(ROUTES.MANGA_READ(mangaId, prevChapter.id, navProvider, resolvedMangadexId ?? undefined));
-  };
+  const handlePrevChapter = () => goToChapter(prevChapter);
+  const handleNextChapter = () => goToChapter(nextChapter);
 
-  const handleNextChapter = () => {
-    if (nextChapter) router.push(ROUTES.MANGA_READ(mangaId, nextChapter.id, navProvider, resolvedMangadexId ?? undefined));
+  const handleToggleSave = () => {
+    if (!chapterId || !manga) return;
+    const mangaTitle = getPreferredTitle(manga.title);
+    const mangaImage = manga.coverImage?.large || manga.coverImage?.medium || '';
+    if (chapterSaved) {
+      unsaveChapter(mangaId, chapterId);
+      if (user?.uid) {
+        removeSavedChapter(user.uid, mangaId, chapterId).catch(() => {});
+      }
+      return;
+    }
+    const item = {
+      mangaId,
+      chapterId,
+      chapterNumber: currentChapter?.chapter,
+      chapterTitle: currentChapter?.title,
+      mangaTitle,
+      mangaImage,
+      provider: navProvider,
+    };
+    saveChapter(item);
+    if (user?.uid) {
+      setSavedChapter(user.uid, { ...item, savedAt: new Date() }).catch(() => {});
+    }
   };
 
   useEffect(() => {
@@ -299,23 +396,43 @@ export default function MangaReadPage() {
               </Button>
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPageViewOpen(true)}
-              title="Page view (one page at a time)"
-              className="flex items-center gap-1.5 shrink-0"
-            >
-              <Square className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">Page view</span>
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleSave}
+                title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
+                className={cn(
+                  'flex items-center gap-1.5 min-h-[40px] min-w-[40px]',
+                  chapterSaved ? 'text-amber-400 hover:text-amber-300' : ''
+                )}
+              >
+                <Bookmark className={cn('w-4 h-4', chapterSaved && 'fill-current')} />
+                <span className="hidden sm:inline text-xs">{chapterSaved ? 'Saved' : 'Save'}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPageViewOpen(true)}
+                title="Page view (one page at a time)"
+                className="flex items-center gap-1.5"
+              >
+                <Square className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Page view</span>
+              </Button>
+            </div>
           </div>
         </div>
+        {isFetching && isPlaceholderData && (
+          <div className="h-0.5 bg-gray-800 overflow-hidden">
+            <div className="h-full w-1/3 bg-amber-500 animate-pulse" />
+          </div>
+        )}
       </div>
 
       {/* Content - Scroll view: all pages stacked, edge-to-edge */}
       <main className={`w-full pb-4 ${pageViewOpen ? 'overflow-hidden' : ''}`} aria-hidden={pageViewOpen}>
-        {isLoading ? (
+        {isLoading && pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 px-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mb-4" />
             <p className="text-gray-400">Loading chapter...</p>
@@ -336,7 +453,12 @@ export default function MangaReadPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col w-full md:max-w-[720px] md:mx-auto md:px-4 md:py-4 md:gap-2">
+          <div
+            className={cn(
+              'flex flex-col w-full md:max-w-[720px] md:mx-auto md:px-4 md:py-4 md:gap-2',
+              isPlaceholderData && 'opacity-60'
+            )}
+          >
             {pages.map((page: MangaChapterPage, idx: number) => (
               <div
                 key={idx}
@@ -355,6 +477,30 @@ export default function MangaReadPage() {
                 />
               </div>
             ))}
+            <div className="flex items-center justify-center gap-0 py-8 px-4">
+              <div className="flex items-center gap-0 rounded-lg border border-gray-700 bg-gray-800/50 overflow-hidden">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={handlePrevChapter}
+                  disabled={!prevChapter}
+                  className="rounded-none min-h-[44px]"
+                >
+                  <ChevronLeft className="w-5 h-5 mr-1" />
+                  Prev
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleNextChapter}
+                  disabled={!nextChapter}
+                  className="rounded-none min-h-[44px] bg-amber-600 hover:bg-amber-700"
+                >
+                  Next
+                  <ChevronRight className="w-5 h-5 ml-1" />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -362,13 +508,13 @@ export default function MangaReadPage() {
       {/* Page view modal */}
       {pageViewOpen && pages.length > 0 && (
         <div
-          className="fixed inset-0 z-50 bg-black/95 flex flex-col overscroll-none"
+          className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-black/95 overscroll-none"
           role="dialog"
           aria-modal="true"
           aria-label="Page view"
         >
-          {/* Top: Chapter change - buttons close to count */}
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-800 shrink-0 min-h-[52px]">
+          {/* Top: Chapter change — fixed chrome, not part of image scroll */}
+          <div className="z-10 flex shrink-0 items-center justify-between gap-2 border-b border-gray-800 bg-gray-900/98 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm min-h-[52px] touch-manipulation">
             <Button
               variant="ghost"
               size="sm"
@@ -406,24 +552,86 @@ export default function MangaReadPage() {
                 <ChevronRight className="w-5 h-5" />
               </Button>
             </div>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={pageViewZoomOut}
+                disabled={pageViewZoom <= PAGE_VIEW_ZOOM_STEPS[0]}
+                title="Zoom out"
+                className="min-h-[44px] min-w-[40px] text-gray-400 hover:text-white"
+              >
+                <ZoomOut className="w-5 h-5" />
+              </Button>
+              <button
+                type="button"
+                onClick={cyclePageViewZoom}
+                className="min-w-[3rem] rounded-md px-1 py-2 text-xs tabular-nums text-gray-400 hover:text-white"
+                title="Double-tap page to cycle zoom"
+              >
+                {pageViewZoom}%
+              </button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={pageViewZoomIn}
+                disabled={pageViewZoom >= PAGE_VIEW_ZOOM_STEPS[PAGE_VIEW_ZOOM_STEPS.length - 1]}
+                title="Zoom in (image area only)"
+                className="min-h-[44px] min-w-[40px] text-gray-400 hover:text-white"
+              >
+                <ZoomIn className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleSave}
+                title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
+                className={cn(
+                  'min-h-[44px] min-w-[44px]',
+                  chapterSaved ? 'text-amber-400 hover:text-amber-300' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                <Bookmark className={cn('w-5 h-5', chapterSaved && 'fill-current')} />
+              </Button>
+            </div>
           </div>
 
-          {/* Content - one page, fit to view */}
-          <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden p-2 sm:p-4">
-            <MangaPageImage
-              src={pages[currentPageIndex]?.img ?? ''}
-              alt={`Page ${currentPageIndex + 1}`}
-              priority
-              fitInView
-              referer={
-                pages[currentPageIndex]?.headerForImage?.Referer ||
-                pages[currentPageIndex]?.headerForImage?.referer
-              }
-            />
+          {/* Image only — scroll inside this pane; top/bottom bars stay fixed */}
+          <div
+            ref={pageViewScrollRef}
+            className={cn(
+              'min-h-0 flex-1 overscroll-contain bg-[#050505]',
+              pageViewZoom > 100
+                ? 'overflow-auto touch-pan-x touch-pan-y'
+                : 'overflow-x-hidden overflow-y-auto touch-pan-y'
+            )}
+            onWheel={(e) => {
+              if (!e.ctrlKey && !e.metaKey) return;
+              e.preventDefault();
+              if (e.deltaY < 0) pageViewZoomIn();
+              else pageViewZoomOut();
+            }}
+          >
+            <div
+              className="mx-auto w-full max-w-3xl pb-6"
+              style={pageViewZoom > 100 ? { width: `${pageViewZoom}%` } : undefined}
+              onDoubleClick={cyclePageViewZoom}
+            >
+              <MangaPageImage
+                src={pages[currentPageIndex]?.img ?? ''}
+                alt={`Page ${currentPageIndex + 1}`}
+                priority
+                fitInView
+                referer={
+                  pages[currentPageIndex]?.headerForImage?.Referer ||
+                  pages[currentPageIndex]?.headerForImage?.referer
+                }
+              />
+            </div>
           </div>
 
-          {/* Bottom: Page change - buttons close to count */}
-          <div className="flex items-center justify-center px-4 py-3 border-t border-gray-800 shrink-0 min-h-[60px]">
+          {/* Bottom: Page change — fixed chrome */}
+          <div className="z-10 flex shrink-0 items-center justify-center border-t border-gray-800 bg-gray-900/98 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm min-h-[60px] touch-manipulation">
             <div className="flex items-center gap-0 rounded-lg border border-gray-700 bg-gray-800/50 overflow-hidden">
               <Button
                 variant="secondary"

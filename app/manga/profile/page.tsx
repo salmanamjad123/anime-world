@@ -16,7 +16,7 @@ import { ROUTES } from '@/constants/routes';
 import { Button } from '@/components/ui/Button';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Input } from '@/components/ui/Input';
-import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, BookOpen, Loader2 } from 'lucide-react';
+import { User, History, Heart, ShieldAlert, Lock, Pencil, Trash2, MoreVertical, Check, BookOpen, Loader2, Bookmark } from 'lucide-react';
 import { updateUserDisplayName } from '@/lib/firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import {
@@ -24,11 +24,12 @@ import {
   removeFromReadingHistory,
   setMangaListItem,
   removeFromMangaList,
+  removeSavedChapter,
 } from '@/lib/firebase/manga-firestore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import type { ListStatus } from '@/types';
 
-type Section = 'profile' | 'reading' | 'readlist';
+type Section = 'profile' | 'reading' | 'saved' | 'readlist';
 
 const SUB_TABS: { key: 'all' | ListStatus; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -50,6 +51,7 @@ const LIST_TABS: { key: ListStatus; label: string }[] = [
 const TOP_TABS: { key: Section; label: string; icon: typeof User }[] = [
   { key: 'profile', label: 'Profile', icon: User },
   { key: 'reading', label: 'Continue Reading', icon: History },
+  { key: 'saved', label: 'Saved', icon: Bookmark },
   { key: 'readlist', label: 'Read List', icon: Heart },
 ];
 
@@ -149,7 +151,7 @@ function MangaProfilePageContent() {
   const tabParam = searchParams.get('tab');
 
   const activeSection: Section = (() => {
-    if (sectionParam === 'profile' || sectionParam === 'reading' || sectionParam === 'readlist') {
+    if (sectionParam === 'profile' || sectionParam === 'reading' || sectionParam === 'readlist' || sectionParam === 'saved') {
       return sectionParam;
     }
     return 'profile';
@@ -178,7 +180,7 @@ function MangaProfilePageContent() {
   const { user, isLoading } = useUserStore();
   const { openAuthModal } = useAuthModalStore();
   const { readlist, getItemsByStatus, setListStatus, removeFromList } = useMangaListStore();
-  const { history, removeFromHistory, clearHistory } = useReadingHistoryStore();
+  const { history, savedChapters, removeFromHistory, clearHistory, unsaveChapter } = useReadingHistoryStore();
 
   useEffect(() => {
     if (!user && !isLoading) router.replace(ROUTES.MANGA);
@@ -350,6 +352,75 @@ function MangaProfilePageContent() {
           })}
         </div>
       </>
+    );
+  };
+
+  const renderSavedChapters = () => {
+    if (savedChapters.length === 0) {
+      return renderEmpty('No saved chapters yet. Bookmark a chapter while reading.', {
+        label: 'Browse manga',
+        href: ROUTES.MANGA,
+      });
+    }
+
+    const handleUnsave = async (mangaId: string, chapterId: string) => {
+      unsaveChapter(mangaId, chapterId);
+      if (user?.uid) {
+        try {
+          await removeSavedChapter(user.uid, mangaId, chapterId);
+        } catch (e) {
+          console.error('Failed to remove saved chapter:', e);
+        }
+      }
+    };
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {savedChapters.map((item) => {
+          const readUrl = ROUTES.MANGA_READ(item.mangaId, item.chapterId, item.provider);
+          return (
+            <div
+              key={`${item.mangaId}::${item.chapterId}`}
+              className="group relative bg-gray-800/50 rounded-xl overflow-hidden border border-gray-700/50 hover:border-amber-500/50 transition-all"
+            >
+              <Link href={readUrl} className="flex gap-4 p-4">
+                <div className="relative w-20 h-28 sm:w-24 sm:h-32 shrink-0 rounded-lg overflow-hidden bg-gray-700">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={item.mangaImage} alt={item.mangaTitle} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-white" />
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 py-1 pr-10">
+                  <h3 className="font-semibold text-sm text-white line-clamp-2 group-hover:text-amber-400 transition-colors break-words">
+                    {item.mangaTitle}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {item.chapterNumber ? `Ch. ${item.chapterNumber}` : 'Chapter'}
+                    {item.chapterTitle && ` · ${item.chapterTitle}`}
+                  </p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">Saved</p>
+                </div>
+              </Link>
+              {user && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleUnsave(item.mangaId, item.chapterId);
+                  }}
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gray-900/80 hover:bg-red-500/80 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                  aria-label="Remove saved chapter"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
@@ -599,7 +670,7 @@ function MangaProfilePageContent() {
                   Hi, {user?.displayName || user?.email?.split('@')[0] || 'Guest'}
                 </h1>
                 <p className="text-gray-400 mt-1 text-sm sm:text-base">
-                  Manage your profile, continue reading, and your manga list
+                  Manage your profile, continue reading, saved chapters, and your manga list
                 </p>
               </div>
             </div>
@@ -672,6 +743,16 @@ function MangaProfilePageContent() {
                   Continue Reading
                 </h2>
                 {renderReadingWithProgress()}
+              </section>
+            )}
+
+            {activeSection === 'saved' && (
+              <section>
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <Bookmark className="w-5 h-5 text-gray-400" />
+                  Saved Chapters
+                </h2>
+                {renderSavedChapters()}
               </section>
             )}
 
