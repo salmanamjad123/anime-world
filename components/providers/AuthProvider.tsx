@@ -75,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             lastLogin: data.lastLogin?.toDate?.(),
             emailVerified: data.emailVerified ?? false,
             gameDemoAccess: data.gameDemoAccess === true,
+            adsHidden: data.adsHidden === true,
           });
 
           // Sync lists once per uid (not on every gameDemoAccess toggle)

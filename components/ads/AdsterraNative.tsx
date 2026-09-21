@@ -7,7 +7,7 @@ import {
   ADSTERRA_NATIVE_SRC,
 } from '@/lib/ads';
 import { useAdMode } from '@/hooks/useAdMode';
-import { useAdsEnabled } from '@/hooks/useAdsEnabled';
+import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 import { AdsterraBanner } from './AdsterraBanner';
 
 const DISMISS_KEY = 'av-watch-player-ad-dismissed';
@@ -18,7 +18,8 @@ const DISMISS_KEY = 'av-watch-player-ad-dismissed';
  */
 export function AdsterraNative() {
   const mode = useAdMode();
-  const { enabled: adsEnabled, isLoading: adsSettingsLoading } = useAdsEnabled();
+  const { visible: adsVisible, isLoading: adsSettingsLoading } =
+    useAdPlacementVisible('watch_player');
   const mountRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const hasNativeUnit = Boolean(ADSTERRA_NATIVE_SRC && ADSTERRA_NATIVE_CONTAINER);
@@ -31,7 +32,7 @@ export function AdsterraNative() {
 
   useEffect(() => {
     if (
-      !adsEnabled ||
+      !adsVisible ||
       mode !== 'live' ||
       !hasNativeUnit ||
       !mountRef.current ||
@@ -53,7 +54,7 @@ export function AdsterraNative() {
     return () => {
       el.innerHTML = '';
     };
-  }, [adsEnabled, mode, hasNativeUnit, visible]);
+  }, [adsVisible, mode, hasNativeUnit, visible]);
 
   function dismiss() {
     sessionStorage.setItem(DISMISS_KEY, '1');
@@ -61,7 +62,7 @@ export function AdsterraNative() {
   }
 
   if (!visible || mode === 'loading') return null;
-  if (!adsSettingsLoading && !adsEnabled) return null;
+  if (!adsSettingsLoading && !adsVisible) return null;
 
   const closeButton = (
     <button
@@ -107,7 +108,7 @@ export function AdsterraNative() {
   return (
     <div className="relative mt-4">
       {closeButton}
-      <AdsterraBanner variant="inline" />
+      <AdsterraBanner placement="watch_player" variant="inline" />
     </div>
   );
 }

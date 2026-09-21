@@ -20,6 +20,7 @@ export function MangaSynopsisAd() {
 
   return (
     <AdsterraBanner
+      placement="manga_synopsis_320"
       variant="strip"
       size="320x50"
       dismissible

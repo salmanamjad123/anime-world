@@ -35,6 +35,7 @@ function TrendingNowHeader() {
       >
         {showStrip && (
           <AdsterraBanner
+            placement="home_trending_320"
             variant="strip"
             size="320x50"
             dismissible

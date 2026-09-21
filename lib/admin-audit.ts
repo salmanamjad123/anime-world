@@ -17,7 +17,10 @@ export type AdminAuditAction =
   | 'admin_login'
   | 'grant_game_demo'
   | 'revoke_game_demo'
-  | 'set_ads_enabled';
+  | 'set_ads_enabled'
+  | 'set_ads_settings'
+  | 'hide_ads_user'
+  | 'show_ads_user';
 
 export type AdminAuditEntry = {
   id: string;

@@ -127,7 +127,7 @@ export function AnimeGrid({
       ))}
       {showAd && (
         <div className="col-span-2">
-          <AdsterraBanner variant="grid" />
+          <AdsterraBanner placement="home_grid_300" variant="grid" />
         </div>
       )}
     </div>

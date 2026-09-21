@@ -5,7 +5,8 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ADSTERRA_BANNER_KEY, ADSTERRA_BANNER_320_KEY } from '@/lib/ads';
 import { useAdMode } from '@/hooks/useAdMode';
-import { useAdsEnabled } from '@/hooks/useAdsEnabled';
+import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
+import type { AdPlacementId } from '@/lib/ads-placements';
 
 const SIZES = {
   '300x250': { width: 300, height: 250, key: ADSTERRA_BANNER_KEY },
@@ -16,6 +17,7 @@ export const ADSTERRA_DISMISS_HOME_320 = 'av-banner-320-dismissed';
 export const ADSTERRA_DISMISS_MANGA_320 = 'av-banner-320-manga-dismissed';
 
 export function AdsterraBanner({
+  placement,
   variant = 'section',
   size = '300x250',
   dismissible = false,
@@ -23,6 +25,7 @@ export function AdsterraBanner({
   onDismiss,
   className,
 }: {
+  placement: AdPlacementId;
   variant?: 'section' | 'grid' | 'inline' | 'strip';
   size?: keyof typeof SIZES;
   dismissible?: boolean;
@@ -31,7 +34,8 @@ export function AdsterraBanner({
   className?: string;
 }) {
   const mode = useAdMode();
-  const { enabled: adsEnabled, isLoading: adsSettingsLoading } = useAdsEnabled();
+  const { visible: adsVisible, isLoading: adsSettingsLoading } =
+    useAdPlacementVisible(placement);
   const { width, height, key } = SIZES[size];
   const liveRef = useRef<HTMLIFrameElement>(null);
   const [hidden, setHidden] = useState(false);
@@ -52,7 +56,7 @@ export function AdsterraBanner({
   }, [canFill, key, width, height]);
 
   if (hidden) return null;
-  if (!adsSettingsLoading && !adsEnabled) return null;
+  if (!adsSettingsLoading && !adsVisible) return null;
 
   const frameClass = cn(
     'overflow-hidden rounded-md border-0 bg-gray-800/40',

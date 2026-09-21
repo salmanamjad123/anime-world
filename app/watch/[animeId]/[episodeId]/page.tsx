@@ -29,7 +29,7 @@ import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 import { AdsterraNative } from '@/components/ads/AdsterraNative';
 import { openAdsterraSmartlink } from '@/lib/ads';
-import { useAdsEnabled } from '@/hooks/useAdsEnabled';
+import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 
 export default function WatchPage() {
   const params = useParams();
@@ -43,11 +43,11 @@ export default function WatchPage() {
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(0);
   const [playbackFailed, setPlaybackFailed] = useState(false);
-  const { enabled: adsEnabled } = useAdsEnabled();
+  const { visible: smartlinkVisible } = useAdPlacementVisible('watch_smartlink');
 
   const openSmartlinkIfEnabled = useCallback(() => {
-    if (adsEnabled) openAdsterraSmartlink();
-  }, [adsEnabled]);
+    if (smartlinkVisible) openAdsterraSmartlink();
+  }, [smartlinkVisible]);
 
   // Only hd-1 and hd-2 work - reset if invalid
   useEffect(() => {

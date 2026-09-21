@@ -26,6 +26,7 @@ type AdminUserRow = {
   createdAt: string | null;
   lastLogin: string | null;
   gameDemoAccess: boolean;
+  adsHidden: boolean;
 };
 
 function parsePage(raw: string | null, fallback: number): number {
@@ -81,6 +82,7 @@ export async function GET(request: NextRequest) {
         createdAt: toIso(data.createdAt),
         lastLogin: toIso(data.lastLogin),
         gameDemoAccess: data.gameDemoAccess === true,
+        adsHidden: data.adsHidden === true,
       };
     });
 
@@ -88,6 +90,7 @@ export async function GET(request: NextRequest) {
     const verifiedCount = users.filter((u) => u.emailVerified).length;
     const unverifiedCount = totalUsers - verifiedCount;
     const gameDemoCount = users.filter((u) => u.gameDemoAccess).length;
+    const adsHiddenCount = users.filter((u) => u.adsHidden).length;
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const recentSignups = users.filter((u) => timeMs(u.createdAt) >= weekAgo).length;
 
@@ -102,6 +105,13 @@ export async function GET(request: NextRequest) {
       users = users.filter((u) => u.gameDemoAccess);
     } else if (gameDemoFilter === 'no') {
       users = users.filter((u) => !u.gameDemoAccess);
+    }
+
+    const adsHiddenFilter = (sp.get('adsHidden') || 'all').toLowerCase();
+    if (adsHiddenFilter === 'yes') {
+      users = users.filter((u) => u.adsHidden);
+    } else if (adsHiddenFilter === 'no') {
+      users = users.filter((u) => !u.adsHidden);
     }
 
     if (q) {
@@ -154,6 +164,7 @@ export async function GET(request: NextRequest) {
         unverified: unverifiedCount,
         recentSignups,
         gameDemoAccess: gameDemoCount,
+        adsHidden: adsHiddenCount,
       },
     });
   } catch (e) {
