@@ -23,6 +23,20 @@ export const ADSTERRA_SOCIAL_SRC =
 export const ADSTERRA_SMARTLINK =
   process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK || '';
 
+/** Home trending grid: `monetag` (default) or `adsterra`. */
+export type HomeGridAdProvider = 'adsterra' | 'monetag';
+
+export const HOME_GRID_AD_PROVIDER: HomeGridAdProvider =
+  process.env.NEXT_PUBLIC_HOME_GRID_AD_PROVIDER === 'adsterra'
+    ? 'adsterra'
+    : 'monetag';
+
+export const MONETAG_ZONE =
+  process.env.NEXT_PUBLIC_MONETAG_ZONE || '11857007';
+
+export const MONETAG_TAG_SRC =
+  process.env.NEXT_PUBLIC_MONETAG_TAG_SRC || 'https://nap5k.com/tag.min.js';
+
 export function isAdLocalHost() {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname;

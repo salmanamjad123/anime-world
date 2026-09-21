@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimeCard } from './AnimeCard';
-import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
+import { HomeTrendingGridAd } from '@/components/ads/HomeTrendingGridAd';
 import { Button } from '@/components/ui/Button';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import type { Anime } from '@/types';
@@ -131,7 +131,7 @@ export function AnimeGrid({
       ))}
       {showAd && (
         <div className="col-span-2">
-          <AdsterraBanner placement="home_grid_300" variant="grid" />
+          <HomeTrendingGridAd />
         </div>
       )}
     </div>
