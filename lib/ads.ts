@@ -7,6 +7,11 @@ export const ADSTERRA_BANNER_320_KEY =
   process.env.NEXT_PUBLIC_ADSTERRA_BANNER_320_KEY ||
   'c87af8802edb6098ffb7523a2f01db11';
 
+/** 160x300 skyscraper — Manga home trending grid (last two card slots). */
+export const ADSTERRA_BANNER_160_300_KEY =
+  process.env.NEXT_PUBLIC_ADSTERRA_BANNER_160_300_KEY ||
+  'e1dc99e198aa7ca41d54eac4bb9bbfa4';
+
 export const ADSTERRA_NATIVE_SRC =
   process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_SRC || '';
 export const ADSTERRA_NATIVE_CONTAINER =
@@ -14,6 +19,11 @@ export const ADSTERRA_NATIVE_CONTAINER =
 
 export const ADSTERRA_SOCIAL_SRC =
   process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_SRC || '';
+
+/** Social bar script — manga /manga Trending card footer (aligns with card title area). */
+export const ADSTERRA_MANGA_TRENDING_SOCIAL_SRC =
+  process.env.NEXT_PUBLIC_ADSTERRA_MANGA_TRENDING_SOCIAL_SRC ||
+  'https://pl31444604.profitableratecpmnetwork.com/ac/28/d6/ac28d650f3fd8394f7cf51c6295e3500.js';
 
 export const ADSTERRA_SMARTLINK =
   process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK || '';

@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ADSTERRA_BANNER_KEY, ADSTERRA_BANNER_320_KEY } from '@/lib/ads';
+import {
+  ADSTERRA_BANNER_KEY,
+  ADSTERRA_BANNER_320_KEY,
+  ADSTERRA_BANNER_160_300_KEY,
+} from '@/lib/ads';
 import { useAdMode } from '@/hooks/useAdMode';
 import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 import type { AdPlacementId } from '@/lib/ads-placements';
@@ -11,6 +15,7 @@ import type { AdPlacementId } from '@/lib/ads-placements';
 const SIZES = {
   '300x250': { width: 300, height: 250, key: ADSTERRA_BANNER_KEY },
   '320x50': { width: 320, height: 50, key: ADSTERRA_BANNER_320_KEY },
+  '160x300': { width: 160, height: 300, key: ADSTERRA_BANNER_160_300_KEY },
 } as const;
 
 export const ADSTERRA_DISMISS_HOME_320 = 'av-banner-320-dismissed';
@@ -60,7 +65,9 @@ export function AdsterraBanner({
 
   const frameClass = cn(
     'overflow-hidden rounded-md border-0 bg-gray-800/40',
-    size === '320x50' ? 'h-[50px] w-[320px] max-w-full' : 'h-[250px] w-[300px]'
+    size === '320x50' && 'h-[50px] w-[320px] max-w-full',
+    size === '300x250' && 'h-[250px] w-[300px]',
+    size === '160x300' && 'h-[300px] w-[160px] max-w-full'
   );
 
   const slot = canFill ? (
@@ -76,7 +83,9 @@ export function AdsterraBanner({
     <div
       className={cn(
         'flex flex-col items-center justify-center rounded-md border border-dashed border-gray-600 bg-gray-800/50 text-center',
-        size === '320x50' ? 'h-[50px] w-[320px] max-w-full px-2' : 'h-[250px] w-[300px] px-4'
+        size === '320x50' && 'h-[50px] w-[320px] max-w-full px-2',
+        size === '300x250' && 'h-[250px] w-[300px] px-4',
+        size === '160x300' && 'h-[300px] w-[160px] max-w-full px-2'
       )}
     >
       <span
@@ -106,7 +115,10 @@ export function AdsterraBanner({
         variant === 'inline' && 'my-0',
         variant === 'strip' &&
           'relative mx-auto my-0 h-[50px] w-[320px] max-w-full shrink-0 overflow-hidden sm:mx-0 sm:ml-auto',
-        variant === 'grid' && 'h-full min-h-[250px] rounded-lg bg-gray-800/30 px-2 py-3',
+        variant === 'grid' &&
+          (size === '160x300'
+            ? 'h-full min-h-[300px] rounded-lg bg-gray-800/30 px-2 py-3'
+            : 'h-full min-h-[250px] rounded-lg bg-gray-800/30 px-2 py-3'),
         className
       )}
     >

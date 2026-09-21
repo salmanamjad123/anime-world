@@ -43,6 +43,14 @@ export const AD_PLACEMENTS = [
     format: '320×50',
     units: 1,
   },
+  {
+    id: 'manga_trending_grid_160',
+    label: 'Trending grid card',
+    page: 'Manga home',
+    path: '/manga',
+    format: '160×300 + social bar',
+    units: 1,
+  },
 ] as const;
 
 export type AdPlacementId = (typeof AD_PLACEMENTS)[number]['id'];
