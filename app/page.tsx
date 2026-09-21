@@ -79,6 +79,7 @@ export default function Home() {
             errorMessage={trendingError instanceof Error ? trendingError.message : undefined}
             onRetry={() => refetchTrending()}
             slowLoad={trendingSlow}
+            adSlot
           />
         </section>
 
