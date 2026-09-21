@@ -8,6 +8,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, BookOpen, Swords } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
@@ -51,6 +52,8 @@ const GAME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.Componen
 ];
 
 export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = false }: Props) {
+  const pathname = usePathname();
+
   const baseItems =
     activeTab === 'manga' ? MANGA_NAV_ITEMS : activeTab === 'game' ? GAME_NAV_ITEMS : ANIME_NAV_ITEMS;
   const navItems = showGameTab
@@ -66,6 +69,20 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = fa
       document.body.style.overflow = '';
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- close menu on route change only
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   return (
     <AnimatePresence>

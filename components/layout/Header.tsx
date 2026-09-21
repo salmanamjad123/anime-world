@@ -90,6 +90,14 @@ export function Header() {
   const showFilter = activeTab === 'anime';
 
   useEffect(() => {
+    setSidebarOpen(false);
+    setSearchOpen(false);
+    setMobileSearchOpen(false);
+    setUserMenuOpen(false);
+    closeAuthModal();
+  }, [pathname, closeAuthModal]);
+
+  useEffect(() => {
     if (!debouncedQuery || debouncedQuery.length < 1) {
       setSearchResults([]);
       setIsFallback(false);

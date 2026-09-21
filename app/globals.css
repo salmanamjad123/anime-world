@@ -166,3 +166,12 @@ video.video-subtitles::-webkit-media-text-track-container {
 .subtitle-position-slider::-moz-range-thumb:active {
   transform: scale(1.02);
 }
+
+@keyframes nav-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

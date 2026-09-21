@@ -82,26 +82,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (listsSyncedForUid.current === firebaseUser.uid) return;
           listsSyncedForUid.current = firebaseUser.uid;
 
-          void (async () => {
-            try {
-              const [watchlist, history, mangaList, readingHistory, savedChapters] = await Promise.all([
-                getWatchlist(firebaseUser.uid),
-                getWatchHistory(firebaseUser.uid),
-                getMangaList(firebaseUser.uid),
-                getReadingHistory(firebaseUser.uid),
-                getSavedChapters(firebaseUser.uid),
-              ]);
-              syncWatchlist(watchlist);
-              syncHistory(history);
-              syncMangaList(mangaList);
-              syncReadingHistory(readingHistory);
-              syncSavedChapters(savedChapters);
-              trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
-              trimContinueReadingToMax(firebaseUser.uid).catch(() => {});
-            } catch (error) {
-              console.error('Failed to sync user data:', error);
-            }
-          })();
+          const runSync = () => {
+            void (async () => {
+              try {
+                const [watchlist, history, mangaList, readingHistory, savedChapters] =
+                  await Promise.all([
+                    getWatchlist(firebaseUser.uid),
+                    getWatchHistory(firebaseUser.uid),
+                    getMangaList(firebaseUser.uid),
+                    getReadingHistory(firebaseUser.uid),
+                    getSavedChapters(firebaseUser.uid),
+                  ]);
+                syncWatchlist(watchlist);
+                syncHistory(history);
+                syncMangaList(mangaList);
+                syncReadingHistory(readingHistory);
+                syncSavedChapters(savedChapters);
+                trimContinueWatchingToMax(firebaseUser.uid).catch(() => {});
+                trimContinueReadingToMax(firebaseUser.uid).catch(() => {});
+              } catch (error) {
+                console.error('Failed to sync user data:', error);
+              }
+            })();
+          };
+          if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(runSync, { timeout: 2000 });
+          } else {
+            setTimeout(runSync, 0);
+          }
         },
         (error) => {
           console.error('User doc listener failed:', error);
