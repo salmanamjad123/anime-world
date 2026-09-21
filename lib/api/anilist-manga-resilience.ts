@@ -2,7 +2,7 @@
  * AniList manga resilience — stale cache + MangaDex/Jikan fallback when AniList is down.
  */
 
-import { getCached, CACHE_TTL } from '@/lib/cache';
+import { getCached, getCachedWhen, deleteCacheKey, CACHE_TTL } from '@/lib/cache';
 import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
 import type { Manga, MangaSearchResult } from '@/types';
 import { isAnilistOutage } from './anilist-resilience';
@@ -47,8 +47,17 @@ export async function indexMangaListResults(media: Manga[]): Promise<void> {
   );
 }
 
+function mangaListHasItems(result: MangaSearchResult | null | undefined): boolean {
+  return (result?.data?.Page?.media?.length ?? 0) > 0;
+}
+
+function isEmptyMangaListError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('[AniList] Empty manga list');
+}
+
 /**
  * Fetch AniList manga list data with stale + MangaDex + Jikan fallback.
+ * Empty lists are not cached — they used to poison Trending while Popular stayed fine.
  */
 export async function fetchAnilistMangaListWithFallback(
   cacheKey: string,
@@ -59,22 +68,31 @@ export async function fetchAnilistMangaListWithFallback(
   mangadexVariant: 'trending' | 'popular' = 'trending'
 ): Promise<MangaSearchResult> {
   try {
-    const data = await getCached(
+    const data = await getCachedWhen(
       cacheKey,
       async () => {
         const fresh = await fetchAnilist();
-        await saveStaleCache(cacheKey, fresh);
         const media = fresh?.data?.Page?.media ?? [];
-        if (media.length) await indexMangaListResults(media);
+        if (!media.length) {
+          throw new Error(`[AniList] Empty manga list for ${cacheKey}`);
+        }
+        await saveStaleCache(cacheKey, fresh);
+        await indexMangaListResults(media);
         return fresh;
       },
-      CACHE_TTL.MANGA_LIST
+      CACHE_TTL.MANGA_LIST,
+      mangaListHasItems
     );
-    const listedMedia = data?.data?.Page?.media ?? [];
-    if (listedMedia.length) void indexMangaListResults(listedMedia);
-    return data;
+
+    if (mangaListHasItems(data)) {
+      void indexMangaListResults(data.data.Page.media);
+      return data;
+    }
+
+    deleteCacheKey(cacheKey);
+    throw new Error(`[AniList] Empty manga list for ${cacheKey}`);
   } catch (error) {
-    if (!isAnilistOutage(error)) throw error;
+    if (!isAnilistOutage(error) && !isEmptyMangaListError(error)) throw error;
 
     const stale = await getStaleCache<MangaSearchResult>(cacheKey);
     if (stale?.data?.Page?.media?.length) {
@@ -86,14 +104,16 @@ export async function fetchAnilistMangaListWithFallback(
     console.warn(`[AniList] Outage — MangaDex browse fallback for ${cacheKey}`);
     const mangadexKey = `mangadex:${cacheKey}`;
     try {
-      const result = await getCached(
+      const result = await getCachedWhen(
         mangadexKey,
         () => getMangaDexBrowseList(page, perPage, mangadexVariant),
-        CACHE_TTL.MANGA_LIST
+        CACHE_TTL.MANGA_LIST,
+        mangaListHasItems
       );
-      const media = result?.data?.Page?.media ?? [];
-      if (media.length) await indexMangaListResults(media);
-      return result;
+      if (mangaListHasItems(result)) {
+        await indexMangaListResults(result.data.Page.media);
+        return result;
+      }
     } catch (mangadexError) {
       console.error(
         `[MangaDex] Fallback failed for ${cacheKey}:`,
@@ -103,10 +123,11 @@ export async function fetchAnilistMangaListWithFallback(
 
     console.warn(`[AniList] Outage — Jikan manga fallback for ${cacheKey}`);
     const jikanKey = `jikan:${cacheKey}`;
-    const result = await getCached(
+    const result = await getCachedWhen(
       jikanKey,
       () => jikanFallback(page, perPage),
-      CACHE_TTL.MANGA_LIST
+      CACHE_TTL.MANGA_LIST,
+      mangaListHasItems
     );
     const media = result?.data?.Page?.media ?? [];
     if (media.length) await indexMangaListResults(media);

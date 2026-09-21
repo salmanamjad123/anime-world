@@ -2,17 +2,15 @@
 
 Moves **video egress** off Railway. Keep Railway for search / episodes / sources.
 
-**Preferred production setup:** use Railway’s built-in proxy instead — fewer 502s on rotating Megaplay CDNs (`megap.*`, `imgnex`, etc.):
+**Preferred production setup** (Worker for HLS, Railway for API only):
 
 ```env
 NEXT_PUBLIC_HIANIME_API_URL=https://streaming-api-july-production.up.railway.app
-NEXT_PUBLIC_PROXY_URL=https://streaming-api-july-production.up.railway.app/api/v2/proxy
+NEXT_PUBLIC_PROXY_URL=https://anime-world-proxy.animevillage-proxy.workers.dev/proxy
 NEXT_PUBLIC_USE_PROXY=true
 ```
 
-`anime-world`’s `getHlsProxyBase()` already prefers Railway when `HIANIME` is a Railway URL, even if `PROXY_URL` still points at this Worker.
-
-Use this Worker only if Railway egress cost is a problem and you’ve verified the Worker can reach current Megaplay hosts.
+`getHlsProxyBase()` uses `NEXT_PUBLIC_PROXY_URL` as-is in production. Point it at Railway `/api/v2/proxy` only if the Worker is 502ing.
 
 ```
 Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts)

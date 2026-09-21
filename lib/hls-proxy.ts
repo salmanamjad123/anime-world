@@ -1,8 +1,9 @@
 /**
  * HLS proxy helpers — Megaplay CDNs require Referer injection via proxy.
  *
- * Prefer Railway streaming-api /api/v2/proxy in production (CF worker often 502s
- * on rotating megap.* / nexabloom hosts). Localhost uses local streaming-api.
+ * Production: honor NEXT_PUBLIC_PROXY_URL (Cloudflare Worker) so video egress
+ * stays off Railway. Railway streaming-api is only the catalog / sources API.
+ * Localhost uses local streaming-api.
  */
 
 /** Hosts that must go through proxy (browser Origin is blocked) */
@@ -14,32 +15,26 @@ function railwayProxyFromHianime(hianimeUrl: string): string | null {
   return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
 }
 
+function isLocalHost(url: string): boolean {
+  return url.includes('localhost') || url.includes('127.0.0.1');
+}
+
 /**
  * Resolve proxy base URL for HLS.
- * Order: localhost streaming-api → Railway (when HIANIME is Railway) → explicit env → /api/proxy
+ * Order: localhost streaming-api → explicit NEXT_PUBLIC_PROXY_URL → Railway (from HIANIME) → /api/proxy
  */
 export function getHlsProxyBase(): string {
   const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
 
-  if (hianimeUrl.includes('localhost') || hianimeUrl.includes('127.0.0.1')) {
-    if (explicit.includes('localhost') || explicit.includes('127.0.0.1')) {
-      return explicit;
-    }
+  if (isLocalHost(hianimeUrl)) {
+    if (explicit && isLocalHost(explicit)) return explicit;
     return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
-  }
-
-  // Production: prefer Railway proxy over CF worker (more reliable Megaplay Referer)
-  const railwayProxy = railwayProxyFromHianime(hianimeUrl);
-  if (railwayProxy) {
-    // Allow explicit Railway override; ignore CF worker when HIANIME is Railway
-    if (explicit.includes('railway.app')) return explicit;
-    return railwayProxy;
   }
 
   if (explicit) return explicit;
 
-  return '/api/proxy';
+  return railwayProxyFromHianime(hianimeUrl) || '/api/proxy';
 }
 
 export function wrapHlsUrl(streamUrl: string, viaProxy: boolean): string {

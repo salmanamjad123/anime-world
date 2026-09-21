@@ -175,7 +175,8 @@ export async function getCachedWhen<T>(
 ): Promise<T> {
   const cached = memoryCache.get<T>(key);
   if (cached !== null) {
-    return cached;
+    if (shouldCache(cached)) return cached;
+    memoryCache.delete(key);
   }
 
   const data = await fetchFn();

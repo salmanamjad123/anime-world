@@ -91,7 +91,9 @@ export async function getCachedWhen<T>(
     try {
       const cached = await redis.get(key);
       if (cached) {
-        return JSON.parse(cached) as T;
+        const parsed = JSON.parse(cached) as T;
+        if (shouldCache(parsed)) return parsed;
+        redis.del(key).catch(() => {});
       }
     } catch (err) {
       console.warn('[Redis] Cache read failed, falling back to memory:', (err as Error).message);
