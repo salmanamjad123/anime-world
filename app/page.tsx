@@ -6,8 +6,56 @@ import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
+import {
+  AdsterraBanner,
+  ADSTERRA_DISMISS_HOME_320,
+} from '@/components/ads/AdsterraBanner';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+function TrendingNowHeader() {
+  const [showStrip, setShowStrip] = useState(true);
+
+  useEffect(() => {
+    if (sessionStorage.getItem(ADSTERRA_DISMISS_HOME_320) === '1') {
+      setShowStrip(false);
+    }
+  }, []);
+
+  return (
+    <div className="mb-6">
+      <div
+        className={cn(
+          'flex',
+          showStrip
+            ? 'flex-col sm:flex-row sm:items-center sm:justify-between'
+            : 'items-center'
+        )}
+      >
+        {showStrip && (
+          <AdsterraBanner
+            variant="strip"
+            size="320x50"
+            dismissible
+            dismissStorageKey={ADSTERRA_DISMISS_HOME_320}
+            onDismiss={() => setShowStrip(false)}
+            className="order-1 h-[50px] sm:order-2"
+          />
+        )}
+        <div
+          className={cn(
+            'flex items-center gap-2',
+            showStrip && 'order-2 sm:order-1'
+          )}
+        >
+          <TrendingUp className="h-6 w-6 text-blue-500" />
+          <h2 className="text-2xl font-bold text-white">Trending Now</h2>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function useSlowLoad(isLoading: boolean, isFetching: boolean, resetKey?: string) {
   const [slowLoad, setSlowLoad] = useState(false);
@@ -68,10 +116,7 @@ export default function Home() {
         />
 
         <section className="mb-12">
-          <div className="flex items-center gap-2 mb-6">
-            <TrendingUp className="w-6 h-6 text-blue-500" />
-            <h2 className="text-2xl font-bold text-white">Trending Now</h2>
-          </div>
+          <TrendingNowHeader />
           <AnimeGrid
             anime={trendingAnime}
             isLoading={isTrendingLoading}

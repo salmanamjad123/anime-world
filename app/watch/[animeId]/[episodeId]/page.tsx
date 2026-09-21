@@ -27,6 +27,9 @@ import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
+import { AdsterraNative } from '@/components/ads/AdsterraNative';
+import { openAdsterraSmartlink } from '@/lib/ads';
+import { useAdsEnabled } from '@/hooks/useAdsEnabled';
 
 export default function WatchPage() {
   const params = useParams();
@@ -40,6 +43,11 @@ export default function WatchPage() {
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(0);
   const [playbackFailed, setPlaybackFailed] = useState(false);
+  const { enabled: adsEnabled } = useAdsEnabled();
+
+  const openSmartlinkIfEnabled = useCallback(() => {
+    if (adsEnabled) openAdsterraSmartlink();
+  }, [adsEnabled]);
 
   // Only hd-1 and hd-2 work - reset if invalid
   useEffect(() => {
@@ -357,9 +365,10 @@ export default function WatchPage() {
                     </Button>
                     <Button
                       variant="secondary"
-                      onClick={() =>
-                        setSelectedServer((s) => (s === 'hd-1' ? 'hd-2' : 'hd-1'))
-                      }
+                      onClick={() => {
+                        openSmartlinkIfEnabled();
+                        setSelectedServer((s) => (s === 'hd-1' ? 'hd-2' : 'hd-1'));
+                      }}
                     >
                       Try {selectedServer === 'hd-1' ? 'HD-2' : 'HD-1'} server
                     </Button>
@@ -473,7 +482,12 @@ export default function WatchPage() {
                   <label className="text-xs sm:text-sm text-gray-400 shrink-0">Server:</label>
                   <select
                     value={selectedServer}
-                    onChange={(e) => setSelectedServer(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value !== selectedServer) {
+                        openSmartlinkIfEnabled();
+                      }
+                      setSelectedServer(e.target.value);
+                    }}
                     className="bg-gray-700 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     title="Try different servers if video doesn't load"
                   >
@@ -509,6 +523,8 @@ export default function WatchPage() {
                 </div>
               </div>
             </div>
+
+            <AdsterraNative />
 
             {/* Episode Description */}
             {currentEpisode?.description && (

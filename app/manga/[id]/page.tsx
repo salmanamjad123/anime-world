@@ -13,6 +13,7 @@ import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
 import { getPreferredTitle, stripHtml, getScoreColor, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { BookOpen, Star, ChevronDown, ArrowLeft, Plus, Bookmark } from 'lucide-react';
+import { MangaSynopsisAd } from '@/components/ads/MangaSynopsisAd';
 import { useState, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
@@ -320,10 +321,10 @@ export default function MangaDetailPage() {
 
       {/* Content */}
       <div className="container mx-auto px-4 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3 md:gap-x-8 md:gap-y-4 lg:items-start">
           <div className="lg:col-span-2">
             {/* Chapters */}
-            <div className="bg-gray-800/50 rounded-lg p-4 md:p-6 mb-6 relative">
+            <div className="bg-gray-800/50 rounded-lg p-4 md:p-6 relative">
               {isChaptersLoading && chapters.length > 0 && !isPlaceholderData && (
                 <div className="absolute inset-0 bg-gray-900/40 rounded-lg flex items-center justify-center z-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500" />
@@ -495,6 +496,7 @@ export default function MangaDetailPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
+            <MangaSynopsisAd />
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button
                 type="button"
