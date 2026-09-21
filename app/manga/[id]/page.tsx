@@ -136,6 +136,10 @@ export default function MangaDetailPage() {
   };
 
   const handleToggleSaveChapter = (chapter: MangaChapter) => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     const saved = isChapterSaved(mangaId, chapter.id);
     if (saved) {
       unsaveChapter(mangaId, chapter.id);
@@ -450,21 +454,24 @@ export default function MangaDetailPage() {
                               </div>
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleToggleSaveChapter(chapter);
-                            }}
-                            title={saved ? 'Remove saved chapter' : 'Save chapter'}
-                            className={cn(
-                              'absolute top-1.5 right-1.5 p-1 rounded text-gray-500 hover:text-amber-400 transition-colors',
-                              saved && 'text-amber-400'
-                            )}
-                          >
-                            <Bookmark className={cn('w-3.5 h-3.5', saved && 'fill-current')} />
-                          </button>
+                          {user && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleToggleSaveChapter(chapter);
+                              }}
+                              title={saved ? 'Remove saved chapter' : 'Save chapter'}
+                              aria-label={saved ? 'Remove saved chapter' : 'Save chapter'}
+                              className={cn(
+                                'absolute top-1.5 right-1.5 p-1 rounded text-gray-500 hover:text-amber-400 transition-colors',
+                                saved && 'text-amber-400'
+                              )}
+                            >
+                              <Bookmark className={cn('w-3.5 h-3.5', saved && 'fill-current')} />
+                            </button>
+                          )}
                         </div>
                       );
                     })}

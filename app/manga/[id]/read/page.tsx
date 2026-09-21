@@ -29,6 +29,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MangaChapter, MangaChapterPage } from '@/types';
 import { useReadingHistoryStore } from '@/store/useReadingHistoryStore';
 import { useUserStore } from '@/store/useUserStore';
+import { useAuthModalStore } from '@/store/useAuthModalStore';
 import {
   updateReadingProgress,
   markMangaChapterRead,
@@ -59,6 +60,7 @@ export default function MangaReadPage() {
   const resumedRef = useRef(false);
 
   const { user } = useUserStore();
+  const { openAuthModal } = useAuthModalStore();
   const {
     updateProgress,
     getProgress,
@@ -280,6 +282,10 @@ export default function MangaReadPage() {
 
   const handleToggleSave = () => {
     if (!chapterId || !manga) return;
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     const mangaTitle = getPreferredTitle(manga.title);
     const mangaImage = manga.coverImage?.large || manga.coverImage?.medium || '';
     if (chapterSaved) {
@@ -397,19 +403,21 @@ export default function MangaReadPage() {
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleSave}
-                title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
-                className={cn(
-                  'flex items-center gap-1.5 min-h-[40px] min-w-[40px]',
-                  chapterSaved ? 'text-amber-400 hover:text-amber-300' : ''
-                )}
-              >
-                <Bookmark className={cn('w-4 h-4', chapterSaved && 'fill-current')} />
-                <span className="hidden sm:inline text-xs">{chapterSaved ? 'Saved' : 'Save'}</span>
-              </Button>
+              {user && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleToggleSave}
+                  title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
+                  className={cn(
+                    'flex items-center gap-1.5 min-h-[40px] min-w-[40px]',
+                    chapterSaved ? 'text-amber-400 hover:text-amber-300' : ''
+                  )}
+                >
+                  <Bookmark className={cn('w-4 h-4', chapterSaved && 'fill-current')} />
+                  <span className="hidden sm:inline text-xs">{chapterSaved ? 'Saved' : 'Save'}</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -581,18 +589,20 @@ export default function MangaReadPage() {
               >
                 <ZoomIn className="w-5 h-5" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleSave}
-                title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
-                className={cn(
-                  'min-h-[44px] min-w-[44px]',
-                  chapterSaved ? 'text-amber-400 hover:text-amber-300' : 'text-gray-400 hover:text-white'
-                )}
-              >
-                <Bookmark className={cn('w-5 h-5', chapterSaved && 'fill-current')} />
-              </Button>
+              {user && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleToggleSave}
+                  title={chapterSaved ? 'Remove saved chapter' : 'Save chapter'}
+                  className={cn(
+                    'min-h-[44px] min-w-[44px]',
+                    chapterSaved ? 'text-amber-400 hover:text-amber-300' : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  <Bookmark className={cn('w-5 h-5', chapterSaved && 'fill-current')} />
+                </Button>
+              )}
             </div>
           </div>
 
