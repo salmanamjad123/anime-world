@@ -48,7 +48,7 @@ export const AD_PLACEMENTS = [
     label: 'Trending grid card',
     page: 'Manga home',
     path: '/manga',
-    format: '160×300 + social bar',
+    format: '160×300',
     units: 1,
   },
 ] as const;

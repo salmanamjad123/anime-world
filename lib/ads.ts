@@ -20,11 +20,6 @@ export const ADSTERRA_NATIVE_CONTAINER =
 export const ADSTERRA_SOCIAL_SRC =
   process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_SRC || '';
 
-/** Social bar script — manga /manga Trending card footer (aligns with card title area). */
-export const ADSTERRA_MANGA_TRENDING_SOCIAL_SRC =
-  process.env.NEXT_PUBLIC_ADSTERRA_MANGA_TRENDING_SOCIAL_SRC ||
-  'https://pl31444604.profitableratecpmnetwork.com/ac/28/d6/ac28d650f3fd8394f7cf51c6295e3500.js';
-
 export const ADSTERRA_SMARTLINK =
   process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK || '';
 
