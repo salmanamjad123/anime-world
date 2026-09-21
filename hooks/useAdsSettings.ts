@@ -9,6 +9,7 @@ import {
   type AdPolicySettings,
 } from '@/lib/ads-placements';
 import { useUserStore } from '@/store/useUserStore';
+import { useAdMode } from '@/hooks/useAdMode';
 
 export const ADS_SETTINGS_QUERY_KEY = ['site-settings', 'ads'] as const;
 
@@ -65,4 +66,22 @@ export function useAdPlacementVisible(placement: AdPlacementId) {
   }, [isLoading, settings, placement, user]);
 
   return { visible, isLoading };
+}
+
+/**
+ * Whether to reserve grid/header space for an ad.
+ * Localhost always previews placeholders; production waits for policy and respects toggles.
+ */
+export function useReserveAdSlot(placement: AdPlacementId, requested: boolean) {
+  const { visible, isLoading: policyLoading } = useAdPlacementVisible(placement);
+  const mode = useAdMode();
+  const devPreview = mode !== 'live';
+
+  const reserve = useMemo(() => {
+    if (!requested) return false;
+    if (devPreview) return true;
+    return policyLoading || visible;
+  }, [requested, devPreview, policyLoading, visible]);
+
+  return reserve;
 }

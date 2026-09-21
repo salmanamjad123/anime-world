@@ -45,6 +45,7 @@ export function AdsterraBanner({
   const liveRef = useRef<HTMLIFrameElement>(null);
   const [hidden, setHidden] = useState(false);
   const canFill = mode === 'live' && Boolean(key);
+  const devPreview = mode !== 'live';
 
   useEffect(() => {
     if (dismissible && sessionStorage.getItem(dismissStorageKey) === '1') {
@@ -61,7 +62,7 @@ export function AdsterraBanner({
   }, [canFill, key, width, height]);
 
   if (hidden) return null;
-  if (!adsSettingsLoading && !adsVisible) return null;
+  if (!devPreview && !adsSettingsLoading && !adsVisible) return null;
 
   const frameClass = cn(
     'overflow-hidden rounded-md border-0 bg-gray-800/40',

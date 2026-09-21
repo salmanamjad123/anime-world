@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { AnimeCard } from './AnimeCard';
 import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { Button } from '@/components/ui/Button';
+import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import type { Anime } from '@/types';
 
 /** Matches AnimeGrid Tailwind breakpoints: 2 / sm:3 / md:4 / lg:5 / xl:6 */
@@ -61,6 +62,10 @@ export function AnimeGrid({
   adSlot = false,
 }: AnimeGridProps) {
   const cols = useGridColumns();
+  const showAd = useReserveAdSlot(
+    'home_grid_300',
+    adSlot && (anime?.length ?? 0) >= 2
+  );
   const showSkeleton = isLoading && (!anime || anime.length === 0);
 
   if (showSkeleton) {
@@ -115,7 +120,6 @@ export function AnimeGrid({
     );
   }
 
-  const showAd = adSlot && anime.length >= 2;
   const items = showAd
     ? anime.slice(0, visibleCountForAdRow(anime.length, cols))
     : anime;

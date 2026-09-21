@@ -8,6 +8,7 @@
 import { MangaCard } from './MangaCard';
 import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { Card } from '@/components/ui/Card';
+import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import type { Manga } from '@/types';
 
 /** Always insert the ad after this many manga (6th slot in grid order). */
@@ -41,6 +42,10 @@ interface MangaGridProps {
 }
 
 export function MangaGrid({ manga, isLoading, adSlot = false }: MangaGridProps) {
+  const showAd = useReserveAdSlot(
+    'manga_trending_grid_160',
+    adSlot && (manga?.length ?? 0) >= 1
+  );
 
   if (isLoading) {
     return (
@@ -64,7 +69,6 @@ export function MangaGrid({ manga, isLoading, adSlot = false }: MangaGridProps) 
     );
   }
 
-  const showAd = adSlot && manga.length >= 1;
   /** Drop one title so total cells align with full rows when possible. */
   const list = showAd ? manga.slice(0, -1) : manga;
   const beforeAdCount = showAd

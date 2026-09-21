@@ -10,18 +10,22 @@ import {
   AdsterraBanner,
   ADSTERRA_DISMISS_HOME_320,
 } from '@/components/ads/AdsterraBanner';
+import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function TrendingNowHeader() {
-  const [showStrip, setShowStrip] = useState(true);
+  const stripAllowed = useReserveAdSlot('home_trending_320', true);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     if (sessionStorage.getItem(ADSTERRA_DISMISS_HOME_320) === '1') {
-      setShowStrip(false);
+      setDismissed(true);
     }
   }, []);
+
+  const showStrip = !dismissed && stripAllowed;
 
   return (
     <div className="mb-6">
@@ -40,7 +44,7 @@ function TrendingNowHeader() {
             size="320x50"
             dismissible
             dismissStorageKey={ADSTERRA_DISMISS_HOME_320}
-            onDismiss={() => setShowStrip(false)}
+            onDismiss={() => setDismissed(true)}
             className="order-1 h-[50px] sm:order-2"
           />
         )}
