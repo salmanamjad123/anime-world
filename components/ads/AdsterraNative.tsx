@@ -10,8 +10,6 @@ import { useAdMode } from '@/hooks/useAdMode';
 import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 import { AdsterraBanner } from './AdsterraBanner';
 
-const DISMISS_KEY = 'av-watch-player-ad-dismissed';
-
 /**
  * Non-intrusive slot under the video player.
  * Uses an Adsterra native unit when env is set; otherwise the 300x250 banner.
@@ -23,12 +21,6 @@ export function AdsterraNative() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const hasNativeUnit = Boolean(ADSTERRA_NATIVE_SRC && ADSTERRA_NATIVE_CONTAINER);
-
-  useEffect(() => {
-    if (sessionStorage.getItem(DISMISS_KEY) === '1') {
-      setVisible(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (
@@ -57,7 +49,6 @@ export function AdsterraNative() {
   }, [adsVisible, mode, hasNativeUnit, visible]);
 
   function dismiss() {
-    sessionStorage.setItem(DISMISS_KEY, '1');
     setVisible(false);
   }
 

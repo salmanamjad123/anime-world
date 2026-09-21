@@ -6,10 +6,7 @@ import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
-import {
-  AdsterraBanner,
-  ADSTERRA_DISMISS_HOME_320,
-} from '@/components/ads/AdsterraBanner';
+import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
@@ -18,13 +15,6 @@ import { cn } from '@/lib/utils';
 function TrendingNowHeader() {
   const stripAllowed = useReserveAdSlot('home_trending_320', true);
   const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    if (sessionStorage.getItem(ADSTERRA_DISMISS_HOME_320) === '1') {
-      setDismissed(true);
-    }
-  }, []);
-
   const showStrip = !dismissed && stripAllowed;
 
   return (
@@ -43,7 +33,6 @@ function TrendingNowHeader() {
             variant="strip"
             size="320x50"
             dismissible
-            dismissStorageKey={ADSTERRA_DISMISS_HOME_320}
             onDismiss={() => setDismissed(true)}
             className="order-1 h-[50px] sm:order-2"
           />

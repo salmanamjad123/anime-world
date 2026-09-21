@@ -18,15 +18,11 @@ const SIZES = {
   '160x300': { width: 160, height: 300, key: ADSTERRA_BANNER_160_300_KEY },
 } as const;
 
-export const ADSTERRA_DISMISS_HOME_320 = 'av-banner-320-dismissed';
-export const ADSTERRA_DISMISS_MANGA_320 = 'av-banner-320-manga-dismissed';
-
 export function AdsterraBanner({
   placement,
   variant = 'section',
   size = '300x250',
   dismissible = false,
-  dismissStorageKey = ADSTERRA_DISMISS_HOME_320,
   onDismiss,
   className,
 }: {
@@ -34,7 +30,7 @@ export function AdsterraBanner({
   variant?: 'section' | 'grid' | 'inline' | 'strip';
   size?: keyof typeof SIZES;
   dismissible?: boolean;
-  dismissStorageKey?: string;
+  /** Called when the user closes a dismissible unit (resets on full page refresh). */
   onDismiss?: () => void;
   className?: string;
 }) {
@@ -46,12 +42,6 @@ export function AdsterraBanner({
   const [hidden, setHidden] = useState(false);
   const canFill = mode === 'live' && Boolean(key);
   const devPreview = mode !== 'live';
-
-  useEffect(() => {
-    if (dismissible && sessionStorage.getItem(dismissStorageKey) === '1') {
-      setHidden(true);
-    }
-  }, [dismissible, dismissStorageKey]);
 
   useEffect(() => {
     if (!canFill || !liveRef.current) return;
@@ -133,7 +123,6 @@ export function AdsterraBanner({
         <button
           type="button"
           onClick={() => {
-            sessionStorage.setItem(dismissStorageKey, '1');
             setHidden(true);
             onDismiss?.();
           }}
