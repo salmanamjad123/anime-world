@@ -44,6 +44,14 @@ export const AD_PLACEMENTS = [
     units: 1,
   },
   {
+    id: 'anime_synopsis_320',
+    label: 'Above synopsis',
+    page: 'Anime detail',
+    path: '/anime/[id]',
+    format: '320×50',
+    units: 1,
+  },
+  {
     id: 'manga_trending_grid_160',
     label: 'Trending grid card',
     page: 'Manga home',

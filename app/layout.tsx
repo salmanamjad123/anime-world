@@ -136,9 +136,6 @@ export const metadata: Metadata = {
     canonical: SITE_URL,
   },
   category: "entertainment",
-  other: {
-    monetag: "5f9342e4b90c73efd806e902c9414af4",
-  },
   verification: {
     google: "QFwlV5RYwIEsVd1vRMwIDymOoFTbsXXymurEz8kmBtc",
     other: {

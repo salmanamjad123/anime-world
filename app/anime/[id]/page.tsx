@@ -23,6 +23,7 @@ import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-r
 import { useState, useEffect } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
+import { AnimeSynopsisAd } from '@/components/ads/AnimeSynopsisAd';
 
 export default function AnimeDetailPage() {
   const params = useParams();
@@ -505,6 +506,7 @@ export default function AnimeDetailPage() {
 
           {/* Sidebar: Synopsis at top, then Studios & Status */}
           <div className="space-y-4 md:space-y-6">
+            <AnimeSynopsisAd />
             {/* Synopsis (accordion: 3 lines by default, expand to see full) */}
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button
