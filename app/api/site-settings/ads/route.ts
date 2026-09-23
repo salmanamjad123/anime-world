@@ -14,7 +14,8 @@ const CACHE_HEADERS = {
 function defaultPublicSettings() {
   return toPublicAdsSettings({
     enabled: true,
-    hideForLoggedInUsers: false,
+    hideForLoggedInUsers: true,
+    showAdFreeLoginBanner: true,
     placements: defaultAdPlacements(),
     updatedAt: null,
     updatedBy: null,

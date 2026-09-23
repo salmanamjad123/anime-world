@@ -18,7 +18,8 @@ export const ADS_ENABLED_QUERY_KEY = ADS_SETTINGS_QUERY_KEY;
 
 const DEFAULT_SETTINGS: AdPolicySettings = {
   enabled: true,
-  hideForLoggedInUsers: false,
+  hideForLoggedInUsers: true,
+  showAdFreeLoginBanner: true,
   placements: defaultAdPlacements(),
 };
 
@@ -28,7 +29,8 @@ async function fetchAdsSettings(): Promise<AdPolicySettings> {
   if (!res.ok) return DEFAULT_SETTINGS;
   return {
     enabled: data.enabled !== false,
-    hideForLoggedInUsers: data.hideForLoggedInUsers === true,
+    hideForLoggedInUsers: data.hideForLoggedInUsers !== false,
+    showAdFreeLoginBanner: data.showAdFreeLoginBanner !== false,
     placements: {
       ...DEFAULT_SETTINGS.placements,
       ...(data.placements && typeof data.placements === 'object'

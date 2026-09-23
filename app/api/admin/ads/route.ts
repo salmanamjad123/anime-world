@@ -74,6 +74,9 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.hideForLoggedInUsers === 'boolean') {
       patch.hideForLoggedInUsers = body.hideForLoggedInUsers;
     }
+    if (typeof body.showAdFreeLoginBanner === 'boolean') {
+      patch.showAdFreeLoginBanner = body.showAdFreeLoginBanner;
+    }
 
     if (body.placements && typeof body.placements === 'object') {
       const current = await readSiteAdsSettings(db);
@@ -96,6 +99,7 @@ export async function PATCH(request: NextRequest) {
       meta: {
         enabled: body.enabled,
         hideForLoggedInUsers: body.hideForLoggedInUsers,
+        showAdFreeLoginBanner: body.showAdFreeLoginBanner,
         placements: body.placements,
       },
     });

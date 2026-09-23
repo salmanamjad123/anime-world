@@ -28,8 +28,6 @@ import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 import { AdsterraNative } from '@/components/ads/AdsterraNative';
-import { openAdsterraSmartlink } from '@/lib/ads';
-import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 
 export default function WatchPage() {
   const params = useParams();
@@ -43,11 +41,6 @@ export default function WatchPage() {
   const [selectedServer, setSelectedServer] = useState<string>('hd-1');
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(0);
   const [playbackFailed, setPlaybackFailed] = useState(false);
-  const { visible: smartlinkVisible } = useAdPlacementVisible('watch_smartlink');
-
-  const openSmartlinkIfEnabled = useCallback(() => {
-    if (smartlinkVisible) openAdsterraSmartlink();
-  }, [smartlinkVisible]);
 
   // Only hd-1 and hd-2 work - reset if invalid
   useEffect(() => {
@@ -366,7 +359,6 @@ export default function WatchPage() {
                     <Button
                       variant="secondary"
                       onClick={() => {
-                        openSmartlinkIfEnabled();
                         setSelectedServer((s) => (s === 'hd-1' ? 'hd-2' : 'hd-1'));
                       }}
                     >
@@ -483,9 +475,6 @@ export default function WatchPage() {
                   <select
                     value={selectedServer}
                     onChange={(e) => {
-                      if (e.target.value !== selectedServer) {
-                        openSmartlinkIfEnabled();
-                      }
                       setSelectedServer(e.target.value);
                     }}
                     className="bg-gray-700 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm border border-gray-600 hover:border-gray-500 focus:outline-none focus:border-blue-500 transition-colors"

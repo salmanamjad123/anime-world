@@ -28,10 +28,10 @@ export const AD_PLACEMENTS = [
     units: 1,
   },
   {
-    id: 'watch_smartlink',
-    label: 'Server change smartlink',
-    page: 'Watch',
-    path: '/watch/…',
+    id: 'home_smartlink',
+    label: 'Home click smartlink (3rd click / session)',
+    page: 'Home',
+    path: '/',
     format: 'Smartlink (new tab)',
     units: 1,
   },
@@ -92,6 +92,8 @@ export type AdAudienceContext = {
 export type AdPolicySettings = {
   enabled: boolean;
   hideForLoggedInUsers: boolean;
+  /** Guest home line: “Log in to watch ad-free”. */
+  showAdFreeLoginBanner: boolean;
   placements: AdPlacementsMap;
 };
 

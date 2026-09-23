@@ -21,6 +21,7 @@ type PlacementCatalogItem = {
 type AdsSettingsResponse = {
   enabled: boolean;
   hideForLoggedInUsers: boolean;
+  showAdFreeLoginBanner: boolean;
   placements: Record<AdPlacementId, boolean>;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -312,6 +313,25 @@ function AdminAdsBody({
             <span className="block text-xs text-gray-500 mt-0.5">
               Guests still see ads (unless a placement is off or they are on the
               exemption list below).
+            </span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-gray-800 bg-gray-950/40 p-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={settings.showAdFreeLoginBanner !== false}
+            disabled={saving}
+            onChange={(e) =>
+              void patchSettings({ showAdFreeLoginBanner: e.target.checked })
+            }
+          />
+          <span>
+            <span className="block text-sm font-medium text-white">
+              Show “Log in to watch ad-free” text
+            </span>
+            <span className="block text-xs text-gray-500 mt-0.5">
+              One-line guest nudge on the home page. Uncheck to hide it.
             </span>
           </span>
         </label>

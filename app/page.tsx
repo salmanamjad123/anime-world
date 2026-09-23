@@ -7,6 +7,8 @@ import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
 import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
+import { AdFreeLoginBanner } from '@/components/ads/AdFreeLoginBanner';
+import { HomeSmartlinkTracker } from '@/components/ads/HomeSmartlinkTracker';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
@@ -91,10 +93,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <HomeSmartlinkTracker />
       <Header />
 
       <main className="container mx-auto px-4 py-4">
         <section className="mb-4 sm:mb-6">
+          <AdFreeLoginBanner />
           <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
             Anime Village – Watch Anime Online Free
           </h1>

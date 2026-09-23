@@ -12,7 +12,7 @@ Goal: earn from mixed global traffic (especially USA) **without** aggressive pop
 |---|---|---|
 | Native banners | **Yes — primary** | Look like related content. Do not interrupt playback. |
 | In-Page Push / Social Bar | **Yes — secondary** | Small slide-in widget. No browser permission popup. |
-| On-click Smartlink | **Yes — on user actions only** | Opens only when the user clicks a button they already expect. |
+| On-click Smartlink | **Yes — home page, 3rd click / session** | Opens once per guest session on the home page (not first click). |
 | Aggressive popunders | **No** | Interrupts watching. Hurts UX and return visits. |
 | Auto popups / malware-style redirects | **No** | Against Adsterra policy and bad for users. |
 
@@ -30,13 +30,12 @@ Goal: earn from mixed global traffic (especially USA) **without** aggressive pop
 
 ### On-click Smartlinks
 
-Attach only to actions the user already expects:
+On the **home page** only:
 
-- Switch server / Mirror 2
-- Download HD / 1080p
-- Watch on another source
-
-The Smartlink opens in a **new tab**. The original page keeps playing. Never fire Smartlinks on page load.
+- Count guest clicks in the current browser session
+- Open the Smartlink on the **3rd** click (not the 1st)
+- Fire **once** per session; skip when the user is logged in
+- Opens in a **new tab**; never fire on page load or on the watch page
 
 ---
 
@@ -52,12 +51,14 @@ Keep ads around the player, not on top of it.
 │ Episode list                        │
 │ Native banner (related-content look)│
 ├─────────────────────────────────────┤
-│ Server / Download buttons           │  ← Smartlink on click only
+│ Server / Download buttons           │
 ├─────────────────────────────────────┤
 │ Native banner (optional, 1 more)    │
 │ In-page push (1 widget, corner)     │
 └─────────────────────────────────────┘
 ```
+
+Home page: guest Smartlink opens once on the **3rd click** of the session (new tab).
 
 Rules:
 
@@ -162,7 +163,7 @@ More pageviews (episode switches, related titles) raise impressions. Do not add 
 - [ ] On every placement, exclude **Erotic ads** and **Gambling ads**
 - [ ] Add native banners under the player and in episode/related areas
 - [ ] Add one in-page push / social bar
-- [ ] Put Smartlinks only on Switch Server / Download buttons
+- [ ] Enable home Smartlink (3rd guest click / session); keep it off the watch page
 - [ ] Do not use aggressive popunders
 - [ ] Set payout to **USDT TRC-20** with the Binance deposit address
 - [ ] Confirm a test deposit address is TRC-20 (`T…`) before the first payout

@@ -21,7 +21,8 @@ function parseSettingsData(
 ): SiteAdsSettingsPublic {
   return {
     enabled: data?.enabled !== false,
-    hideForLoggedInUsers: data?.hideForLoggedInUsers === true,
+    hideForLoggedInUsers: data?.hideForLoggedInUsers !== false,
+    showAdFreeLoginBanner: data?.showAdFreeLoginBanner !== false,
     placements: normalizeAdPlacements(
       data?.placements as Partial<AdPlacementsMap> | undefined
     ),
@@ -39,7 +40,8 @@ export async function readSiteAdsSettings(
   if (!snap.exists) {
     return {
       enabled: true,
-      hideForLoggedInUsers: false,
+      hideForLoggedInUsers: true,
+      showAdFreeLoginBanner: true,
       placements: defaultAdPlacements(),
       updatedAt: null,
       updatedBy: null,
@@ -63,6 +65,7 @@ export function toPublicAdsSettings(
   return {
     enabled: settings.enabled,
     hideForLoggedInUsers: settings.hideForLoggedInUsers,
+    showAdFreeLoginBanner: settings.showAdFreeLoginBanner,
     placements: settings.placements,
   };
 }
