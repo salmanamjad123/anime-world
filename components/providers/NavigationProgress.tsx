@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { cn } from '@/lib/utils';
 
@@ -22,17 +22,25 @@ function isInternalNavHref(href: string, currentPath: string): boolean {
 /** Top loading line during client navigations; page content stays visible. */
 export function NavigationProgress() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const closeAuthModal = useAuthModalStore((s) => s.closeAuthModal);
   const [pending, setPending] = useState(false);
 
-  const start = useCallback(() => setPending(true), []);
-  const finish = useCallback(() => setPending(false), []);
+  // Defer: Next may call history.replaceState inside useInsertionEffect
+  const start = useCallback(() => {
+    queueMicrotask(() => setPending(true));
+  }, []);
+  const finish = useCallback(() => {
+    queueMicrotask(() => setPending(false));
+  }, []);
 
+  // Clear on pathname OR search change (manga chapter nav only updates ?chapterId=)
   useEffect(() => {
     closeAuthModal();
     document.body.style.overflow = '';
     finish();
-  }, [pathname, closeAuthModal, finish]);
+  }, [pathname, search, closeAuthModal, finish]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {

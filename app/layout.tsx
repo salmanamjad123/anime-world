@@ -4,6 +4,7 @@ import "./globals.css";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { Suspense } from "react";
 import { NavigationProgress } from "@/components/providers/NavigationProgress";
 import { Footer } from "@/components/layout/Footer";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, SITE_TITLE_DEFAULT, SOCIAL_LINKS } from "@/constants/site";
@@ -177,7 +178,9 @@ export default function RootLayout({
         <QueryProvider>
           <ThemeProvider>
             <AuthProvider>
-              <NavigationProgress />
+              <Suspense fallback={null}>
+                <NavigationProgress />
+              </Suspense>
               <div className="flex min-h-screen flex-col">
                 <main className="flex-1">{children}</main>
                 <Footer />
