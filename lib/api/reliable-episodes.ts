@@ -108,9 +108,12 @@ export async function searchAnimeMultiProvider(
 function anyTitleMatchesSlug(
   titles: string[],
   hiAnimeId: string,
-  episodeCount?: number
+  episodeCount?: number,
+  hiAnimeName?: string
 ): boolean {
-  return titles.some((t) => hiAnimeSlugMatchesTitle(t, hiAnimeId, { episodeCount }));
+  return titles.some((t) =>
+    hiAnimeSlugMatchesTitle(t, hiAnimeId, { episodeCount, hiAnimeName })
+  );
 }
 
 /**
@@ -132,6 +135,7 @@ export async function getReliableEpisodes(
 
   // TIER 1: Try HiAnime API directly (Primary source)
   // Skip health check - it blocks 15s on Railway cold start. Try HiAnime directly; fallback on failure.
+  let hiAnimeErrored = false;
   try {
     let match: Awaited<ReturnType<typeof findHiAnimeMatch>> = null;
 
@@ -166,15 +170,15 @@ export async function getReliableEpisodes(
 
     if (!match) {
       for (const title of titles) {
-        const candidate = await findHiAnimeMatch(title, isDub, episodeCount);
-        if (candidate && anyTitleMatchesSlug(titles, candidate.id, episodeCount)) {
+        const candidate = await findHiAnimeMatch(title, isDub, episodeCount, titles);
+        if (candidate && anyTitleMatchesSlug(titles, candidate.id, episodeCount, candidate.name)) {
           match = candidate;
           break;
         }
       }
     }
 
-    if (match && !anyTitleMatchesSlug(titles, match.id, episodeCount)) {
+    if (match && !anyTitleMatchesSlug(titles, match.id, episodeCount, match.name)) {
       console.warn(
         `⚠️ [Episodes] Rejected provider mismatch: ${match.id} for "${primaryTitle}"`
       );
@@ -207,6 +211,7 @@ export async function getReliableEpisodes(
       }
     }
   } catch (error: any) {
+    hiAnimeErrored = true;
     console.warn('⚠️ [TIER 1] HiAnime API failed:', error.message);
   }
 
@@ -221,8 +226,17 @@ export async function getReliableEpisodes(
     console.warn(`⚠️ [Episodes] Ignoring stale Firestore cache for ${animeId} (wrong provider)`);
   }
 
-  // No cache: server down, don't show wrong fallbacks
-  throw new EpisodesUnavailableError();
+  // HiAnime was reachable but no matching listing (unreleased / not catalogued).
+  // Only treat this as an outage when the provider itself failed.
+  if (hiAnimeErrored) {
+    throw new EpisodesUnavailableError();
+  }
+
+  return {
+    animeId,
+    totalEpisodes: 0,
+    episodes: [],
+  };
 }
 
 /**

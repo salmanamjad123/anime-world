@@ -20,7 +20,7 @@ import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@
 import { ROUTES } from '@/constants/routes';
 import { isAniListNumericId } from '@/lib/seo/anime-path';
 import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
 import { AnimeSynopsisAd } from '@/components/ads/AnimeSynopsisAd';
@@ -32,6 +32,7 @@ export default function AnimeDetailPage() {
   
   const [selectedLanguage, setSelectedLanguage] = useState<'sub' | 'dub'>('sub');
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>(animeId);
+  const autoSelectedWatchableForId = useRef<string | null>(null);
   const [seasons, setSeasons] = useState<any[]>([]);
   const [movies, setMovies] = useState<any[]>([]);
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
@@ -93,35 +94,55 @@ export default function AnimeDetailPage() {
   
   const anime = animeData?.data?.Media;
   const episodes = episodesData?.episodes || [];
+  const selectedIsCurrentAnime =
+    !!anime?.id && String(selectedSeasonId) === String(anime.id);
+  const isUnreleasedSeason =
+    episodesData?.code === 'NOT_YET_RELEASED' ||
+    (selectedIsCurrentAnime && anime?.status === 'NOT_YET_RELEASED');
+  const releaseYear = anime?.startDate?.year;
 
   // URL may be a HiAnime slug while seasons use AniList ids — keep selection in sync
   useEffect(() => {
+    autoSelectedWatchableForId.current = null;
     setSelectedSeasonId(animeId);
   }, [animeId]);
 
   useEffect(() => {
     if (!anime?.id) return;
-    setSelectedSeasonId((prev) => {
-      const resolved = String(anime.id);
-      if (prev === animeId || prev === resolved) return resolved;
-      return prev;
-    });
-  }, [anime?.id, animeId]);
+    const resolved = String(anime.id);
+    const isUnreleased = anime.status === 'NOT_YET_RELEASED';
 
-  useEffect(() => {
-    if (seasons.length === 0 && movies.length === 0) return;
+    if (isUnreleased && seasons.length > 0 && autoSelectedWatchableForId.current !== resolved) {
+      const watchable = seasons
+        .filter((s) => Number(s.episodes) > 0 && String(s.id) !== resolved)
+        .sort(
+          (a, b) =>
+            (b.seasonYear || 0) - (a.seasonYear || 0) ||
+            (b.episodes || 0) - (a.episodes || 0)
+        );
+      if (watchable[0]) {
+        autoSelectedWatchableForId.current = resolved;
+        setSelectedSeasonId(String(watchable[0].id));
+        return;
+      }
+    }
+
+    if (seasons.length === 0 && movies.length === 0) {
+      setSelectedSeasonId((prev) => (prev === animeId || prev === resolved ? resolved : prev));
+      return;
+    }
+
     setSelectedSeasonId((prev) => {
       const seasonIds = new Set(seasons.map((s) => String(s.id)));
       const movieIds = new Set(movies.map((m) => String(m.id)));
       const prevStr = String(prev);
       if (seasonIds.has(prevStr) || movieIds.has(prevStr)) return prevStr;
-      const resolved = anime?.id ? String(anime.id) : null;
-      if (resolved && seasonIds.has(resolved)) return resolved;
+      if (seasonIds.has(resolved)) return resolved;
       const main = seasons.find((s) => s.relationType === 'MAIN') ?? seasons[0];
       if (main) return String(main.id);
       return prevStr;
     });
-  }, [seasons, movies, anime?.id]);
+  }, [anime?.id, anime?.status, animeId, seasons, movies]);
 
   const trendingAnime = (trendingData?.data?.Page?.media || []).filter(
     (a: any) => String(a.id) !== String(animeId)
@@ -224,6 +245,10 @@ export default function AnimeDetailPage() {
     }
   };
 
+  const selectedEpisodeCount =
+    seasonEpisodeCounts[selectedSeasonId] ??
+    (!isEpisodesLoading && !isEpisodesError ? episodes.length : null);
+
   return (
     <div className="min-h-screen bg-gray-900">
       <AnimeSlugUrlSync slug={anime.slug} />
@@ -289,9 +314,12 @@ export default function AnimeDetailPage() {
                   </div>
                 )}
                 {/* Show episode count when we've fetched for selected season */}
-                {(seasonEpisodeCounts[selectedSeasonId] ?? (!isEpisodesLoading ? episodes.length : null)) != null && (
-                  <span className="text-gray-300">
-                    {seasonEpisodeCounts[selectedSeasonId] ?? episodes.length} Episodes
+                {selectedEpisodeCount != null && selectedEpisodeCount > 0 && (
+                  <span className="text-gray-300">{selectedEpisodeCount} Episodes</span>
+                )}
+                {isUnreleasedSeason && (
+                  <span className="text-amber-400">
+                    Not yet released{releaseYear ? ` (${releaseYear})` : ''}
                   </span>
                 )}
               </div>
@@ -316,7 +344,7 @@ export default function AnimeDetailPage() {
                   variant="primary"
                   size="lg"
                   onClick={handlePlayFirst}
-                  disabled={isEpisodesLoading}
+                  disabled={isEpisodesLoading || episodes.length === 0}
                   isLoading={isEpisodesLoading}
                   loadingVariant="skeleton"
                   className="w-full sm:w-auto"
@@ -383,11 +411,19 @@ export default function AnimeDetailPage() {
                             onClick={() => setSelectedSeasonId(season.id)}
                           >
                             {season.title || (season.relationType === 'MAIN' ? 'Season 1' : `Season ${index + 1}`)}
-                            {displayCount != null && ` (${displayCount} eps)`}
+                            {displayCount != null && displayCount > 0 && ` (${displayCount} eps)`}
                           </Button>
                         );
                       })}
                     </div>
+                    {anime.status === 'NOT_YET_RELEASED' &&
+                      String(selectedSeasonId) !== String(anime.id) && (
+                        <p className="text-amber-400/90 text-xs mt-3">
+                          This season is not out yet
+                          {releaseYear ? ` (${releaseYear})` : ''}. Showing the latest season with
+                          episodes.
+                        </p>
+                      )}
                   </div>
                 )}
 
@@ -494,11 +530,26 @@ export default function AnimeDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-gray-400">
-                    {seasons.length > 1 || movies.length > 0
-                      ? 'No episodes for this season. Try selecting another season or movie above.'
-                      : 'No episode information available for this anime.'}
-                  </p>
+                  {isUnreleasedSeason ? (
+                    <>
+                      <p className="text-amber-400 font-medium mb-2">
+                        This season has not been released yet
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        {releaseYear
+                          ? `Episodes will appear here when it starts airing in ${releaseYear}.`
+                          : 'Episodes will appear here when it starts airing.'}
+                        {(seasons.length > 1 || movies.length > 0) &&
+                          ' You can watch another season from the selector above.'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-gray-400">
+                      {seasons.length > 1 || movies.length > 0
+                        ? 'No episodes for this season. Try selecting another season or movie above.'
+                        : 'No episode information available for this anime.'}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -542,7 +593,7 @@ export default function AnimeDetailPage() {
             {anime.status && (
               <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
                 <h3 className="text-lg font-bold text-white mb-3">Status</h3>
-                <p className="text-gray-300 capitalize">{anime.status.toLowerCase().replace('_', ' ')}</p>
+                <p className="text-gray-300 capitalize">{anime.status.toLowerCase().replaceAll('_', ' ')}</p>
               </div>
             )}
           </div>

@@ -20,6 +20,7 @@ function mapHiAnimeToAnime(item: HiAnimeAZItem): Anime {
 
   return {
     id: item.id || '',
+    slug: item.id || undefined,
     title: { romaji: name, english: name },
     coverImage: {
       large: poster,

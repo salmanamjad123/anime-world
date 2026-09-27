@@ -1,6 +1,8 @@
 /**
  * Manga chapter resolution + pagination
- * Full lists are cached; API returns page slices for fast first paint.
+ * Full lists use durable SWR (Redis → Firestore → source):
+ * soft TTL 24h (serve + background refresh), hard TTL 7d.
+ * API returns page slices for fast first paint.
  *
  * - provider=auto: fetch all sources in parallel, pick longest title-verified list
  * - explicit tab: only that source (no silent swap)
@@ -14,8 +16,13 @@ import {
   findMangaDexByAnilistId,
   getMangaDexChapters,
 } from '@/lib/api/mangadex';
-import { getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
+import {
+  lookupChapterListCache,
+  saveChapterListCache,
+  tryAcquireChapterListRefreshLock,
+  type ChapterListPayload,
+} from '@/lib/api/chapter-list-cache';
 import type { Manga, MangaChapter } from '@/types';
 import { getPreferredTitle } from '@/lib/utils';
 import {
@@ -542,12 +549,79 @@ export function buildChapterPageRanges(
   });
 }
 
+function toPagedResult(
+  full: ChapterListPayload | FullChapterList,
+  page: number,
+  limit: number,
+  all: boolean
+): ResolveChaptersResult {
+  const pageSize =
+    all || limit <= 0 ? DEFAULT_CHAPTER_PAGE_SIZE : limit || DEFAULT_CHAPTER_PAGE_SIZE;
+  const paged = paginateChapters(full.chapters, page, limit);
+  const pageRanges = buildChapterPageRanges(full.chapters, pageSize);
+
+  return {
+    ...paged,
+    provider: full.provider,
+    mode: full.mode,
+    mangadexId: full.mangadexId,
+    source: full.source,
+    unavailableReason: full.unavailableReason,
+    pageRanges,
+    firstChapter: full.chapters[0] ?? null,
+  };
+}
+
+async function fetchAndStoreChapterList(
+  anilistId: string,
+  provider: string,
+  manga: Manga,
+  mangadexIdHint?: string | null
+): Promise<FullChapterList> {
+  const mode = provider || 'auto';
+  const full = await resolveFullChapterList(anilistId, provider, manga, mangadexIdHint);
+  await saveChapterListCache(anilistId, mode, mangadexIdHint, full);
+  return full;
+}
+
+/**
+ * Schedule a background re-fetch when the durable list is older than the soft TTL (24h).
+ * Call from a route via Next.js `after()`.
+ */
+function scheduleChapterListRefresh(
+  scheduleRefresh: ((task: () => Promise<void>) => void) | undefined,
+  anilistId: string,
+  provider: string,
+  manga: Manga,
+  mangadexIdHint?: string | null
+): void {
+  if (!scheduleRefresh) return;
+  const mode = provider || 'auto';
+
+  scheduleRefresh(async () => {
+    const locked = await tryAcquireChapterListRefreshLock(anilistId, mode, mangadexIdHint);
+    if (!locked) return;
+    try {
+      console.log(`🔄 [ChapterList Refresh] ${anilistId} mode=${mode} (background)`);
+      await fetchAndStoreChapterList(anilistId, provider, manga, mangadexIdHint);
+    } catch (err) {
+      console.warn('[ChapterList Refresh] Failed:', (err as Error).message);
+    }
+  });
+}
+
 export async function resolveMangaChapters(
   anilistId: string,
   provider: string = DEFAULT_CHAPTER_SOURCE,
   mangaHint?: Manga | null,
   mangadexIdHint?: string | null,
-  options?: { page?: number; limit?: number; all?: boolean }
+  options?: {
+    page?: number;
+    limit?: number;
+    all?: boolean;
+    /** Next.js `after` — run stale refresh after the response is sent */
+    scheduleRefresh?: (task: () => Promise<void>) => void;
+  }
 ): Promise<ResolveChaptersResult> {
   const page = options?.page ?? 1;
   const all = options?.all === true;
@@ -579,32 +653,29 @@ export async function resolveMangaChapters(
     };
   }
 
-  // v10: reject light-novel editions; manhwa auto skips mangapill
-  const cacheKey = `manga:chapters:full:v10:${anilistId}:${mode}:${mangadexIdHint ?? ''}`;
+  // Durable SWR: Redis → Firestore → source (soft 24h / hard 7d)
+  const cached = await lookupChapterListCache(anilistId, mode, mangadexIdHint);
+  if (cached.hit) {
+    if (cached.shouldRefresh) {
+      scheduleChapterListRefresh(
+        options?.scheduleRefresh,
+        anilistId,
+        provider,
+        manga,
+        mangadexIdHint
+      );
+    }
+    return toPagedResult(cached.payload, page, limit, all);
+  }
 
-  const full = await getCachedWhen(
-    cacheKey,
-    () => resolveFullChapterList(anilistId, provider, manga!, mangadexIdHint),
-    CACHE_TTL.MANGA_CHAPTERS_LIST,
-    (r) => (r?.chapters?.length ?? 0) > 0,
-    5 * 60 * 1000
+  const full = await fetchAndStoreChapterList(
+    anilistId,
+    provider,
+    manga,
+    mangadexIdHint
   );
 
-  const pageSize =
-    all || limit <= 0 ? DEFAULT_CHAPTER_PAGE_SIZE : limit || DEFAULT_CHAPTER_PAGE_SIZE;
-  const paged = paginateChapters(full.chapters, page, limit);
-  const pageRanges = buildChapterPageRanges(full.chapters, pageSize);
-
-  return {
-    ...paged,
-    provider: full.provider,
-    mode: full.mode,
-    mangadexId: full.mangadexId,
-    source: full.source,
-    unavailableReason: full.unavailableReason,
-    pageRanges,
-    firstChapter: full.chapters[0] ?? null,
-  };
+  return toPagedResult(full, page, limit, all);
 }
 
 export { MANGA_PROVIDERS, MANHWA_FRIENDLY_SOURCES };

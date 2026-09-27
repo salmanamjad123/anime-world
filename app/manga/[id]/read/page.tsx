@@ -38,6 +38,7 @@ import {
 } from '@/lib/firebase/manga-firestore';
 import { cn, getPreferredTitle } from '@/lib/utils';
 import { MangaPageImage } from '@/components/manga/MangaPageImage';
+import { MangaChapterSelect, chapterLabelFromId } from '@/components/manga/MangaChapterSelect';
 
 const PAGE_VIEW_ZOOM_STEPS = [100, 125, 150, 200, 250] as const;
 
@@ -68,6 +69,7 @@ export default function MangaReadPage() {
     saveChapter,
     unsaveChapter,
     isChapterSaved,
+    isChapterRead,
   } = useReadingHistoryStore();
   const { data: infoData } = useMangaInfo(mangaId, mangadexId);
   const manga = infoData?.manga;
@@ -381,15 +383,14 @@ export default function MangaReadPage() {
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <span className="text-sm text-gray-300 min-w-[80px] sm:min-w-[100px] text-center px-2 truncate">
-                {pages.length > 0
-                  ? `Ch. ${
-                      chapters.find((c) => c.id === chapterId)?.chapter ||
-                      chapters.find((c) => c.id === chapterId)?.title?.replace(/^ch\.?\s*/i, '') ||
-                      '—'
-                    } · ${scrollViewPage}/${pages.length}`
-                  : '—'}
-              </span>
+              <MangaChapterSelect
+                chapters={chapters}
+                currentId={chapterId}
+                onSelect={goToChapter}
+                isRead={(id) => isChapterRead(mangaId, id)}
+                pageLabel={pages.length > 0 ? `${scrollViewPage}/${pages.length}` : undefined}
+                fallbackLabel={chapterLabelFromId(chapterId)}
+              />
               <Button
                 variant="ghost"
                 size="sm"
@@ -532,7 +533,7 @@ export default function MangaReadPage() {
               <X className="w-5 h-5" />
               <span className="hidden sm:inline">Close</span>
             </Button>
-            <div className="flex items-center gap-0 rounded-lg border border-gray-700 bg-gray-800/50">
+            <div className="flex items-center gap-0 rounded-lg border border-gray-700 bg-gray-800/50 flex-1 justify-center max-w-[200px] sm:max-w-[240px] mx-auto">
               <Button
                 variant="ghost"
                 size="sm"
@@ -543,12 +544,13 @@ export default function MangaReadPage() {
               >
                 <ChevronLeft className="w-5 h-5" />
               </Button>
-              <span className="text-sm text-gray-300 min-w-[72px] text-center px-2">
-                Ch.{' '}
-                {chapters.find((c) => c.id === chapterId)?.chapter ||
-                  chapters.find((c) => c.id === chapterId)?.title?.replace(/^ch\.?\s*/i, '') ||
-                  '—'}
-              </span>
+              <MangaChapterSelect
+                chapters={chapters}
+                currentId={chapterId}
+                onSelect={goToChapter}
+                isRead={(id) => isChapterRead(mangaId, id)}
+                fallbackLabel={chapterLabelFromId(chapterId)}
+              />
               <Button
                 variant="ghost"
                 size="sm"

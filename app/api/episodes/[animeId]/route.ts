@@ -71,6 +71,7 @@ export async function GET(
     const searchTitles = [
       anime.title.english,
       anime.title.romaji,
+      ...(anime.synonyms ?? []),
       anime.title.native,
     ].filter((t): t is string => Boolean(t?.trim()));
     const episodeCount = anime.episodes || 0;
@@ -83,6 +84,13 @@ export async function GET(
       episodeCount,
       dub
     );
+
+    if (result.episodes.length === 0 && anime.status === 'NOT_YET_RELEASED') {
+      return NextResponse.json({
+        ...result,
+        code: 'NOT_YET_RELEASED',
+      });
+    }
 
     return NextResponse.json(result);
   } catch (error) {

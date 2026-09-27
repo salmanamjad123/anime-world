@@ -15,6 +15,7 @@ import {
 } from './anilist-resilience';
 import { searchJikanAnime } from './jikan';
 import { getHiAnimeBrowseList, searchHiAnimeAsList } from './hianime-fallback';
+import { keepWatchableSearchResult, WATCHABLE_CATALOG_STATUSES } from './watchable-catalog';
 import type {
   Anime,
   AnimeSearchResult,
@@ -37,6 +38,7 @@ const ANIME_FIELDS = `
     english
     native
   }
+  synonyms
   description
   coverImage {
     large
@@ -85,7 +87,7 @@ const TRENDING_QUERY = `
         hasNextPage
         perPage
       }
-      media(type: ANIME, sort: TRENDING_DESC) {
+      media(type: ANIME, sort: TRENDING_DESC, status_in: [RELEASING, FINISHED, HIATUS]) {
         ${ANIME_FIELDS}
       }
     }
@@ -102,7 +104,7 @@ const POPULAR_QUERY = `
         hasNextPage
         perPage
       }
-      media(type: ANIME, sort: POPULARITY_DESC) {
+      media(type: ANIME, sort: POPULARITY_DESC, status_in: [RELEASING, FINISHED, HIATUS]) {
         ${ANIME_FIELDS}
       }
     }
@@ -119,6 +121,7 @@ const SEARCH_QUERY = `
     $season: MediaSeason
     $format: MediaFormat
     $status: MediaStatus
+    $status_in: [MediaStatus]
     $sort: [MediaSort]
   ) {
     Page(page: $page, perPage: $perPage) {
@@ -137,6 +140,7 @@ const SEARCH_QUERY = `
         season: $season
         format: $format
         status: $status
+        status_in: $status_in
         sort: $sort
       ) {
         ${ANIME_FIELDS}
@@ -186,8 +190,8 @@ async function executeQuery<T>(query: string, variables: Record<string, any> = {
  * Get trending anime (cached 5 min)
  */
 export async function getTrendingAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  const cacheKey = `anilist:trending:${page}:${perPage}`;
-  return fetchAnilistListWithFallback(
+  const cacheKey = `anilist:trending:watchable:${page}:${perPage}`;
+  const result = await fetchAnilistListWithFallback(
     cacheKey,
     () => executeQuery<AnimeSearchResult>(TRENDING_QUERY, { page, perPage }),
     getJikanTrending,
@@ -195,14 +199,15 @@ export async function getTrendingAnime(page = 1, perPage = 20): Promise<AnimeSea
     perPage,
     'trending'
   );
+  return keepWatchableSearchResult(result);
 }
 
 /**
  * Get popular anime (cached 5 min)
  */
 export async function getPopularAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  const cacheKey = `anilist:popular:${page}:${perPage}`;
-  return fetchAnilistListWithFallback(
+  const cacheKey = `anilist:popular:watchable:${page}:${perPage}`;
+  const result = await fetchAnilistListWithFallback(
     cacheKey,
     () => executeQuery<AnimeSearchResult>(POPULAR_QUERY, { page, perPage }),
     getJikanPopular,
@@ -210,6 +215,7 @@ export async function getPopularAnime(page = 1, perPage = 20): Promise<AnimeSear
     perPage,
     'popular'
   );
+  return keepWatchableSearchResult(result);
 }
 
 // AniList uses different names for some genres
@@ -285,13 +291,26 @@ export async function searchAnime(
   if (filters.year) variables.year = filters.year;
   if (filters.season) variables.season = filters.season;
   if (filters.format) variables.format = filters.format;
-  if (filters.status) variables.status = filters.status;
+  if (filters.status) {
+    variables.status = filters.status;
+  } else if (!filters.search?.trim()) {
+    // Genre / browse grids are watch catalogs — hide unreleased titles
+    variables.status_in = WATCHABLE_CATALOG_STATUSES;
+  }
 
   try {
-    return await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
+    const result = await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
+    if (!filters.status && !filters.search?.trim()) {
+      return keepWatchableSearchResult(result);
+    }
+    return result;
   } catch (error) {
     if (!isAnilistOutage(error)) throw error;
-    return searchAnimeOutageFallback(filters, page, perPage);
+    const fallback = await searchAnimeOutageFallback(filters, page, perPage);
+    if (!filters.status && !filters.search?.trim()) {
+      return keepWatchableSearchResult(fallback);
+    }
+    return fallback;
   }
 }
 
@@ -348,20 +367,22 @@ export async function getAnimeByIds(ids: string[]): Promise<Anime[]> {
  * Get top rated anime (cached 5 min)
  */
 export async function getTopRatedAnime(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  const cacheKey = `anilist:top:${page}:${perPage}`;
-  return fetchAnilistListWithFallback(
+  const cacheKey = `anilist:top:watchable:${page}:${perPage}`;
+  const result = await fetchAnilistListWithFallback(
     cacheKey,
     () =>
       executeQuery<AnimeSearchResult>(SEARCH_QUERY, {
         page,
         perPage,
         sort: ['SCORE_DESC'],
+        status_in: WATCHABLE_CATALOG_STATUSES,
       }),
     getJikanTopRated,
     page,
     perPage,
     'popular'
   );
+  return keepWatchableSearchResult(result);
 }
 
 /**

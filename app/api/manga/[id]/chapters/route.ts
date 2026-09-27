@@ -2,9 +2,12 @@
  * Manga Chapters API Route
  * GET /api/manga/[id]/chapters?provider=mangadex&page=1&limit=60
  * Optional: all=1 — return full cached list (reader navigation)
+ *
+ * Chapter lists use durable SWR (Redis/Firestore): serve instantly from cache,
+ * refresh from source in the background when older than 24h.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import {
   DEFAULT_CHAPTER_SOURCE,
   DEFAULT_CHAPTER_PAGE_SIZE,
@@ -32,23 +35,38 @@ export async function GET(
       provider,
       null,
       mangadexIdHint,
-      { page, limit, all }
+      {
+        page,
+        limit,
+        all,
+        scheduleRefresh: (task) => {
+          after(task);
+        },
+      }
     );
 
-    return NextResponse.json({
-      chapters: result.chapters,
-      provider: result.provider,
-      mode: result.mode,
-      mangadexId: result.mangadexId ?? undefined,
-      source: result.source,
-      page: result.page,
-      limit: result.limit,
-      total: result.total,
-      hasMore: result.hasMore,
-      unavailableReason: result.unavailableReason,
-      pageRanges: result.pageRanges ?? [],
-      firstChapter: result.firstChapter ?? null,
-    });
+    return NextResponse.json(
+      {
+        chapters: result.chapters,
+        provider: result.provider,
+        mode: result.mode,
+        mangadexId: result.mangadexId ?? undefined,
+        source: result.source,
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        hasMore: result.hasMore,
+        unavailableReason: result.unavailableReason,
+        pageRanges: result.pageRanges ?? [],
+        firstChapter: result.firstChapter ?? null,
+      },
+      {
+        headers: {
+          // Short CDN/browser hint — durable freshness is handled server-side (SWR)
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        },
+      }
+    );
   } catch (error) {
     console.error('[API Error] /api/manga/[id]/chapters:', error);
     return NextResponse.json(

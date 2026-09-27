@@ -5,6 +5,7 @@
 
 import { axiosInstance } from './axios';
 import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
+import { keepWatchableSearchResult } from './watchable-catalog';
 import type { Anime, AnimeFormat, AnimeSearchResult, AnimeStatus } from '@/types';
 
 const JIKAN_BASE = 'https://api.jikan.moe/v4';
@@ -160,7 +161,8 @@ export async function getJikanTrending(page = 1, perPage = 20): Promise<AnimeSea
 
 /** Most popular on MAL */
 export async function getJikanPopular(page = 1, perPage = 20): Promise<AnimeSearchResult> {
-  return fetchJikanList('/top/anime?filter=bypopularity', page, perPage);
+  const result = await fetchJikanList('/top/anime?filter=bypopularity', page, perPage);
+  return keepWatchableSearchResult(result);
 }
 
 /** Top rated by score */
@@ -184,6 +186,66 @@ export async function getJikanAnimeByMalId(
   } catch {
     return null;
   }
+}
+
+/** A-Z list by starting letter (Jikan fallback when HiAnime azlist is down) */
+export async function getJikanAZList(
+  letter: string,
+  page = 1
+): Promise<{
+  sortOption: string;
+  animes: Array<{
+    id: string | null;
+    name: string | null;
+    jname?: string | null;
+    poster: string | null;
+    type?: string | null;
+    rating?: string | null;
+    episodes?: { sub: number | null; dub: number | null };
+  }>;
+  totalPages: number;
+  hasNextPage: boolean;
+  currentPage: number;
+}> {
+  const normalized = letter.toLowerCase();
+  const isDigit = normalized === '0-9';
+  const isOther = normalized === 'other' || normalized === 'all';
+  const letterParam = isDigit || isOther ? undefined : normalized.slice(0, 1);
+
+  const limit = 25;
+  const response = await axiosInstance.get<JikanListResponse>(`${JIKAN_BASE}/anime`, {
+    params: {
+      page,
+      limit,
+      order_by: 'title',
+      sort: 'asc',
+      ...(letterParam ? { letter: letterParam } : {}),
+    },
+    timeout: JIKAN_TIMEOUT,
+  });
+
+  const items = response.data?.data ?? [];
+  const lastPage = response.data?.pagination?.last_visible_page ?? page;
+  const hasNext = response.data?.pagination?.has_next_page ?? false;
+
+  return {
+    sortOption: letter,
+    animes: items.map((item) => ({
+      id: String(item.mal_id),
+      name: item.title_english || item.title,
+      jname: item.title_japanese || item.title,
+      poster: item.images?.jpg?.large_image_url || item.images?.jpg?.image_url || null,
+      type: item.type || null,
+      rating: item.score != null ? String(item.score) : null,
+      episodes: {
+        sub: item.episodes ?? null,
+        dub: null,
+      },
+    })),
+    totalPages: lastPage,
+    hasNextPage: hasNext,
+    currentPage: response.data?.pagination?.current_page ?? page,
+  };
 }
 
 /** Search anime on MAL via Jikan */

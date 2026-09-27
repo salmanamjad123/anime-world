@@ -33,6 +33,7 @@ export interface EpisodeListResponse {
   totalEpisodes: number;
   episodes: Episode[];
   _provider?: string; // Which provider was used (hianime, gogoanime, etc.)
+  code?: 'NOT_YET_RELEASED' | 'NO_EPISODES';
 }
 
 /**

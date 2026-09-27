@@ -3,7 +3,7 @@
  * Shared types for anime data across the application
  */
 
-export type AnimeStatus = 'FINISHED' | 'RELEASING' | 'NOT_YET_RELEASED' | 'CANCELLED';
+export type AnimeStatus = 'FINISHED' | 'RELEASING' | 'NOT_YET_RELEASED' | 'CANCELLED' | 'HIATUS';
 export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
 export type AnimeSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
 
@@ -20,6 +20,7 @@ export interface Anime {
     english?: string;
     native?: string;
   };
+  synonyms?: string[];
   description?: string;
   coverImage: {
     large: string;

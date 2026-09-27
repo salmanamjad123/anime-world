@@ -9,6 +9,7 @@ import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
 import { getCached, CACHE_TTL } from '@/lib/cache';
 import { retry } from '@/lib/utils/retry';
+import { getJikanAZList } from './jikan';
 
 // HiAnime API base URL (default to localhost, override via env)
 const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
@@ -88,7 +89,10 @@ export async function searchHiAnime(
   query: string,
   page: number = 1
 ): Promise<HiAnimeSearchResult[]> {
-  const cacheKey = `hianime:search:${query}:${page}`;
+  const q = query.trim();
+  if (!q) return [];
+
+  const cacheKey = `hianime:search:${q}:${page}`;
   
   return getCached(
     cacheKey,
@@ -97,7 +101,7 @@ export async function searchHiAnime(
         async () => {
           const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
           const response = await axiosInstance.get(url, {
-            params: { q: query, page },
+            params: { q, page },
             timeout: HIANIME_TIMEOUT,
           });
           const results = response.data?.data?.animes || [];
@@ -380,6 +384,8 @@ const SEQUEL_KEYWORDS = [
   'shibuya incident',
   'part 2',
   'part 3',
+  'cour 2',
+  'cour 3',
   '2nd season',
   '3rd season',
   'second season',
@@ -400,7 +406,67 @@ function searchTitleSuggestsSequel(cleanTitle: string): boolean {
   return SEQUEL_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-const TITLE_STOP_WORDS = new Set(['the', 'and', 'for', 'part', 'arc']);
+const TITLE_STOP_WORDS = new Set(['the', 'and', 'for', 'part', 'arc', 'cour', 'cool']);
+
+const ROMAN_SEASON: Record<string, number> = {
+  ii: 2,
+  iii: 3,
+  iv: 4,
+  v: 5,
+  vi: 6,
+  vii: 7,
+  viii: 8,
+};
+
+function extractSeasonPart(text: string): { season?: number; part?: number } {
+  const lower = text.toLowerCase().replace(/[-_]/g, ' ');
+  let season: number | undefined;
+  let part: number | undefined;
+
+  const seasonMatch =
+    lower.match(/(?:^|[\s:])(?:season|s)\s*(\d+)/) ||
+    lower.match(/(\d+)(?:st|nd|rd|th)\s*season/);
+  if (seasonMatch) season = parseInt(seasonMatch[1], 10);
+
+  const partMatch = lower.match(/(?:part|cour|cool)\s*(\d+)/);
+  if (partMatch) part = parseInt(partMatch[1], 10);
+
+  if (season == null) {
+    const roman = lower.match(/\b(viii|vii|vi|iv|iii|ii|v)\b/);
+    if (roman) season = ROMAN_SEASON[roman[1]];
+  }
+
+  return { season, part };
+}
+
+function seasonPartCompatible(
+  queryTitle: string,
+  resultId: string,
+  resultName = ''
+): boolean {
+  const query = extractSeasonPart(queryTitle);
+  const result = extractSeasonPart(`${resultId} ${resultName}`);
+  // No season/roman marker means the original cour (season 1).
+  // A "Part 2" / "Cour 2" title without a season is season 1 part 2.
+  const resultSeason = result.season ?? 1;
+  const querySeason = query.season ?? (query.part != null ? 1 : undefined);
+
+  if (querySeason != null && querySeason !== resultSeason) {
+    return false;
+  }
+  if (query.part != null && result.part != null && query.part !== result.part) {
+    return false;
+  }
+  // "Season 3 Part 2" / "Cour 2" must not attach to a listing with no part
+  if (query.part != null && result.part == null) {
+    return false;
+  }
+  // "Season 3" must not attach to a "Part 2" listing of that season (or of season 1)
+  if (query.part == null && result.part != null && querySeason != null) {
+    return false;
+  }
+  return true;
+}
 
 /**
  * Check if result name/id reasonably matches the search (avoids cross-anime matches)
@@ -417,15 +483,65 @@ function getAnchorWord(words: string[]): string | null {
   return words.find((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w)) ?? null;
 }
 
+function editDistanceAtMost1(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (la > lb) i += 1;
+    else if (lb > la) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return edits + (la - i) + (lb - j) <= 1;
+}
+
+function fuzzyIncludes(haystack: string, word: string): boolean {
+  if (haystack.includes(word)) return true;
+  if (word.length < 5) return false;
+  return haystack
+    .split(/[^a-z0-9]+/)
+    .some((token) => token.length >= 4 && editDistanceAtMost1(token, word));
+}
+
 function titleOverlap(searchWords: string[], resultId: string, resultName: string): boolean {
   const text = normalizeForMatch(`${resultId} ${resultName}`);
   const core = searchWords.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
   if (core.length === 0) return true;
 
   const anchor = getAnchorWord(searchWords);
-  if (anchor && !text.includes(anchor)) return false;
+  if (anchor && !fuzzyIncludes(text, anchor)) return false;
 
-  return core.every((w) => text.includes(w));
+  return core.every((w) => fuzzyIncludes(text, w));
+}
+
+function resultMatchesKnownTitle(
+  titles: string[],
+  resultId: string,
+  resultName: string
+): boolean {
+  return titles.some((title) => {
+    const words = extractSearchWords(title);
+    if (words.length === 0) return false;
+    return (
+      titleOverlap(words, resultId, resultName) &&
+      seasonPartCompatible(title, resultId, resultName)
+    );
+  });
 }
 
 function decodeEpisodeTitle(title: string): string {
@@ -450,15 +566,20 @@ const SPECIAL_SLUG_MARKERS = [
 export function hiAnimeSlugMatchesTitle(
   animeTitle: string,
   hiAnimeId: string,
-  options?: { episodeCount?: number; allowSpecials?: boolean }
+  options?: { episodeCount?: number; allowSpecials?: boolean; hiAnimeName?: string }
 ): boolean {
   const words = extractSearchWords(animeTitle);
   const core = words.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
   const slug = hiAnimeId.toLowerCase();
+  const resultName = options?.hiAnimeName ?? '';
 
-  if (!titleOverlap(words, hiAnimeId, '')) return false;
+  if (!titleOverlap(words, hiAnimeId, resultName)) return false;
+  if (!seasonPartCompatible(animeTitle, hiAnimeId, resultName)) return false;
 
-  const overlap = countSlugTokenOverlap(buildSearchTitleStripped(animeTitle), hiAnimeId);
+  const overlapHaystack = `${hiAnimeId} ${resultName}`.toLowerCase();
+  const overlap = extractSearchWords(animeTitle).filter(
+    (t) => t.length >= 3 && !TITLE_STOP_WORDS.has(t) && fuzzyIncludes(overlapHaystack, t)
+  ).length;
   const minOverlap = Math.min(3, core.length);
   if (core.length >= 2 && overlap < minOverlap) return false;
 
@@ -517,19 +638,24 @@ function buildSearchTitleStripped(title: string): string {
 export async function findHiAnimeMatch(
   animeTitle: string,
   isDub: boolean = false,
-  expectedEpisodeCount?: number
+  expectedEpisodeCount?: number,
+  alternateTitles: string[] = []
 ): Promise<HiAnimeSearchResult | null> {
   try {
     const fullSearchTitle = buildSearchTitlePreservingSeason(animeTitle);
     const strippedTitle = buildSearchTitleStripped(animeTitle);
-    const searchWords = extractSearchWords(animeTitle);
+    const knownTitles = [animeTitle, ...alternateTitles].filter(
+      (t, i, arr) => Boolean(t?.trim()) && arr.indexOf(t) === i
+    );
     const weWantSequel = searchTitleSuggestsSequel(fullSearchTitle);
+
+    if (!fullSearchTitle && !strippedTitle) return null;
 
     // First try with full title (preserving "season 2", "2nd season", "part 2", etc.)
     // so HiAnime entries like "frieren-beyond-journeys-end-season-2" are found
-    let results = await searchHiAnime(fullSearchTitle);
+    let results = fullSearchTitle ? await searchHiAnime(fullSearchTitle) : [];
 
-    if (results.length === 0 && fullSearchTitle !== strippedTitle) {
+    if (results.length === 0 && strippedTitle && fullSearchTitle !== strippedTitle) {
       results = await searchHiAnime(strippedTitle);
     }
 
@@ -543,9 +669,10 @@ export async function findHiAnimeMatch(
       if (dubMatches.length > 0) matches = dubMatches;
     }
 
-    // Filter to results that actually match the search (avoid cross-anime like Beheneko for Bleach)
+    // A result is valid if it matches this search title OR another known title
+    // (English "Overgeared" vs HiAnime "Tempal: Item no Chikara" / slug overgeared-...)
     const titleMatched = matches.filter((r) =>
-      titleOverlap(searchWords, r.id, r.name ?? '')
+      resultMatchesKnownTitle(knownTitles, r.id, r.name ?? '')
     );
     if (titleMatched.length === 0) return null;
     matches = titleMatched;
@@ -662,25 +789,34 @@ export async function getHiAnimeAZList(
     throw new Error(`Invalid AZ sort option: ${sortOption}`);
   }
 
-  const cacheKey = `hianime:azlist:${apiOption}:${page}`;
+  const cacheKey = `hianime:azlist:v3:${apiOption}:${page}`;
 
   return getCached(
     cacheKey,
     async () => {
       const url = `${HIANIME_API_URL}/api/v2/hianime/azlist/${apiOption}`;
-      const response = await axiosInstance.get(url, {
-        params: { page },
-        timeout: HIANIME_TIMEOUT,
-      });
+      try {
+        const response = await axiosInstance.get(url, {
+          params: { page },
+          timeout: HIANIME_TIMEOUT,
+        });
 
-      const data = response.data?.data ?? response.data;
-      return {
-        sortOption: data.sortOption ?? apiOption,
-        animes: data.animes ?? [],
-        totalPages: data.totalPages ?? 1,
-        hasNextPage: data.hasNextPage ?? false,
-        currentPage: data.currentPage ?? page,
-      };
+        const data = response.data?.data ?? response.data;
+        return {
+          sortOption: data.sortOption ?? apiOption,
+          animes: data.animes ?? [],
+          totalPages: data.totalPages ?? 1,
+          hasNextPage: data.hasNextPage ?? false,
+          currentPage: data.currentPage ?? page,
+        };
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 501) {
+          console.warn('[HiAnime AZ] Endpoint missing — Jikan letter fallback');
+          return getJikanAZList(normalized, page);
+        }
+        throw error;
+      }
     },
     CACHE_TTL.ANIME_SEARCH
   ).catch((error: any) => {
