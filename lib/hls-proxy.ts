@@ -86,12 +86,16 @@ export function vercelMediaOffloadUrl(
   return `${destBase.replace(/\/$/, '')}${incoming.search}`;
 }
 
+/** Same-origin /api/proxy: native tracks need it, and ASS/SRT become WebVTT. */
 export function wrapSubtitleUrl(subtitleUrl: string, referer?: string): string {
   if (!subtitleUrl.startsWith('http')) return subtitleUrl;
-  const base = getHlsProxyBase().replace(/\/$/, '');
-  const params = new URLSearchParams({ url: subtitleUrl });
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const params = new URLSearchParams({
+    url: subtitleUrl,
+    kind: 'subtitle',
+  });
   if (referer) params.set('referer', referer);
-  return `${base}?${params.toString()}`;
+  return `${origin}/api/proxy?${params.toString()}`;
 }
 
 export function wrapImageProxyUrl(imageUrl: string, referer?: string): string {

@@ -12,10 +12,21 @@ import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
 const CACHE_MAX_AGE = parseInt(process.env.PROXY_CACHE_MAX_AGE || '3600');
 
+function isSubtitleProxyRequest(request: NextRequest): boolean {
+  const kind = request.nextUrl.searchParams.get('kind');
+  const target = request.nextUrl.searchParams.get('url') || '';
+  return (
+    kind === 'subtitle' || /\.(ass|ssa|srt|vtt)(\?|$)/i.test(target)
+  );
+}
+
 export async function GET(request: NextRequest) {
-  const offload = vercelMediaOffloadUrl('proxy', request.url);
-  if (offload) {
-    return NextResponse.redirect(offload, 302);
+  // Subtitles stay on Vercel (tiny + ASS→VTT). Video still offloads to the Worker.
+  if (!isSubtitleProxyRequest(request)) {
+    const offload = vercelMediaOffloadUrl('proxy', request.url);
+    if (offload) {
+      return NextResponse.redirect(offload, 302);
+    }
   }
 
   try {
@@ -153,6 +164,7 @@ export async function GET(request: NextRequest) {
 
     // Subtitles: browsers only render WebVTT in <track> — convert ASS/SRT
     const isSubtitle =
+      request.nextUrl.searchParams.get('kind') === 'subtitle' ||
       /\.(ass|ssa|srt|vtt)(\?|$)/i.test(url) ||
       contentType.toLowerCase().includes('text/vtt') ||
       contentType.toLowerCase().includes('application/x-subrip') ||

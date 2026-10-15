@@ -799,6 +799,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         className="w-full h-full video-subtitles"
+        crossOrigin="anonymous"
         style={{ ['--subtitle-position' as string]: subtitlePosition }}
         poster={poster}
         onPlay={() => {
