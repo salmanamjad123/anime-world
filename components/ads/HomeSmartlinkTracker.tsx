@@ -6,8 +6,8 @@ import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
 import { useUserStore } from '@/store/useUserStore';
 
 /**
- * On the home page, opens the Adsterra smartlink once on the 3rd guest click
- * in the current browser session. Skipped when logged in or placement is off.
+ * Site-wide: first guest click opens the Adsterra smartlink, then 2h cooldown.
+ * Skipped when logged in, placement is off, or the user is in /admin.
  */
 export function HomeSmartlinkTracker() {
   const user = useUserStore((s) => s.user);
@@ -18,6 +18,7 @@ export function HomeSmartlinkTracker() {
     if (!enabled) return;
 
     const onClick = () => {
+      if (window.location.pathname.startsWith('/admin')) return;
       trackHomeSmartlinkClick(true);
     };
 

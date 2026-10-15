@@ -10,6 +10,7 @@ import { Footer } from "@/components/layout/Footer";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, SITE_TITLE_DEFAULT, SOCIAL_LINKS } from "@/constants/site";
 import { ALL_SEO_KEYWORDS } from "@/constants/seo";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { HomeSmartlinkTracker } from "@/components/ads/HomeSmartlinkTracker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -178,6 +179,7 @@ export default function RootLayout({
         <QueryProvider>
           <ThemeProvider>
             <AuthProvider>
+              <HomeSmartlinkTracker />
               <Suspense fallback={null}>
                 <NavigationProgress />
               </Suspense>

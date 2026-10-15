@@ -18,16 +18,41 @@ export const ADSTERRA_NATIVE_CONTAINER =
   process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_CONTAINER || '';
 
 export const ADSTERRA_SOCIAL_SRC =
-  process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_SRC || '';
+  process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_SRC ||
+  'https://bauval.org/14/ac28d650f3fd8394f7cf51c6295e3500';
 
 export const ADSTERRA_SMARTLINK =
-  process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK || '';
+  process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK ||
+  'https://araplhn.org/4/f7182aedea42dbf055578f0d0cfc0498';
 
-/** Guest home clicks before opening the smartlink once per session. */
-export const HOME_SMARTLINK_CLICK_THRESHOLD = 3;
+/** After a smartlink opens, do not open another for this long. */
+export const SMARTLINK_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
-const HOME_SMARTLINK_DONE_KEY = 'home_smartlink_done';
-const HOME_SMARTLINK_CLICKS_KEY = 'home_smartlink_clicks';
+const SMARTLINK_LAST_OPEN_KEY = 'smartlink_last_open';
+
+/** Manga social bar: show at most once every 2 hours. */
+export const SOCIAL_BAR_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const SOCIAL_BAR_LAST_SHOWN_KEY = 'manga_social_bar_last';
+
+export function canShowMangaSocialBar(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!ADSTERRA_SOCIAL_SRC) return false;
+  try {
+    const last = Number(localStorage.getItem(SOCIAL_BAR_LAST_SHOWN_KEY) || 0);
+    if (last && Date.now() - last < SOCIAL_BAR_COOLDOWN_MS) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function markMangaSocialBarShown(): void {
+  try {
+    localStorage.setItem(SOCIAL_BAR_LAST_SHOWN_KEY, String(Date.now()));
+  } catch {
+    /* private mode */
+  }
+}
 
 export function isAdLocalHost() {
   if (typeof window === 'undefined') return false;
@@ -43,26 +68,19 @@ export function openAdsterraSmartlink() {
 }
 
 /**
- * Count a home-page guest click. On the Nth click in this browser session,
- * open the smartlink once. No-op if already fired this session.
+ * On the first eligible click, open the smartlink in a new tab.
+ * After that, no-op until the 2-hour cooldown expires (localStorage).
  * Returns true if the smartlink was opened.
  */
-export function trackHomeSmartlinkClick(
-  enabled: boolean,
-  threshold = HOME_SMARTLINK_CLICK_THRESHOLD
-): boolean {
+export function trackHomeSmartlinkClick(enabled: boolean): boolean {
   if (typeof window === 'undefined') return false;
   if (!enabled || !ADSTERRA_SMARTLINK) return false;
 
   try {
-    if (sessionStorage.getItem(HOME_SMARTLINK_DONE_KEY) === '1') return false;
+    const last = Number(localStorage.getItem(SMARTLINK_LAST_OPEN_KEY) || 0);
+    if (last && Date.now() - last < SMARTLINK_COOLDOWN_MS) return false;
 
-    const next = Number(sessionStorage.getItem(HOME_SMARTLINK_CLICKS_KEY) || 0) + 1;
-    sessionStorage.setItem(HOME_SMARTLINK_CLICKS_KEY, String(next));
-
-    if (next < threshold) return false;
-
-    sessionStorage.setItem(HOME_SMARTLINK_DONE_KEY, '1');
+    localStorage.setItem(SMARTLINK_LAST_OPEN_KEY, String(Date.now()));
     openAdsterraSmartlink();
     return true;
   } catch {

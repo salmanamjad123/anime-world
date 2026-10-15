@@ -29,9 +29,9 @@ export const AD_PLACEMENTS = [
   },
   {
     id: 'home_smartlink',
-    label: 'Home click smartlink (3rd click / session)',
-    page: 'Home',
-    path: '/',
+    label: 'First-click smartlink (2 hour cooldown)',
+    page: 'Site-wide',
+    path: '/*',
     format: 'Smartlink (new tab)',
     units: 1,
   },
@@ -57,6 +57,14 @@ export const AD_PLACEMENTS = [
     page: 'Manga home',
     path: '/manga',
     format: '160×300',
+    units: 1,
+  },
+  {
+    id: 'manga_social_bar',
+    label: 'Social bar (once / 2 hours)',
+    page: 'Manga',
+    path: '/manga/…',
+    format: 'In-page push',
     units: 1,
   },
 ] as const;
