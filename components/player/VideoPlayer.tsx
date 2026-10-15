@@ -13,6 +13,7 @@ import {
   initialHlsViaProxy,
   shouldPreferDirectHls,
   wrapHlsUrl,
+  wrapSubtitleUrl,
 } from '@/lib/hls-proxy';
 
 import { usePlayerStore } from '@/store/usePlayerStore';
@@ -233,7 +234,9 @@ export function VideoPlayer({
       hlsFatalRetriesRef.current = 0;
       const hls = hlsRef.current;
       if (!hls) return false;
-      hls.loadSource(wrapHlsUrl(currentSrc, next === 'proxy'));
+      hls.loadSource(
+        wrapHlsUrl(currentSrc, next === 'proxy', streamReferer || undefined)
+      );
       return true;
     };
 
@@ -258,7 +261,8 @@ export function VideoPlayer({
 
         const finalSrc = wrapHlsUrl(
           currentSrc,
-          hlsTransportRef.current === 'proxy'
+          hlsTransportRef.current === 'proxy',
+          streamReferer || undefined
         );
         hls.loadSource(finalSrc);
         hls.attachMedia(video);
@@ -343,8 +347,12 @@ export function VideoPlayer({
           hlsRef.current = null;
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari) — always direct
-        video.src = currentSrc;
+        // Native HLS (Safari) — same Worker proxy as hls.js (CDN Referer)
+        video.src = wrapHlsUrl(
+          currentSrc,
+          startViaProxy,
+          streamReferer || undefined
+        );
         video.onerror = () => failOrFallback();
         if (!(initialTime && initialTime > 0)) {
           setIsLoading(false);
@@ -368,6 +376,7 @@ export function VideoPlayer({
     onPlaybackError,
     embedUrl,
     forceEmbed,
+    streamReferer,
   ]);
 
   // Seek to initialTime when video can play (Continue Watching from ?t=)
@@ -438,9 +447,6 @@ export function VideoPlayer({
         setCurrentSubtitle(defaultLang);
       }
 
-      // Proxy + ASS→VTT (HTML5 <track> only supports WebVTT)
-      const subtitleProxyUrl =
-        typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
       // Megaplay ASS CDNs need megaplay Referer; Anivexa tracks often need provider Referer
       const subReferer =
         (streamReferer && streamReferer.trim()) || 'https://megaplay.buzz/';
@@ -455,9 +461,7 @@ export function VideoPlayer({
         trackEl.label = subtitle.label || subtitle.lang;
         trackEl.srclang = subtitle.lang;
 
-        const subUrl = subtitle.url.startsWith('http')
-          ? `${subtitleProxyUrl}?url=${encodeURIComponent(subtitle.url)}&referer=${encodeURIComponent(subReferer)}`
-          : subtitle.url;
+        const subUrl = wrapSubtitleUrl(subtitle.url, subReferer);
         trackEl.src = subUrl;
 
         const isDefault = index === defaultIndex;
@@ -747,14 +751,9 @@ export function VideoPlayer({
     );
     const sub = english ?? subtitles[0];
     if (!sub?.url) return embedUrl;
-    const subtitleProxyUrl =
-      typeof window !== 'undefined' ? `${window.location.origin}/api/proxy` : '/api/proxy';
     const subReferer =
       (streamReferer && streamReferer.trim()) || 'https://megaplay.buzz/';
-    const subUrl =
-      sub.url.startsWith('http')
-        ? `${subtitleProxyUrl}?url=${encodeURIComponent(sub.url)}&referer=${encodeURIComponent(subReferer)}`
-        : sub.url;
+    const subUrl = wrapSubtitleUrl(sub.url, subReferer);
     const sep = embedUrl.includes('?') ? '&' : '?';
     // Some embeds use sub=, others subtitle= or vtt= - try sub first (most common)
     return `${embedUrl}${sep}sub=${encodeURIComponent(subUrl)}&subtitle=${encodeURIComponent(subUrl)}`;

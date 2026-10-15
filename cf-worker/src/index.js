@@ -1,10 +1,10 @@
 /**
- * Cloudflare Worker: HLS / subtitle proxy for anime-world
+ * Cloudflare Worker: HLS, subtitle, and image proxy for anime-world
  *
- * GET /proxy?url=<encoded-url>
+ * GET /proxy?url=<encoded-url>[&referer=]
+ * GET /image?url=<encoded-url>[&referer=]
  *
- * Moves video egress off Railway (API stays on Railway).
- * Tries Megaplay / Megacloud / Anikoto referers so CDN segments work.
+ * Video + manga egress stays on Cloudflare. Railway is catalog JSON only.
  */
 
 const CORS = {
@@ -18,57 +18,124 @@ const CORS = {
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-const HEADER_SETS = [
-  {
-    Referer: 'https://megaplay.buzz/',
-    Origin: 'https://megaplay.buzz',
-  },
-  {
-    Referer: 'https://megaplay.buzz/',
-  },
-  {
-    Referer: 'https://megacloud.blog/',
-    Origin: 'https://megacloud.blog',
-  },
-  {
-    Referer: 'https://anikototv.to/',
-    Origin: 'https://anikototv.to',
-  },
-  {
-    Referer: 'https://hianime.to/',
-    Origin: 'https://hianime.to',
-  },
-  // Rotating Megaplay edge CDNs (norami / shiora / mikora / imgnex)
-  {
-    Referer: 'https://megap.norami.top/',
-    Origin: 'https://megap.norami.top',
-  },
-  {
-    Referer: 'https://ncdn.imgnex.top/',
-    Origin: 'https://ncdn.imgnex.top',
-  },
-  {
-    Referer: 'https://bb.akirax.buzz/',
-    Origin: 'https://bb.akirax.buzz',
-  },
+const HLS_HEADER_SETS = [
+  { Referer: 'https://megaplay.buzz/', Origin: 'https://megaplay.buzz' },
+  { Referer: 'https://megaplay.buzz/' },
+  { Referer: 'https://megacloud.blog/', Origin: 'https://megacloud.blog' },
+  { Referer: 'https://anikototv.to/', Origin: 'https://anikototv.to' },
+  { Referer: 'https://hianime.to/', Origin: 'https://hianime.to' },
+  { Referer: 'https://megap.norami.top/', Origin: 'https://megap.norami.top' },
+  { Referer: 'https://ncdn.imgnex.top/', Origin: 'https://ncdn.imgnex.top' },
+  { Referer: 'https://bb.akirax.buzz/', Origin: 'https://bb.akirax.buzz' },
   {},
 ];
 
-function withUa(headers) {
+const IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/svg+xml',
+  'application/octet-stream',
+  'binary/octet-stream',
+]);
+
+const RETRY_STATUSES = new Set([403, 429, 500, 502, 503]);
+
+function withUa(headers, accept) {
   return {
     ...headers,
-    Accept: '*/*',
+    Accept: accept || '*/*',
     'Accept-Language': 'en-US,en;q=0.9',
     'User-Agent': UA,
   };
 }
 
-const RETRY_STATUSES = new Set([403, 429, 500, 502, 503]);
+function isBlockedTarget(targetUrl) {
+  try {
+    const u = new URL(targetUrl);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return true;
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    if (host.endsWith('.local')) return true;
+    if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
 
-async function fetchUpstream(targetUrl, rangeHeader) {
+function parseTarget(raw) {
+  if (!raw) return null;
+  try {
+    const targetUrl = decodeURIComponent(raw);
+    // eslint-disable-next-line no-new
+    new URL(targetUrl);
+    if (isBlockedTarget(targetUrl)) return null;
+    return targetUrl;
+  } catch {
+    return null;
+  }
+}
+
+function imageReferers(targetUrl, override) {
+  const list = [];
+  if (override) list.push(override);
+  try {
+    const { hostname, origin } = new URL(targetUrl);
+    const h = hostname.toLowerCase();
+    if (h.includes('mangadex')) {
+      list.push('https://mangadex.org/', 'https://www.mangadex.org/');
+    } else if (h.includes('mangahere')) {
+      list.push('https://www.mangahere.cc/', 'http://www.mangahere.cc/', origin + '/');
+    } else if (
+      h.includes('readdetectiveconan') ||
+      h.includes('mangapill') ||
+      h.includes('mangap.')
+    ) {
+      list.push('https://mangapill.com/', 'https://www.mangapill.com/', origin + '/');
+    } else if (h.includes('mangareader') || h.includes('mrserver')) {
+      list.push('https://mangareader.to/', origin + '/');
+    } else if (h.includes('mangapark') || h.includes('parkmanga')) {
+      list.push('https://mangapark.net/', origin + '/');
+    } else if (
+      h.includes('mangasee') ||
+      h.includes('asuracomic') ||
+      h.includes('asurascans')
+    ) {
+      list.push('https://mangasee123.com/', 'https://asuracomic.net/', origin + '/');
+    } else if (
+      h.includes('mangakakalot') ||
+      h.includes('manganato') ||
+      h.includes('mkklcdnv6')
+    ) {
+      list.push(
+        'https://www.mangakakalot.gg/',
+        'https://chapmanganato.to/',
+        origin + '/'
+      );
+    } else {
+      list.push(
+        'https://mangapark.net/',
+        'https://mangasee123.com/',
+        'https://mangapill.com/',
+        'https://www.mangahere.cc/',
+        origin + '/'
+      );
+    }
+  } catch {
+    list.push('https://www.mangahere.cc/', 'https://mangadex.org/');
+  }
+  return [...new Set(list.filter(Boolean))];
+}
+
+async function fetchWithHeaderSets(targetUrl, headerSets, rangeHeader, accept) {
   let last = null;
-  for (const set of HEADER_SETS) {
-    const headers = withUa(set);
+  for (const set of headerSets) {
+    const headers = withUa(set, accept);
     if (rangeHeader) headers.Range = rangeHeader;
     try {
       const res = await fetch(targetUrl, {
@@ -87,7 +154,7 @@ async function fetchUpstream(targetUrl, rangeHeader) {
   throw last || new Error('Upstream fetch failed');
 }
 
-function rewriteM3u8(text, targetUrl, proxyBase) {
+function rewriteM3u8(text, targetUrl, proxyBase, referer) {
   const base = targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1);
 
   const absUrl = (u) => {
@@ -99,21 +166,165 @@ function rewriteM3u8(text, targetUrl, proxyBase) {
     }
   };
 
-  const viaProxy = (u) => `${proxyBase}?url=${encodeURIComponent(absUrl(u))}`;
+  const viaProxy = (u) => {
+    const params = new URLSearchParams({ url: absUrl(u) });
+    if (referer) params.set('referer', referer);
+    return `${proxyBase}?${params.toString()}`;
+  };
 
   return text
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
-
       if (trimmed.startsWith('#')) {
         return line.replace(/URI="([^"]+)"/g, (_, u) => `URI="${viaProxy(u)}"`);
       }
-
       return viaProxy(trimmed);
     })
     .join('\n');
+}
+
+function guessImageType(url) {
+  const path = url.toLowerCase().split('?')[0] ?? '';
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.webp')) return 'image/webp';
+  if (path.endsWith('.gif')) return 'image/gif';
+  if (path.endsWith('.avif')) return 'image/avif';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  return 'image/jpeg';
+}
+
+async function handleProxy(request, url) {
+  const targetUrl = parseTarget(url.searchParams.get('url'));
+  if (!targetUrl) {
+    return new Response(JSON.stringify({ error: 'Invalid or missing url' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const preferredReferer = url.searchParams.get('referer') || '';
+  const headerSets = preferredReferer
+    ? [{ Referer: preferredReferer }, ...HLS_HEADER_SETS]
+    : HLS_HEADER_SETS;
+
+  const proxyBase = `${url.origin}/proxy`;
+  const rangeHeader = request.headers.get('Range');
+  const response = await fetchWithHeaderSets(
+    targetUrl,
+    headerSets,
+    rangeHeader
+  );
+
+  if (!response.ok && response.status !== 206) {
+    return new Response(JSON.stringify({ error: `Upstream ${response.status}` }), {
+      status: response.status === 403 ? 502 : response.status,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const contentType =
+    response.headers.get('content-type') || 'application/octet-stream';
+  const isM3u8 =
+    targetUrl.includes('.m3u8') ||
+    contentType.includes('mpegurl') ||
+    contentType.includes('application/vnd.apple.mpegurl') ||
+    contentType.includes('application/x-mpegURL');
+
+  if (isM3u8) {
+    const text = await response.text();
+    const rewritten = rewriteM3u8(
+      text,
+      targetUrl,
+      proxyBase,
+      preferredReferer || 'https://megaplay.buzz/'
+    );
+    return new Response(rewritten, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.apple.mpegurl',
+        'Cache-Control': 'public, max-age=60',
+        ...CORS,
+      },
+    });
+  }
+
+  const outHeaders = {
+    'Content-Type': contentType,
+    'Cache-Control': 'public, max-age=3600',
+    ...CORS,
+  };
+  const cl = response.headers.get('content-length');
+  const cr = response.headers.get('content-range');
+  const ar = response.headers.get('accept-ranges');
+  if (cl) outHeaders['Content-Length'] = cl;
+  if (cr) outHeaders['Content-Range'] = cr;
+  if (ar) outHeaders['Accept-Ranges'] = ar;
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: outHeaders,
+  });
+}
+
+async function handleImage(request, url) {
+  const targetUrl = parseTarget(url.searchParams.get('url'));
+  if (!targetUrl) {
+    return new Response(JSON.stringify({ error: 'Invalid or missing url' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const override = url.searchParams.get('referer') || '';
+  const headerSets = imageReferers(targetUrl, override).map((Referer) => ({
+    Referer,
+  }));
+
+  const response = await fetchWithHeaderSets(
+    targetUrl,
+    headerSets,
+    null,
+    'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+  );
+
+  if (!response.ok) {
+    return new Response(JSON.stringify({ error: `Upstream ${response.status}` }), {
+      status: response.status === 403 ? 502 : response.status,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const contentType =
+    response.headers.get('content-type')?.split(';')[0]?.trim() || '';
+  const typeOk = !contentType || IMAGE_TYPES.has(contentType);
+  if (!typeOk) {
+    return new Response(JSON.stringify({ error: 'Unsupported content type' }), {
+      status: 415,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const resolvedType = IMAGE_TYPES.has(contentType) && contentType.startsWith('image/')
+    ? contentType
+    : guessImageType(targetUrl);
+
+  const host = new URL(targetUrl).hostname.toLowerCase();
+  const cacheControl = host.includes('mangadex')
+    ? 'public, max-age=600, stale-while-revalidate=300'
+    : host.includes('mangahere')
+      ? 'public, max-age=604800, stale-while-revalidate=86400'
+      : 'public, max-age=86400, stale-while-revalidate=604800';
+
+  return new Response(response.body, {
+    status: 200,
+    headers: {
+      'Content-Type': resolvedType,
+      'Cache-Control': cacheControl,
+      ...CORS,
+    },
+  });
 }
 
 export default {
@@ -128,13 +339,15 @@ export default {
       return new Response('Method not allowed', { status: 405, headers: CORS });
     }
 
-    // Health / info
     if (url.pathname === '/' || url.pathname === '') {
       return new Response(
         JSON.stringify({
           ok: true,
           service: 'anime-world-proxy',
-          usage: 'GET /proxy?url=<encoded-https-url>',
+          usage: {
+            hls: 'GET /proxy?url=<encoded-https-url>',
+            image: 'GET /image?url=<encoded-https-url>',
+          },
         }),
         {
           status: 200,
@@ -144,95 +357,23 @@ export default {
     }
 
     const path = url.pathname.replace(/\/$/, '') || '/proxy';
-    if (!path.endsWith('/proxy') && path !== '/proxy') {
-      return new Response(JSON.stringify({ error: 'Not found. Use /proxy?url=' }), {
+
+    try {
+      if (path.endsWith('/image')) return await handleImage(request, url);
+      if (path.endsWith('/proxy')) return await handleProxy(request, url);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: String(e?.message || e) }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', ...CORS },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Not found. Use /proxy?url= or /image?url=' }),
+      {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...CORS },
-      });
-    }
-
-    // Workers are always HTTPS publicly — never rewrite as http://
-    const proxyBase = `${url.origin}/proxy`;
-
-    let targetUrl = url.searchParams.get('url');
-    if (!targetUrl) {
-      return new Response(JSON.stringify({ error: 'URL parameter is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS },
-      });
-    }
-
-    try {
-      targetUrl = decodeURIComponent(targetUrl);
-      // eslint-disable-next-line no-new
-      new URL(targetUrl);
-    } catch {
-      return new Response(JSON.stringify({ error: 'Invalid url' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...CORS },
-      });
-    }
-
-    try {
-      const rangeHeader = request.headers.get('Range');
-      const response = await fetchUpstream(targetUrl, rangeHeader);
-
-      if (!response.ok && response.status !== 206) {
-        return new Response(
-          JSON.stringify({ error: `Upstream ${response.status}` }),
-          {
-            status: response.status === 403 ? 502 : response.status,
-            headers: { 'Content-Type': 'application/json', ...CORS },
-          }
-        );
       }
-
-      const contentType =
-        response.headers.get('content-type') || 'application/octet-stream';
-      const isM3u8 =
-        targetUrl.includes('.m3u8') ||
-        contentType.includes('mpegurl') ||
-        contentType.includes('application/vnd.apple.mpegurl') ||
-        contentType.includes('application/x-mpegURL');
-
-      if (isM3u8) {
-        const text = await response.text();
-        const rewritten = rewriteM3u8(text, targetUrl, proxyBase);
-        return new Response(rewritten, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/vnd.apple.mpegurl',
-            'Cache-Control': 'public, max-age=60',
-            ...CORS,
-          },
-        });
-      }
-
-      // Stream segments / VTT (avoid buffering whole video in Worker memory)
-      const outHeaders = {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
-        ...CORS,
-      };
-      const cl = response.headers.get('content-length');
-      const cr = response.headers.get('content-range');
-      const ar = response.headers.get('accept-ranges');
-      if (cl) outHeaders['Content-Length'] = cl;
-      if (cr) outHeaders['Content-Range'] = cr;
-      if (ar) outHeaders['Accept-Ranges'] = ar;
-
-      return new Response(response.body, {
-        status: response.status,
-        headers: outHeaders,
-      });
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ error: String(e?.message || e) }),
-        {
-          status: 502,
-          headers: { 'Content-Type': 'application/json', ...CORS },
-        }
-      );
-    }
+    );
   },
 };

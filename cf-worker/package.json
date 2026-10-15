@@ -1,0 +1,12 @@
+{
+  "name": "anime-world-proxy",
+  "private": true,
+  "scripts": {
+    "login": "wrangler login",
+    "deploy": "wrangler deploy",
+    "whoami": "wrangler whoami"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.0"
+  }
+}

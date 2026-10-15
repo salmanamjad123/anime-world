@@ -1,12 +1,16 @@
 /**
- * Image proxy — fetches hotlink-protected poster/banner URLs server-side.
+ * Local image proxy — fetches hotlink-protected poster/banner URLs.
  * GET /api/image?url=https://...
+ *
+ * Production 302s to the Cloudflare Worker /image so Vercel never pays
+ * for manga/CDN bytes. Localhost keeps this route.
  *
  * Important: do NOT use Next fetch `next.revalidate` here — failed 403s get
  * cached by URL and poison later attempts with a correct Referer.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { vercelMediaOffloadUrl } from '@/lib/hls-proxy';
 import {
   isImageProxyAllowed,
   normalizeImageUrl,
@@ -29,6 +33,11 @@ const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 export async function GET(request: NextRequest) {
+  const offload = vercelMediaOffloadUrl('image', request.url);
+  if (offload) {
+    return NextResponse.redirect(offload, 302);
+  }
+
   try {
     const raw = request.nextUrl.searchParams.get('url');
     const url = normalizeImageUrl(raw);

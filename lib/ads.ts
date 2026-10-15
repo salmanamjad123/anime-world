@@ -29,6 +29,37 @@ export const ADSTERRA_SMARTLINK =
 export const SMARTLINK_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 const SMARTLINK_LAST_OPEN_KEY = 'smartlink_last_open';
+const SMARTLINK_COOKIE = 'av_smartlink_cd';
+
+function readSmartlinkCooldownTs(): number {
+  try {
+    const fromLs = Number(localStorage.getItem(SMARTLINK_LAST_OPEN_KEY) || 0);
+    if (fromLs) return fromLs;
+  } catch {
+    /* private mode */
+  }
+  try {
+    const match = document.cookie.match(/(?:^|; )av_smartlink_cd=(\d+)/);
+    if (match) return Number(match[1]) || 0;
+  } catch {
+    /* cookies blocked */
+  }
+  return 0;
+}
+
+function writeSmartlinkCooldownTs(ts: number) {
+  try {
+    localStorage.setItem(SMARTLINK_LAST_OPEN_KEY, String(ts));
+  } catch {
+    /* private mode */
+  }
+  try {
+    const maxAge = Math.floor(SMARTLINK_COOLDOWN_MS / 1000);
+    document.cookie = `${SMARTLINK_COOKIE}=${ts}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+  } catch {
+    /* cookies blocked */
+  }
+}
 
 /** Manga social bar: show at most once every 2 hours. */
 export const SOCIAL_BAR_COOLDOWN_MS = 2 * 60 * 60 * 1000;
@@ -69,21 +100,18 @@ export function openAdsterraSmartlink() {
 
 /**
  * On the first eligible click, open the smartlink in a new tab.
- * After that, no-op until the 2-hour cooldown expires (localStorage).
+ * After that, no-op for 2 hours even if the tab/browser is closed
+ * (localStorage + cookie).
  * Returns true if the smartlink was opened.
  */
 export function trackHomeSmartlinkClick(enabled: boolean): boolean {
   if (typeof window === 'undefined') return false;
   if (!enabled || !ADSTERRA_SMARTLINK) return false;
 
-  try {
-    const last = Number(localStorage.getItem(SMARTLINK_LAST_OPEN_KEY) || 0);
-    if (last && Date.now() - last < SMARTLINK_COOLDOWN_MS) return false;
+  const last = readSmartlinkCooldownTs();
+  if (last && Date.now() - last < SMARTLINK_COOLDOWN_MS) return false;
 
-    localStorage.setItem(SMARTLINK_LAST_OPEN_KEY, String(Date.now()));
-    openAdsterraSmartlink();
-    return true;
-  } catch {
-    return false;
-  }
+  writeSmartlinkCooldownTs(Date.now());
+  openAdsterraSmartlink();
+  return true;
 }

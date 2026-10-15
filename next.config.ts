@@ -89,6 +89,11 @@ const nextConfig: NextConfig = {
         hostname: 'res.cloudinary.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'anime-world-proxy.animevillage-proxy.workers.dev',
+        pathname: '/**',
+      },
     ],
   },
 };

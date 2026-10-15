@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import NextImage, { type ImageProps } from 'next/image';
 import { cn } from '@/lib/utils';
+import { isMediaProxyUrl } from '@/lib/hls-proxy';
 import { ANIME_PLACEHOLDER, getDisplayImageUrl, getProxiedImageUrl, normalizeImageUrl } from '@/lib/utils/image-url';
 
 function isRemoteUrl(src: ImageProps['src']): src is string {
@@ -47,7 +48,7 @@ export function SafeImage({
         if (
           normalized &&
           normalized.startsWith('http') &&
-          !currentSrc.includes('/api/image?')
+          !isMediaProxyUrl(currentSrc)
         ) {
           setCurrentSrc(getProxiedImageUrl(normalized));
           return;

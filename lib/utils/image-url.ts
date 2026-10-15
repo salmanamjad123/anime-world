@@ -1,3 +1,5 @@
+import { wrapImageProxyUrl } from '@/lib/hls-proxy';
+
 /** Local SVG — never depends on AniList or external CDNs */
 export const ANIME_PLACEHOLDER = '/images/anime-placeholder.svg';
 
@@ -186,11 +188,9 @@ export function getImageProxyReferers(url: string): string[] {
   ];
 }
 
-/** Serve through same-origin image proxy (adds Referer server-side). */
+/** Serve through Cloudflare Worker /image in production (local: /api/image). */
 export function getProxiedImageUrl(url: string, referer?: string): string {
-  const base = `/api/image?url=${encodeURIComponent(url)}`;
-  if (referer) return `${base}&referer=${encodeURIComponent(referer)}`;
-  return base;
+  return wrapImageProxyUrl(url, referer);
 }
 
 /** Manga chapter page — always proxy hotlinked CDN URLs for reliable production loads */

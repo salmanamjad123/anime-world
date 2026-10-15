@@ -1,16 +1,10 @@
 /**
- * Proxy Route (Vercel Optimized)
- * Proxies HLS streams and subtitles to bypass CORS restrictions
- * 
- * IMPORTANT: On production (Vercel), this is primarily used for:
- * - Subtitle files (.vtt) - small files, no timeout issues
- * - M3U8 playlists - tiny files, rewritten to proxy segments
- * 
- * Video segments (.ts) stream directly from CDN when USE_PROXY=false
- * This avoids Vercel serverless timeout issues!
+ * Local HLS/subtitle proxy. Production 302s to the Cloudflare Worker so
+ * Vercel never pays for video bytes (including leftover /api/proxy clients).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { vercelMediaOffloadUrl } from '@/lib/hls-proxy';
 import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
 import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 
@@ -19,6 +13,11 @@ const ENABLE_CACHE = process.env.ENABLE_PROXY_CACHE === 'true';
 const CACHE_MAX_AGE = parseInt(process.env.PROXY_CACHE_MAX_AGE || '3600');
 
 export async function GET(request: NextRequest) {
+  const offload = vercelMediaOffloadUrl('proxy', request.url);
+  if (offload) {
+    return NextResponse.redirect(offload, 302);
+  }
+
   try {
     // Rate limiting
     if (process.env.ENABLE_RATE_LIMITING === 'true') {

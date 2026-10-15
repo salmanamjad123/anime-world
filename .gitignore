@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/cf-worker/node_modules
+/cf-worker/.wrangler
 /.pnp
 .pnp.*
 .yarn/*

@@ -1,8 +1,15 @@
-# Cloudflare Worker – HLS video proxy (optional)
+# Cloudflare Worker – HLS + image proxy
 
-Moves **video egress** off Railway. Keep Railway for search / episodes / sources.
+Moves **video and manga image egress** off Vercel and Railway. Keep Railway for search / episodes / sources only.
 
-**Preferred production setup** (Worker for HLS, Railway for API only):
+```
+Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts + subtitles)
+Browser  →  CF Worker /image  →  CDN (manga pages, locked posters)
+Browser  →  Railway streaming-api  →  catalog JSON only
+Browser  →  Vercel  →  website HTML/JS only
+```
+
+**Preferred production env:**
 
 ```env
 NEXT_PUBLIC_HIANIME_API_URL=https://streaming-api-july-production.up.railway.app
@@ -10,45 +17,34 @@ NEXT_PUBLIC_PROXY_URL=https://anime-world-proxy.animevillage-proxy.workers.dev/p
 NEXT_PUBLIC_USE_PROXY=true
 ```
 
-`getHlsProxyBase()` uses `NEXT_PUBLIC_PROXY_URL` as-is in production. Point it at Railway `/api/v2/proxy` only if the Worker is 502ing.
-
-```
-Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts)
-Browser  →  Railway streaming-api  →  Anikoto / Megaplay metadata
-```
+Do **not** set `NEXT_PUBLIC_PROXY_URL` to `animevillage.org/api/proxy` or Railway `/api/v2/proxy`.
 
 ## 1. Deploy the Worker
 
 ```bash
 cd anime-world/cf-worker
-npx wrangler login          # once — opens browser
+npm install
+npx wrangler login
 npx wrangler deploy
 ```
 
-Copy the URL from the output, e.g.:
-
-`https://anime-world-proxy.<your-subdomain>.workers.dev`
-
 Smoke test:
 
-- `https://…workers.dev/` → JSON `{ ok: true }`
-- `https://…workers.dev/proxy?url=https%3A%2F%2Fexample.com` → should not 404 the route
+- `https://…workers.dev/` → `{ ok: true }`
+- `https://…workers.dev/proxy?url=` → HLS proxy
+- `https://…workers.dev/image?url=` → image proxy
 
-## 2. Point anime-world at Worker (optional)
-
-### Vercel (Production)
+## 2. Vercel env + redeploy
 
 | Name | Value |
 |------|--------|
-| `NEXT_PUBLIC_HIANIME_API_URL` | `https://streaming-api-july-production.up.railway.app` |
+| `NEXT_PUBLIC_HIANIME_API_URL` | Railway catalog API |
 | `NEXT_PUBLIC_PROXY_URL` | `https://anime-world-proxy.<subdomain>.workers.dev/proxy` |
 | `NEXT_PUBLIC_USE_PROXY` | `true` |
 
-Then **Redeploy** Vercel (required for `NEXT_PUBLIC_*`).
+`NEXT_PUBLIC_*` requires a **redeploy**.
 
-### Local `.env`
-
-Prefer local/Railway proxy for Megaplay Referer:
+### Local
 
 ```env
 NEXT_PUBLIC_HIANIME_API_URL=http://localhost:4000
@@ -56,15 +52,10 @@ NEXT_PUBLIC_PROXY_URL=http://localhost:4000/api/v2/proxy
 NEXT_PUBLIC_USE_PROXY=true
 ```
 
-## 3. Verify cost drop (if using Worker)
+Local images still use Next `/api/image`.
 
-1. Play an episode on the site.
-2. Network tab: `.m3u8` / `.ts` go to **`*.workers.dev/proxy`**, not Railway.
-3. Railway Usage → Egress should flatten (API JSON only).
+## 3. Verify
 
-## Notes
-
-- Do **not** remove Railway — the app still needs it for catalog + stream URLs.
-- Leave the Worker meta/path as `/proxy` (matches `NEXT_PUBLIC_PROXY_URL`).
-- Free Workers tier is usually enough at Hobby traffic; watch CF dashboard if you grow.
-- Header retries include Megaplay edge CDNs (`megap.norami.top`, `ncdn.imgnex.top`, etc.).
+1. Play an episode: `.m3u8` / `.ts` / subtitles → **`*.workers.dev/proxy`**, not Vercel.
+2. Read a manga chapter: images → **`*.workers.dev/image`**, not `/api/image`.
+3. Vercel Fast Data Transfer should drop. Cloudflare Worker bandwidth is the stream cost.

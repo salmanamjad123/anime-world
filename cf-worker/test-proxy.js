@@ -3,7 +3,7 @@
  * Run: node test-proxy.js
  */
 
-const WORKER_URL = 'https://anime-world-proxy.anime-world-proxy.workers.dev/proxy';
+const WORKER_URL = 'https://anime-world-proxy.animevillage-proxy.workers.dev/proxy';
 
 async function test(name, url, expectedStatus) {
   try {
