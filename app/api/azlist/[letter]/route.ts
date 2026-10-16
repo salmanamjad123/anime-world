@@ -3,7 +3,8 @@
  * GET /api/azlist/[letter] - Get anime list by letter (0-9, A-Z, other)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { getHiAnimeAZList } from '@/lib/api/hianime';
 
 export async function GET(
@@ -19,15 +20,15 @@ export async function GET(
 
     const data = await getHiAnimeAZList(sortOption, page);
 
-    return NextResponse.json(data);
+    return cachedJson(data, 300);
   } catch (error: any) {
     console.error('[API Error] /api/azlist/[letter]:', error?.message);
-    return NextResponse.json(
+    return uncachedJson(
       {
         error: 'Failed to fetch A-Z list',
         message: error?.message,
       },
-      { status: 500 }
+      500
     );
   }
 }

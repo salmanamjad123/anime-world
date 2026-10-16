@@ -3,7 +3,8 @@
  * GET /api/anime - List anime (trending, popular, top-rated, by season)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import {
   getTrendingAnime,
   getPopularAnime,
@@ -42,9 +43,9 @@ export async function GET(request: NextRequest) {
         const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString(), 10);
         
         if (!season) {
-          return NextResponse.json(
+          return uncachedJson(
             { error: 'Season parameter is required for season type' },
-            { status: 400 }
+            400
           );
         }
         
@@ -52,10 +53,7 @@ export async function GET(request: NextRequest) {
         break;
       
       default:
-        return NextResponse.json(
-          { error: 'Invalid type parameter' },
-          { status: 400 }
-        );
+        return uncachedJson({ error: 'Invalid type parameter' }, 400);
     }
 
     // Cache-only slugs — respond fast; warm missing slugs in background
@@ -64,12 +62,9 @@ export async function GET(request: NextRequest) {
     });
     warmAnimeSlugsInBackground(enriched.data?.Page?.media ?? []);
 
-    return NextResponse.json(enriched);
+    return cachedJson(enriched, 120);
   } catch (error) {
     console.error('[API Error] /api/anime:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch anime' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to fetch anime' }, 500);
   }
 }

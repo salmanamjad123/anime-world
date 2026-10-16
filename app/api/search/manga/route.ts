@@ -3,7 +3,8 @@
  * GET /api/search/manga?search=xxx&page=1&perPage=25
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { searchManga } from '@/lib/api/anilist-manga';
 
 export async function GET(request: NextRequest) {
@@ -14,12 +15,9 @@ export async function GET(request: NextRequest) {
     const perPage = parseInt(searchParams.get('perPage') || '25', 10);
 
     const result = await searchManga(search, page, perPage);
-    return NextResponse.json(result);
+    return cachedJson(result, 60);
   } catch (error) {
     console.error('[API Error] /api/search/manga:', error);
-    return NextResponse.json(
-      { error: 'Failed to search manga' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to search manga' }, 500);
   }
 }

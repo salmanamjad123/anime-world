@@ -3,7 +3,8 @@
  * GET /api/anime/[id] - Get anime by ID (AniList numeric id or HiAnime slug)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { fetchAnimeByRouteSegment } from '@/lib/seo/anime-route';
 import { warmAnimeSlugsInBackground } from '@/lib/seo/enrich-slugs';
 import { ANIME_PLACEHOLDER, resolveAnimeImageUrl } from '@/lib/utils/image-url';
@@ -89,25 +90,19 @@ export async function GET(
     const { id } = await params;
 
     if (!id) {
-      return NextResponse.json(
-        { error: 'Anime ID is required' },
-        { status: 400 }
-      );
+      return uncachedJson({ error: 'Anime ID is required' }, 400);
     }
 
     const media = await fetchAnimeByRouteSegment(id, mapHiAnimeInfoToAnime);
     if (!media) {
-      return NextResponse.json({ error: 'Anime not found' }, { status: 404 });
+      return uncachedJson({ error: 'Anime not found' }, 404);
     }
 
     warmAnimeSlugsInBackground([media], 1);
 
-    return NextResponse.json({ data: { Media: media } });
+    return cachedJson({ data: { Media: media } }, 300);
   } catch (error) {
     console.error('[API Error] /api/anime/[id]:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch anime details' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to fetch anime details' }, 500);
   }
 }

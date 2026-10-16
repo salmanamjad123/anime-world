@@ -3,7 +3,8 @@
  * GET /api/manga - List manga (trending, popular)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { getTrendingManga, getPopularManga, getMangaByGenre } from '@/lib/api/anilist-manga';
 
 export async function GET(request: NextRequest) {
@@ -34,19 +35,16 @@ export async function GET(request: NextRequest) {
           result = await getPopularManga(page, perPage);
           break;
         default:
-          return NextResponse.json(
+          return uncachedJson(
             { error: 'Invalid type. Use trending or popular' },
-            { status: 400 }
+            400
           );
       }
     }
 
-    return NextResponse.json(result);
+    return cachedJson(result, 120);
   } catch (error) {
     console.error('[API Error] /api/manga:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch manga' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to fetch manga' }, 500);
   }
 }

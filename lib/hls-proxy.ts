@@ -24,15 +24,27 @@ function isCloudflareWorkerProxy(url: string): boolean {
   return url.includes('workers.dev') && url.includes('/proxy');
 }
 
+/** Localhost / 127.0.0.1 only. Live site and Vercel always use the Worker. */
+function useLocalMediaProxy(): boolean {
+  if (process.env.VERCEL) return false;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  }
+  const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
+  const explicit = process.env.NEXT_PUBLIC_PROXY_URL || '';
+  return isLocalHost(hianimeUrl) || isLocalHost(explicit);
+}
+
 /**
- * HLS / subtitle proxy. Production always uses the Cloudflare Worker.
+ * HLS proxy. Production / live hostname always uses the Cloudflare Worker.
  * Localhost uses streaming-api. Never animevillage.org/api/proxy.
  */
 export function getHlsProxyBase(): string {
   const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
 
-  if (isLocalHost(hianimeUrl) || isLocalHost(explicit)) {
+  if (useLocalMediaProxy()) {
     if (explicit && isLocalHost(explicit)) return explicit;
     if (isLocalHost(hianimeUrl)) {
       return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
@@ -45,10 +57,9 @@ export function getHlsProxyBase(): string {
 
 /** Image proxy. Production: Worker /image. Local: Next /api/image. */
 export function getImageProxyBase(): string {
-  const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
 
-  if (isLocalHost(hianimeUrl) || isLocalHost(explicit)) {
+  if (useLocalMediaProxy()) {
     return '/api/image';
   }
 
@@ -71,31 +82,26 @@ export function wrapHlsUrl(
   return `${base}?${params.toString()}`;
 }
 
-/** Production leftover /api/proxy|/api/image hits → Worker (no Vercel media egress). */
+/** On Vercel, leftover /api/proxy and /api/image must 302 to the Worker. */
 export function vercelMediaOffloadUrl(
   kind: 'proxy' | 'image',
   requestUrl: string
 ): string | null {
-  const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
-  const explicit = process.env.NEXT_PUBLIC_PROXY_URL || '';
-  if (isLocalHost(hianimeUrl) || isLocalHost(explicit)) return null;
+  if (useLocalMediaProxy()) return null;
 
   const incoming = new URL(requestUrl);
   const destBase =
-    kind === 'proxy' ? getHlsProxyBase() : getImageProxyBase();
-  return `${destBase.replace(/\/$/, '')}${incoming.search}`;
+    kind === 'proxy' ? DEFAULT_WORKER_PROXY : DEFAULT_WORKER_IMAGE;
+  return `${destBase}${incoming.search}`;
 }
 
-/** Same-origin /api/proxy: native tracks need it, and ASS/SRT become WebVTT. */
+/** Same-origin /api/subtitles: native tracks + ASS/SRT → WebVTT. Tiny; not video. */
 export function wrapSubtitleUrl(subtitleUrl: string, referer?: string): string {
   if (!subtitleUrl.startsWith('http')) return subtitleUrl;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const params = new URLSearchParams({
-    url: subtitleUrl,
-    kind: 'subtitle',
-  });
+  const params = new URLSearchParams({ url: subtitleUrl });
   if (referer) params.set('referer', referer);
-  return `${origin}/api/proxy?${params.toString()}`;
+  return `${origin}/api/subtitles?${params.toString()}`;
 }
 
 export function wrapImageProxyUrl(imageUrl: string, referer?: string): string {
@@ -108,6 +114,7 @@ export function wrapImageProxyUrl(imageUrl: string, referer?: string): string {
 export function isMediaProxyUrl(src: string): boolean {
   return (
     src.includes('/api/image?') ||
+    src.includes('/api/subtitles?') ||
     src.includes('/image?url=') ||
     src.includes('/proxy?url=')
   );

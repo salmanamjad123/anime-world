@@ -3,7 +3,7 @@
  * Returns airing schedule from AniList for the next 7 days
  */
 
-import { NextResponse } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { axiosInstance } from '@/lib/api/axios';
 import { ANILIST_API_URL } from '@/constants/api';
 import { getPreferredTitle } from '@/lib/utils';
@@ -129,9 +129,9 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ days });
+    return cachedJson({ days }, 60);
   } catch (error) {
     console.error('[Schedule API]', error);
-    return NextResponse.json({ days: [], _degraded: true });
+    return cachedJson({ days: [], _degraded: true }, 15);
   }
 }

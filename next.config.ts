@@ -23,6 +23,39 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/api/anime",
+        headers: [
+          { key: "Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+        ],
+      },
+      {
+        source: "/api/manga",
+        headers: [
+          { key: "Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+        ],
+      },
+      {
+        source: "/api/schedule",
+        headers: [
+          { key: "Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+        ],
+      },
     ];
   },
   images: {

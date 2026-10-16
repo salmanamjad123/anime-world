@@ -3,13 +3,12 @@
  */
 
 import { NextResponse } from 'next/server';
+import { cacheHeaders } from '@/lib/http-cache';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { defaultAdPlacements } from '@/lib/ads-placements';
 import { readSiteAdsSettings, toPublicAdsSettings } from '@/lib/site-settings-ads';
 
-const CACHE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-};
+const CACHE_HEADERS = cacheHeaders(60, 120);
 
 function defaultPublicSettings() {
   return toPublicAdsSettings({
@@ -36,9 +35,7 @@ export async function GET() {
   } catch (e) {
     console.error('[site-settings/ads]', e);
     return NextResponse.json(defaultPublicSettings(), {
-      headers: {
-        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
-      },
+      headers: cacheHeaders(30, 60),
     });
   }
 }

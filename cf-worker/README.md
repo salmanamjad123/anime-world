@@ -3,8 +3,9 @@
 Moves **video and manga image egress** off Vercel and Railway. Keep Railway for search / episodes / sources only.
 
 ```
-Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts + subtitles)
+Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts)
 Browser  →  CF Worker /image  →  CDN (manga pages, locked posters)
+Browser  →  Vercel /api/subtitles  →  tiny VTT only (ASS converted)
 Browser  →  Railway streaming-api  →  catalog JSON only
 Browser  →  Vercel  →  website HTML/JS only
 ```

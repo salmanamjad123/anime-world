@@ -3,7 +3,8 @@
  * GET /api/episodes/[animeId] - Get episodes for an anime (AniList id or HiAnime slug)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import {
   getEpisodesMultiSource,
   EpisodesUnavailableError,
@@ -23,10 +24,7 @@ export async function GET(
     const dub = searchParams.get('dub') === 'true';
 
     if (!animeId) {
-      return NextResponse.json(
-        { error: 'Anime ID is required' },
-        { status: 400 }
-      );
+      return uncachedJson({ error: 'Anime ID is required' }, 400);
     }
 
     const anilistId = await resolveAnilistIdFromSegment(animeId, { allowLookup: true });
@@ -38,7 +36,7 @@ export async function GET(
         const result = await getHiAnimeEpisodesStandard(slug, slug);
         if (result.episodes.length > 0) {
           saveEpisodesToFirestoreBackground(slug, category, slug, result);
-          return NextResponse.json(result);
+          return cachedJson(result, 60);
         }
       } catch (error) {
         console.warn('[Episodes] HiAnime slug fetch failed, trying Firebase cache');
@@ -46,11 +44,11 @@ export async function GET(
       const { getEpisodesFromFirestore } = await import('@/lib/api/episode-cache');
       const cached = await getEpisodesFromFirestore(slug, category);
       if (cached?.episodes?.length) {
-        return NextResponse.json(cached);
+        return cachedJson(cached, 60);
       }
-      return NextResponse.json(
+      return uncachedJson(
         { error: 'Anime not found', episodes: [], totalEpisodes: 0, animeId: slug },
-        { status: 404 }
+        404
       );
     }
 
@@ -61,10 +59,7 @@ export async function GET(
     const anime = animeData.data.Media;
 
     if (!anime) {
-      return NextResponse.json(
-        { error: 'Anime not found' },
-        { status: 404 }
-      );
+      return uncachedJson({ error: 'Anime not found' }, 404);
     }
 
     const animeTitle = anime.title.english || anime.title.romaji;
@@ -86,28 +81,25 @@ export async function GET(
     );
 
     if (result.episodes.length === 0 && anime.status === 'NOT_YET_RELEASED') {
-      return NextResponse.json({
+      return cachedJson({
         ...result,
         code: 'NOT_YET_RELEASED',
-      });
+      }, 60);
     }
 
-    return NextResponse.json(result);
+    return cachedJson(result, 60);
   } catch (error) {
     if (error instanceof EpisodesUnavailableError) {
-      return NextResponse.json(
+      return uncachedJson(
         {
           error: 'Streaming server unavailable',
           message: error.message,
           code: 'EPISODES_UNAVAILABLE',
         },
-        { status: 503 }
+        503
       );
     }
     console.error('[API Error] /api/episodes/[animeId]:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch episodes' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to fetch episodes' }, 500);
   }
 }

@@ -3,7 +3,8 @@
  * GET /api/search - Search anime with filters
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 import { searchAnime } from '@/lib/api/anilist';
 import {
   attachSlugsToSearchResult,
@@ -34,12 +35,9 @@ export async function GET(request: NextRequest) {
     });
     warmAnimeSlugsInBackground(enriched.data?.Page?.media ?? []);
 
-    return NextResponse.json(enriched);
+    return cachedJson(enriched, 60);
   } catch (error) {
     console.error('[API Error] /api/search:', error);
-    return NextResponse.json(
-      { error: 'Failed to search anime' },
-      { status: 500 }
-    );
+    return uncachedJson({ error: 'Failed to search anime' }, 500);
   }
 }
