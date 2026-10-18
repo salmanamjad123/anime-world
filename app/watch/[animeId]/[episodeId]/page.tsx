@@ -20,7 +20,7 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { updateWatchProgress } from '@/lib/firebase/firestore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { isAniListNumericId } from '@/lib/seo/anime-path';
+import { isAniListNumericId, resolveHiAnimeEpisodeId } from '@/lib/seo/anime-path';
 import { isFragileCdnHost } from '@/lib/hls-proxy';
 import { WatchCanonicalUrlSync } from '@/components/anime/WatchCanonicalUrlSync';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
@@ -32,8 +32,12 @@ import { AdsterraNative } from '@/components/ads/AdsterraNative';
 export default function WatchPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const animeId = params.animeId as string;
-  const episodeId = decodeURIComponent(params.episodeId as string);
+  const episodeId = resolveHiAnimeEpisodeId(
+    params.episodeId as string,
+    searchParams.get('ep')
+  );
 
   const [selectedLanguage, setSelectedLanguage] = useState<'sub' | 'dub'>('sub');
   const [showEpisodes, setShowEpisodes] = useState(false);
@@ -147,7 +151,6 @@ export default function WatchPage() {
   const title = anime ? getPreferredTitle(anime.title) : 'Loading...';
 
   // Resume: URL ?t= first (Continue Watching), then localStorage fallback on refresh
-  const searchParams = useSearchParams();
   const tParam = searchParams.get('t');
   const initialTime = useMemo(() => {
     const fromUrl = tParam ? Math.max(0, parseInt(tParam, 10) || 0) : 0;

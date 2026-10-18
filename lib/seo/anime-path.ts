@@ -37,3 +37,17 @@ export function getWatchAnimeId(
 export function isWatchAnimeId(id: string): boolean {
   return isAniListNumericId(id);
 }
+
+/**
+ * HiAnime ids are `slug?ep=123`. Next.js puts `?ep=` on the query string
+ * for direct visits, or `%3Fep%3D` in the path for in-app links. Merge both.
+ */
+export function resolveHiAnimeEpisodeId(
+  pathEpisodeId: string | undefined,
+  epQuery: string | null
+): string {
+  const decoded = decodeURIComponent(pathEpisodeId || '');
+  if (decoded.includes('?ep=')) return decoded;
+  if (epQuery) return `${decoded}?ep=${epQuery}`;
+  return decoded;
+}

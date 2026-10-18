@@ -11,6 +11,7 @@ export function cacheHeaders(sMaxAge: number, swr = sMaxAge * 4): Record<string,
     'Cache-Control': value,
     'CDN-Cache-Control': value,
     'Vercel-CDN-Cache-Control': value,
+    'Cloudflare-CDN-Cache-Control': value,
   };
 }
 

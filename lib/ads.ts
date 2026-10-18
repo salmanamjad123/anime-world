@@ -61,15 +61,20 @@ function writeSmartlinkCooldownTs(ts: number) {
   }
 }
 
-/** Manga social bar: show at most once every 2 hours. */
+/** Social bar (manga + anime watch): show at most once every 2 hours. */
 export const SOCIAL_BAR_COOLDOWN_MS = 2 * 60 * 60 * 1000;
-const SOCIAL_BAR_LAST_SHOWN_KEY = 'manga_social_bar_last';
+const SOCIAL_BAR_LAST_SHOWN_KEY = 'social_bar_last';
+const SOCIAL_BAR_LAST_SHOWN_KEY_LEGACY = 'manga_social_bar_last';
 
-export function canShowMangaSocialBar(): boolean {
+export function canShowSocialBar(): boolean {
   if (typeof window === 'undefined') return false;
   if (!ADSTERRA_SOCIAL_SRC) return false;
   try {
-    const last = Number(localStorage.getItem(SOCIAL_BAR_LAST_SHOWN_KEY) || 0);
+    const last = Number(
+      localStorage.getItem(SOCIAL_BAR_LAST_SHOWN_KEY) ||
+        localStorage.getItem(SOCIAL_BAR_LAST_SHOWN_KEY_LEGACY) ||
+        0
+    );
     if (last && Date.now() - last < SOCIAL_BAR_COOLDOWN_MS) return false;
     return true;
   } catch {
@@ -77,13 +82,20 @@ export function canShowMangaSocialBar(): boolean {
   }
 }
 
-export function markMangaSocialBarShown(): void {
+export function markSocialBarShown(): void {
   try {
-    localStorage.setItem(SOCIAL_BAR_LAST_SHOWN_KEY, String(Date.now()));
+    const ts = String(Date.now());
+    localStorage.setItem(SOCIAL_BAR_LAST_SHOWN_KEY, ts);
+    localStorage.setItem(SOCIAL_BAR_LAST_SHOWN_KEY_LEGACY, ts);
   } catch {
     /* private mode */
   }
 }
+
+/** @deprecated use canShowSocialBar */
+export const canShowMangaSocialBar = canShowSocialBar;
+/** @deprecated use markSocialBarShown */
+export const markMangaSocialBarShown = markSocialBarShown;
 
 export function isAdLocalHost() {
   if (typeof window === 'undefined') return false;

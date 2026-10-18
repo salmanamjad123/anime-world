@@ -11,6 +11,18 @@ const imagesUnoptimized =
 
 const nextConfig: NextConfig = {
   async headers() {
+    const catalog = "public, s-maxage=120, stale-while-revalidate=600";
+    const catalogHeaders = [
+      { key: "Cache-Control", value: catalog },
+      { key: "CDN-Cache-Control", value: catalog },
+      { key: "Vercel-CDN-Cache-Control", value: catalog },
+      { key: "Cloudflare-CDN-Cache-Control", value: catalog },
+    ];
+    const htmlCdn = "public, s-maxage=60, stale-while-revalidate=300";
+    const htmlHeaders = [
+      { key: "CDN-Cache-Control", value: htmlCdn },
+      { key: "Cloudflare-CDN-Cache-Control", value: htmlCdn },
+    ];
     return [
       {
         source: "/:path*",
@@ -32,20 +44,23 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      { source: "/", headers: htmlHeaders },
+      { source: "/anime/:path*", headers: htmlHeaders },
+      { source: "/manga/:path*", headers: htmlHeaders },
+      { source: "/api/anime", headers: catalogHeaders },
+      { source: "/api/anime/:path*", headers: catalogHeaders },
+      { source: "/api/manga", headers: catalogHeaders },
+      { source: "/api/manga/:path*", headers: catalogHeaders },
+      { source: "/api/azlist/:path*", headers: catalogHeaders },
+      { source: "/api/search/:path*", headers: catalogHeaders },
+      { source: "/api/search", headers: catalogHeaders },
       {
-        source: "/api/anime",
+        source: "/api/episodes/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
-          { key: "CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
-          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
-        ],
-      },
-      {
-        source: "/api/manga",
-        headers: [
-          { key: "Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
-          { key: "CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
-          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
         ],
       },
       {
@@ -54,6 +69,7 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
           { key: "CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
           { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
         ],
       },
     ];

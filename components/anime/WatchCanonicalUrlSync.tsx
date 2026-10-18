@@ -5,8 +5,9 @@ import { isAniListNumericId } from '@/lib/seo/anime-path';
 import { ROUTES } from '@/constants/routes';
 
 /**
- * Canonicalize /watch/{slug}/… → /watch/{anilistId}/… without remounting the page.
- * Uses history.replaceState so the VideoPlayer is not torn down (avoids AbortError).
+ * Canonicalize watch URLs without remounting the player:
+ * - /watch/{slug}/… → /watch/{anilistId}/…
+ * - ?ep=123 query → encoded path (%3Fep%3D) used by in-app links
  */
 export function WatchCanonicalUrlSync({
   routeAnimeId,
@@ -18,15 +19,22 @@ export function WatchCanonicalUrlSync({
   episodeId: string;
 }) {
   useEffect(() => {
-    const id = anilistId != null ? String(anilistId) : '';
-    if (!id || !isAniListNumericId(id)) return;
-    if (routeAnimeId === id) return;
+    if (!episodeId) return;
+    const numeric =
+      anilistId != null && isAniListNumericId(String(anilistId))
+        ? String(anilistId)
+        : isAniListNumericId(routeAnimeId)
+          ? routeAnimeId
+          : '';
+    if (!numeric) return;
 
-    const canonical = ROUTES.WATCH(id, episodeId);
+    const canonicalPath = ROUTES.WATCH(numeric, episodeId);
+    const t = new URLSearchParams(window.location.search).get('t');
+    const next = t ? `${canonicalPath}?t=${encodeURIComponent(t)}` : canonicalPath;
     const current = `${window.location.pathname}${window.location.search}`;
-    if (current === canonical) return;
+    if (current === next) return;
 
-    window.history.replaceState(window.history.state, '', canonical);
+    window.history.replaceState(window.history.state, '', next);
   }, [routeAnimeId, anilistId, episodeId]);
 
   return null;

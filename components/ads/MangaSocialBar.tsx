@@ -3,13 +3,14 @@
 import { useEffect } from 'react';
 import {
   ADSTERRA_SOCIAL_SRC,
-  canShowMangaSocialBar,
-  markMangaSocialBarShown,
+  canShowSocialBar,
+  markSocialBarShown,
 } from '@/lib/ads';
 import { useAdMode } from '@/hooks/useAdMode';
 import { useAdPlacementVisible } from '@/hooks/useAdsSettings';
+import type { AdPlacementId } from '@/lib/ads-placements';
 
-const SOCIAL_SCRIPT_ATTR = 'data-av-manga-social';
+const SOCIAL_SCRIPT_ATTR = 'data-av-social-bar';
 
 function removeSocialBarArtifacts() {
   document
@@ -19,16 +20,16 @@ function removeSocialBarArtifacts() {
 }
 
 /**
- * Manga routes only: inject Adsterra social bar at most once every 2 hours.
- * Removed when leaving /manga so it never stays on anime pages.
+ * Adsterra social bar, at most once every 2 hours (shared manga + watch cooldown).
+ * Removed on unmount so it does not stay on other sections.
  */
-export function MangaSocialBar() {
+export function AdsterraSocialBar({ placement }: { placement: AdPlacementId }) {
   const mode = useAdMode();
-  const { visible, isLoading } = useAdPlacementVisible('manga_social_bar');
+  const { visible, isLoading } = useAdPlacementVisible(placement);
 
   useEffect(() => {
     if (isLoading || mode !== 'live' || !visible || !ADSTERRA_SOCIAL_SRC) return;
-    if (!canShowMangaSocialBar()) return;
+    if (!canShowSocialBar()) return;
 
     const added: Node[] = [];
     const observer = new MutationObserver((mutations) => {
@@ -44,7 +45,7 @@ export function MangaSocialBar() {
     script.dataset.cfasync = 'false';
     script.setAttribute(SOCIAL_SCRIPT_ATTR, '1');
     document.body.appendChild(script);
-    markMangaSocialBarShown();
+    markSocialBarShown();
 
     return () => {
       observer.disconnect();
@@ -54,7 +55,15 @@ export function MangaSocialBar() {
       });
       removeSocialBarArtifacts();
     };
-  }, [isLoading, mode, visible]);
+  }, [isLoading, mode, visible, placement]);
 
   return null;
+}
+
+export function MangaSocialBar() {
+  return <AdsterraSocialBar placement="manga_social_bar" />;
+}
+
+export function WatchSocialBar() {
+  return <AdsterraSocialBar placement="watch_social_bar" />;
 }
