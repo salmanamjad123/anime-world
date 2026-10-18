@@ -283,7 +283,11 @@ export async function searchAnime(
   const variables: Record<string, unknown> = {
     page,
     perPage,
-    sort: filters.sort ? [filters.sort] : ['POPULARITY_DESC'],
+    sort: filters.sort
+      ? [filters.sort]
+      : filters.search?.trim()
+        ? ['SEARCH_MATCH']
+        : ['POPULARITY_DESC'],
   };
 
   if (filters.search?.trim()) variables.search = filters.search.trim();

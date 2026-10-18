@@ -7,7 +7,7 @@
 
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
-import { getCached, CACHE_TTL } from '@/lib/cache';
+import { getCached, getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import { retry } from '@/lib/utils/retry';
 import { getJikanAZList } from './jikan';
 
@@ -730,7 +730,8 @@ export interface HiAnimeAZListResponse {
 }
 
 /**
- * Get A-Z anime list from HiAnime (with caching)
+ * Get A-Z anime list from HiAnime (with caching).
+ * Production Railway often has no /azlist (404) or hangs — fail over to Jikan quickly.
  */
 export async function getHiAnimeAZList(
   sortOption: string,
@@ -744,40 +745,41 @@ export async function getHiAnimeAZList(
     throw new Error(`Invalid AZ sort option: ${sortOption}`);
   }
 
-  const cacheKey = `hianime:azlist:v3:${apiOption}:${page}`;
+  const cacheKey = `hianime:azlist:v4:${apiOption}:${page}`;
 
-  return getCached(
+  return getCachedWhen(
     cacheKey,
     async () => {
       const url = `${HIANIME_API_URL}/api/v2/hianime/azlist/${apiOption}`;
       try {
         const response = await axiosInstance.get(url, {
           params: { page },
-          timeout: HIANIME_TIMEOUT,
+          timeout: 4000,
         });
 
         const data = response.data?.data ?? response.data;
-        return {
-          sortOption: data.sortOption ?? apiOption,
-          animes: data.animes ?? [],
-          totalPages: data.totalPages ?? 1,
-          hasNextPage: data.hasNextPage ?? false,
-          currentPage: data.currentPage ?? page,
-        };
+        const animes = data.animes ?? [];
+        if (animes.length > 0) {
+          return {
+            sortOption: data.sortOption ?? apiOption,
+            animes,
+            totalPages: data.totalPages ?? 1,
+            hasNextPage: data.hasNextPage ?? false,
+            currentPage: data.currentPage ?? page,
+          };
+        }
       } catch (error: any) {
         const status = error?.response?.status;
-        if (status === 404 || status === 501) {
-          console.warn('[HiAnime AZ] Endpoint missing — Jikan letter fallback');
-          return getJikanAZList(normalized, page);
-        }
-        throw error;
+        console.warn(
+          `[HiAnime AZ] ${status || error?.code || 'fail'} — Jikan letter fallback`
+        );
       }
+
+      return getJikanAZList(normalized, page);
     },
-    CACHE_TTL.ANIME_SEARCH
-  ).catch((error: any) => {
-    console.error('[HiAnime API Error] getHiAnimeAZList:', error.message);
-    throw new Error(`HiAnime A-Z list failed: ${error.message}`);
-  });
+    CACHE_TTL.ANIME_SEARCH,
+    (data) => (data.animes?.length ?? 0) > 0
+  );
 }
 
 /**

@@ -115,43 +115,18 @@ export function Header() {
       setIsSearching(false);
     };
 
-    const loadAnimeTrendingFallback = async () => {
-      try {
-        const res = await fetch('/api/anime?type=trending&page=1&perPage=20');
-        const fallback = res.ok ? await res.json() : null;
-        const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
-        finish(Array.isArray(fallbackMedia) ? fallbackMedia : [], true);
-      } catch {
-        finish([], true);
-      }
-    };
-
-    const loadMangaPopularFallback = async () => {
-      try {
-        const res = await fetch('/api/manga?type=popular&page=1&perPage=20');
-        const fallback = res.ok ? await res.json() : null;
-        const fallbackMedia = fallback?.data?.Page?.media ?? fallback?.Page?.media ?? [];
-        finish(Array.isArray(fallbackMedia) ? fallbackMedia : [], true);
-      } catch {
-        finish([], true);
-      }
-    };
-
     if (activeTab === 'manga') {
       (async () => {
         try {
           const res = await fetch(
-            `/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`
+            `/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`,
+            { signal: AbortSignal.timeout(8000) }
           );
           const data = res.ok ? await res.json() : null;
           const media = data?.data?.Page?.media ?? data?.Page?.media ?? [];
-          if (media.length === 0) {
-            await loadMangaPopularFallback();
-            return;
-          }
-          finish(media, false);
+          finish(Array.isArray(media) ? media : [], false);
         } catch {
-          await loadMangaPopularFallback();
+          finish([], false);
         }
       })();
       return () => {
@@ -162,63 +137,60 @@ export function Header() {
     (async () => {
       try {
         const res = await fetch(
-          `/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`
+          `/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`,
+          { signal: AbortSignal.timeout(8000) }
         );
         const anilistData = res.ok ? await res.json() : null;
         const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
-        if (media.length === 0) {
-          await loadAnimeTrendingFallback();
-          return;
-        }
+        finish(Array.isArray(media) ? media : [], false);
 
         const first = media[0];
-        const relationIds = new Set<string>();
+        if (!first?.id || cancelled) return;
 
-        if (first.id) {
-          try {
-            const seasonsRes = await fetch(`/api/anime/${first.id}/seasons`);
-            if (seasonsRes.ok && !cancelled) {
-              const seasonsData = await seasonsRes.json();
-              const main = seasonsData.main;
-              const seasons = seasonsData.seasons ?? [];
-              const movies = seasonsData.movies ?? [];
-              const allRelations = [main, ...seasons, ...movies].filter(Boolean);
-              allRelations.forEach((r: { id: string }) => relationIds.add(String(r.id)));
+        try {
+          const seasonsRes = await fetch(`/api/anime/${first.id}/seasons`, {
+            signal: AbortSignal.timeout(2500),
+          });
+          if (!seasonsRes.ok || cancelled) return;
+          const seasonsData = await seasonsRes.json();
+          const main = seasonsData.main;
+          const seasons = seasonsData.seasons ?? [];
+          const movies = seasonsData.movies ?? [];
+          const allRelations = [main, ...seasons, ...movies].filter(Boolean);
+          if (allRelations.length === 0) return;
 
-              const mediaById = new Map<string, Anime>(media.map((m: Anime) => [String(m.id), m]));
-              const firstCover = (first as Anime).coverImage?.medium || (first as Anime).coverImage?.large;
-              const genericPlaceholder = '/images/anime-placeholder.svg';
-              const relationToAnime = (r: { id: string; title: string; coverImage?: string; format?: string }) => {
-                const original = mediaById.get(String(r.id)) as Anime | undefined;
-                const origCover = original?.coverImage as { medium?: string; large?: string } | undefined;
-                const img =
-                  r.coverImage ||
-                  origCover?.medium ||
-                  origCover?.large ||
-                  firstCover ||
-                  genericPlaceholder;
-                return {
-                  id: String(r.id),
-                  slug: original?.slug,
-                  title: { romaji: r.title, english: r.title, native: '' },
-                  coverImage: { large: img, medium: img },
-                  genres: r.format ? [r.format] : [],
-                } as Anime;
-              };
+          const relationIds = new Set<string>();
+          allRelations.forEach((r: { id: string }) => relationIds.add(String(r.id)));
 
-              const enriched: Anime[] = allRelations.map(relationToAnime);
-              const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
-              finish([...enriched, ...rest], false);
-              return;
-            }
-          } catch {
-            /* fall through to plain results */
-          }
+          const mediaById = new Map<string, Anime>(media.map((m: Anime) => [String(m.id), m]));
+          const firstCover = (first as Anime).coverImage?.medium || (first as Anime).coverImage?.large;
+          const genericPlaceholder = '/images/anime-placeholder.svg';
+          const relationToAnime = (r: { id: string; title: string; coverImage?: string; format?: string }) => {
+            const original = mediaById.get(String(r.id)) as Anime | undefined;
+            const origCover = original?.coverImage as { medium?: string; large?: string } | undefined;
+            const img =
+              r.coverImage ||
+              origCover?.medium ||
+              origCover?.large ||
+              firstCover ||
+              genericPlaceholder;
+            return {
+              id: String(r.id),
+              slug: original?.slug,
+              title: { romaji: r.title, english: r.title, native: '' },
+              coverImage: { large: img, medium: img },
+              genres: r.format ? [r.format] : [],
+            } as Anime;
+          };
+
+          const enriched: Anime[] = allRelations.map(relationToAnime);
+          const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
+          finish([...enriched, ...rest], false);
+        } catch {
+          /* typed matches already shown */
         }
-
-        finish(Array.isArray(media) ? media : [], false);
       } catch {
-        await loadAnimeTrendingFallback();
+        finish([], false);
       }
     })();
 

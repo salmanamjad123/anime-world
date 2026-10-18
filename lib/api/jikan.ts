@@ -221,7 +221,7 @@ export async function getJikanAZList(
       sort: 'asc',
       ...(letterParam ? { letter: letterParam } : {}),
     },
-    timeout: JIKAN_TIMEOUT,
+    timeout: 8000,
   });
 
   const items = response.data?.data ?? [];
