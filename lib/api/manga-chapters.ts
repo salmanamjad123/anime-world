@@ -1,10 +1,12 @@
 /**
  * Manga chapter resolution + pagination
  * Full lists use durable SWR (Redis → Firestore → source):
- * soft TTL 24h (serve + background refresh), hard TTL 7d.
+ * soft TTL 24h (serve + incremental refresh on the winning source),
+ * re-contest all sources after 7d, hard TTL 7d.
  * API returns page slices for fast first paint.
  *
  * - provider=auto: fetch all sources in parallel, pick longest title-verified list
+ * - later visits: serve cache; background fetch only new chapters on the winner
  * - explicit tab: only that source (no silent swap)
  * - Manhwa (KR) / manhua (CN/TW): prefer MangaPark, MangaSee, MangaHere, AsuraScans
  */
@@ -15,9 +17,11 @@ import { getAsuraChaptersForTitles } from '@/lib/api/asura-scans';
 import {
   findMangaDexByAnilistId,
   getMangaDexChapters,
+  getMangaDexChaptersSince,
 } from '@/lib/api/mangadex';
 import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
 import {
+  CHAPTER_LIST_RECONTEST_TTL_MS,
   lookupChapterListCache,
   saveChapterListCache,
   tryAcquireChapterListRefreshLock,
@@ -172,13 +176,14 @@ async function resolveMangaDexId(
 async function chaptersFromMangaDex(
   anilistId: string,
   manga: Manga,
-  mangadexIdHint?: string | null
+  mangadexIdHint?: string | null,
+  skipCache = false
 ): Promise<{ chapters: MangaChapter[]; mangadexId: string | null }> {
   const mangadexId = await resolveMangaDexId(anilistId, manga, mangadexIdHint);
   if (!mangadexId) {
     return { chapters: [], mangadexId: null };
   }
-  const chapters = await getMangaDexChapters(mangadexId);
+  const chapters = await getMangaDexChapters(mangadexId, 'en', { skipCache });
   return { chapters, mangadexId };
 }
 
@@ -278,6 +283,7 @@ interface FullChapterList {
   mangadexId?: string | null;
   source: 'mangadex' | 'consumet' | 'asura' | 'none';
   unavailableReason?: 'empty' | 'title_mismatch';
+  lastContestedAt?: string;
 }
 
 type Candidate = {
@@ -311,13 +317,31 @@ function sourceOf(provider: string): 'mangadex' | 'consumet' | 'asura' {
   return 'consumet';
 }
 
+function settleWithTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
+
 /**
- * Auto mode: MangaDex + scrapers + AsuraScans in parallel; manhwa prefers scraper sources.
+ * Auto mode: MangaDex + scrapers + AsuraScans in parallel; pick the longest list.
+ * Per-source timeouts keep a hung scraper from emptying the page.
  */
 async function resolveAutoChapterList(
   anilistId: string,
   manga: Manga,
-  mangadexIdHint?: string | null
+  mangadexIdHint?: string | null,
+  skipCache = false
 ): Promise<FullChapterList> {
   const expectedTitles = collectAniListMangaTitles(manga);
   const preferManhwa = isManhwaOrManhua(manga);
@@ -334,19 +358,28 @@ async function resolveAutoChapterList(
     : [...CONSUMET_SOURCES];
 
   const expectedCount = manga.chapters ?? null;
+  const scraperTimeoutMs = preferManhwa ? 8000 : 6000;
 
   const [mdResult, ...scrapers] = await Promise.all([
-    chaptersFromMangaDex(anilistId, manga, mangadexIdHint),
+    chaptersFromMangaDex(anilistId, manga, mangadexIdHint, skipCache),
     ...consumetToQuery.map((p) =>
-      chaptersFromConsumetProvider(
-        anilistId,
-        p,
-        expectedTitles,
-        expectedCount,
-        format
+      settleWithTimeout(
+        chaptersFromConsumetProvider(
+          anilistId,
+          p,
+          expectedTitles,
+          expectedCount,
+          format
+        ),
+        scraperTimeoutMs,
+        { chapters: [], provider: p, rejected: 'empty' as const }
       )
     ),
-    chaptersFromAsura(expectedTitles),
+    settleWithTimeout(
+      chaptersFromAsura(expectedTitles),
+      scraperTimeoutMs,
+      { chapters: [], provider: 'asurascans', rejected: 'empty' as const }
+    ),
   ]);
 
   const consumetResults = scrapers;
@@ -383,6 +416,7 @@ async function resolveAutoChapterList(
       mode: 'auto',
       mangadexId: winner.mangadexId ?? mdResult.mangadexId,
       source: winner.source,
+      lastContestedAt: new Date().toISOString(),
     };
   }
 
@@ -402,20 +436,22 @@ async function resolveFullChapterList(
   anilistId: string,
   provider: string,
   manga: Manga,
-  mangadexIdHint?: string | null
+  mangadexIdHint?: string | null,
+  skipCache = false
 ): Promise<FullChapterList> {
   const expectedTitles = collectAniListMangaTitles(manga);
   const mode = provider || 'auto';
 
   if (isAutoMode(provider)) {
-    return resolveAutoChapterList(anilistId, manga, mangadexIdHint);
+    return resolveAutoChapterList(anilistId, manga, mangadexIdHint, skipCache);
   }
 
   if (provider === 'mangadex') {
     const { chapters, mangadexId } = await chaptersFromMangaDex(
       anilistId,
       manga,
-      mangadexIdHint
+      mangadexIdHint,
+      skipCache
     );
     return {
       chapters,
@@ -572,28 +608,166 @@ function toPagedResult(
   };
 }
 
+function chapterSortKey(ch: MangaChapter): number {
+  const n = parseFloat(String(ch.chapter ?? ''));
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+function sortChapters(chapters: MangaChapter[]): MangaChapter[] {
+  return [...chapters].sort((a, b) => {
+    const d = chapterSortKey(a) - chapterSortKey(b);
+    if (d !== 0) return d;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function mergeChapters(base: MangaChapter[], extra: MangaChapter[]): MangaChapter[] {
+  const byId = new Set(base.map((c) => c.id));
+  const byNum = new Set(
+    base.map((c) => c.chapter).filter((n): n is string => Boolean(n))
+  );
+  const added = extra.filter((c) => {
+    if (byId.has(c.id)) return false;
+    if (c.chapter && byNum.has(c.chapter)) return false;
+    return true;
+  });
+  if (added.length === 0) return base;
+  return sortChapters([...base, ...added]);
+}
+
+function toFullList(payload: ChapterListPayload): FullChapterList {
+  return {
+    chapters: payload.chapters,
+    provider: payload.provider,
+    mode: payload.mode,
+    mangadexId: payload.mangadexId,
+    source: payload.source ?? 'none',
+    unavailableReason: payload.unavailableReason,
+    lastContestedAt: payload.lastContestedAt,
+  };
+}
+
+function shouldFullContest(payload: ChapterListPayload): boolean {
+  if (!isAutoMode(payload.mode)) return false;
+  if (!payload.lastContestedAt) return true;
+  const t = Date.parse(payload.lastContestedAt);
+  if (!Number.isFinite(t)) return true;
+  return Date.now() - t >= CHAPTER_LIST_RECONTEST_TTL_MS;
+}
+
+async function refreshWinnerIncrementally(
+  cached: ChapterListPayload,
+  anilistId: string,
+  manga: Manga,
+  mangadexIdHint?: string | null
+): Promise<FullChapterList | 'unchanged' | 'contest'> {
+  const winner = cached.provider;
+  if (!winner || winner === 'auto' || winner === 'none' || cached.chapters.length === 0) {
+    return 'contest';
+  }
+
+  if (winner === 'mangadex') {
+    const mangadexId =
+      cached.mangadexId ||
+      (await resolveMangaDexId(anilistId, manga, mangadexIdHint));
+    if (!mangadexId) return 'contest';
+
+    const knownIds = new Set(cached.chapters.map((c) => c.id));
+    const { chapters: newest, hitKnown } = await getMangaDexChaptersSince(
+      mangadexId,
+      knownIds
+    );
+
+    if (newest.length === 0) return 'unchanged';
+
+    let chapters: MangaChapter[];
+    if (!hitKnown) {
+      chapters = await getMangaDexChapters(mangadexId, 'en', { skipCache: true });
+    } else {
+      chapters = mergeChapters(cached.chapters, newest);
+    }
+
+    if (chapters.length <= cached.chapters.length) return 'unchanged';
+    console.log(
+      `➕ [ChapterList Incremental] ${anilistId} mangadex +${chapters.length - cached.chapters.length}`
+    );
+    return {
+      ...toFullList(cached),
+      chapters,
+      mangadexId,
+      source: 'mangadex',
+      unavailableReason: undefined,
+    };
+  }
+
+  const expectedTitles = collectAniListMangaTitles(manga);
+  const incoming =
+    winner === 'asurascans'
+      ? await chaptersFromAsura(expectedTitles)
+      : await chaptersFromConsumetProvider(
+          anilistId,
+          winner,
+          expectedTitles,
+          manga.chapters ?? null,
+          manga.format ?? null
+        );
+
+  if (incoming.chapters.length === 0) return 'contest';
+  if (incoming.chapters.length <= cached.chapters.length) return 'unchanged';
+
+  const chapters = mergeChapters(cached.chapters, incoming.chapters);
+  if (chapters.length <= cached.chapters.length) return 'unchanged';
+  console.log(
+    `➕ [ChapterList Incremental] ${anilistId} ${winner} +${chapters.length - cached.chapters.length}`
+  );
+  return {
+    ...toFullList(cached),
+    chapters,
+    source: sourceOf(winner),
+    unavailableReason: undefined,
+  };
+}
+
 async function fetchAndStoreChapterList(
   anilistId: string,
   provider: string,
   manga: Manga,
-  mangadexIdHint?: string | null
+  mangadexIdHint?: string | null,
+  skipCache = false,
+  previous?: ChapterListPayload
 ): Promise<FullChapterList> {
   const mode = provider || 'auto';
-  const full = await resolveFullChapterList(anilistId, provider, manga, mangadexIdHint);
+  const full = await resolveFullChapterList(
+    anilistId,
+    provider,
+    manga,
+    mangadexIdHint,
+    skipCache
+  );
+  if (previous && previous.chapters.length > full.chapters.length) {
+    const kept: FullChapterList = {
+      ...toFullList(previous),
+      lastContestedAt: full.lastContestedAt || new Date().toISOString(),
+      unavailableReason: undefined,
+    };
+    await saveChapterListCache(anilistId, mode, mangadexIdHint, kept);
+    return kept;
+  }
   await saveChapterListCache(anilistId, mode, mangadexIdHint, full);
   return full;
 }
 
 /**
- * Schedule a background re-fetch when the durable list is older than the soft TTL (24h).
- * Call from a route via Next.js `after()`.
+ * After 24h: append new chapters on the winning source.
+ * After 7d (Auto): compare all sources again and keep the longest list.
  */
 function scheduleChapterListRefresh(
   scheduleRefresh: ((task: () => Promise<void>) => void) | undefined,
   anilistId: string,
   provider: string,
   manga: Manga,
-  mangadexIdHint?: string | null
+  mangadexIdHint: string | null | undefined,
+  cached: ChapterListPayload
 ): void {
   if (!scheduleRefresh) return;
   const mode = provider || 'auto';
@@ -602,8 +776,33 @@ function scheduleChapterListRefresh(
     const locked = await tryAcquireChapterListRefreshLock(anilistId, mode, mangadexIdHint);
     if (!locked) return;
     try {
-      console.log(`🔄 [ChapterList Refresh] ${anilistId} mode=${mode} (background)`);
-      await fetchAndStoreChapterList(anilistId, provider, manga, mangadexIdHint);
+      if (cached.chapters.length > 0 && !shouldFullContest(cached)) {
+        const incremental = await refreshWinnerIncrementally(
+          cached,
+          anilistId,
+          manga,
+          mangadexIdHint
+        );
+        if (incremental === 'unchanged') {
+          console.log(`✅ [ChapterList Incremental] ${anilistId} mode=${mode} no new chapters`);
+          await saveChapterListCache(anilistId, mode, mangadexIdHint, cached);
+          return;
+        }
+        if (incremental !== 'contest') {
+          await saveChapterListCache(anilistId, mode, mangadexIdHint, incremental);
+          return;
+        }
+      }
+
+      console.log(`🔄 [ChapterList Recontest] ${anilistId} mode=${mode} (background)`);
+      await fetchAndStoreChapterList(
+        anilistId,
+        provider,
+        manga,
+        mangadexIdHint,
+        true,
+        cached
+      );
     } catch (err) {
       console.warn('[ChapterList Refresh] Failed:', (err as Error).message);
     }
@@ -662,7 +861,8 @@ export async function resolveMangaChapters(
         anilistId,
         provider,
         manga,
-        mangadexIdHint
+        mangadexIdHint,
+        cached.payload
       );
     }
     return toPagedResult(cached.payload, page, limit, all);

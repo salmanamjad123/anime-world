@@ -9,6 +9,10 @@ import { getCached, getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import type { MangaChapter } from '@/types';
 
 const MANGADEX_API = 'https://api.mangadex.org';
+const MANGADEX_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'AnimeVillage/1.0 (https://www.animevillage.org)',
+};
 
 export interface MangaDexManga {
   id: string;
@@ -55,6 +59,7 @@ export async function searchMangaDexByTitle(title: string): Promise<string | nul
         limit: 5,
         contentRating: ['safe', 'suggestive', 'erotica'],
       },
+      headers: MANGADEX_HEADERS,
       timeout: 10000,
     });
     const data = res.data?.data;
@@ -86,6 +91,7 @@ export async function findMangaDexByAnilistId(
             contentRating: ['safe', 'suggestive', 'erotica'],
             'order[relevance]': 'desc',
           },
+          headers: MANGADEX_HEADERS,
           timeout: 10000,
         });
         const data = res.data?.data;
@@ -132,19 +138,20 @@ export async function findMangaDexByAnilistId(
  */
 async function fetchMangaDexChapterFeed(
   mangaId: string,
-  lang?: string
+  lang?: string,
+  order: 'asc' | 'desc' = 'asc',
+  maxPages = 30
 ): Promise<MangaChapter[]> {
   try {
     const all: MangaDexChapter[] = [];
     let offset = 0;
     const limit = 100; // MangaDex API maximum
-    const maxPages = 30; // up to 3000 chapter rows before dedupe
 
     for (let page = 0; page < maxPages; page++) {
       const params: Record<string, string | number | string[]> = {
         limit,
         offset,
-        'order[chapter]': 'asc',
+        'order[chapter]': order,
         'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
         includeEmptyPages: 0,
         includeFuturePublishAt: 0,
@@ -158,6 +165,7 @@ async function fetchMangaDexChapterFeed(
         `${MANGADEX_API}/manga/${mangaId}/feed`,
         {
           params,
+          headers: MANGADEX_HEADERS,
           timeout: 20000,
         }
       );
@@ -193,31 +201,61 @@ function dedupeChaptersByNumber(chapters: MangaChapter[]): MangaChapter[] {
   return Array.from(byNumber.values());
 }
 
-export async function getMangaDexChapters(
+async function loadMangaDexChapterList(
   mangaId: string,
   lang = 'en'
 ): Promise<MangaChapter[]> {
+  let chapters = await fetchMangaDexChapterFeed(mangaId, lang);
+  // Merge other languages when EN is sparse (licensed titles often have few EN uploads)
+  if (lang === 'en') {
+    const anyLang = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
+    if (anyLang.length > chapters.length) {
+      chapters = anyLang;
+    } else {
+      chapters = dedupeChaptersByNumber(chapters);
+    }
+  } else {
+    chapters = dedupeChaptersByNumber(chapters);
+  }
+  return chapters;
+}
+
+export async function getMangaDexChapters(
+  mangaId: string,
+  lang = 'en',
+  options?: { skipCache?: boolean }
+): Promise<MangaChapter[]> {
+  if (options?.skipCache) {
+    return loadMangaDexChapterList(mangaId, lang);
+  }
   const key = `mangadex:chapters:v4:${mangaId}:${lang}`;
   return getCachedWhen(
     key,
-    async () => {
-      let chapters = await fetchMangaDexChapterFeed(mangaId, lang);
-      // Merge other languages when EN is sparse (licensed titles often have few EN uploads)
-      if (lang === 'en') {
-        const anyLang = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
-        if (anyLang.length > chapters.length) {
-          chapters = anyLang;
-        } else {
-          chapters = dedupeChaptersByNumber(chapters);
-        }
-      } else {
-        chapters = dedupeChaptersByNumber(chapters);
-      }
-      return chapters;
-    },
+    () => loadMangaDexChapterList(mangaId, lang),
     CACHE_TTL.MANGA_CHAPTERS_LIST,
     (chs) => chs.length > 0
   );
+}
+
+/**
+ * Newest readable chapters until we hit an id already in cache.
+ * Used for background incremental refresh — not a full feed walk.
+ */
+export async function getMangaDexChaptersSince(
+  mangaId: string,
+  knownIds: ReadonlySet<string>
+): Promise<{ chapters: MangaChapter[]; hitKnown: boolean }> {
+  const newest = await fetchMangaDexChapterFeed(mangaId, undefined, 'desc', 3);
+  const chapters: MangaChapter[] = [];
+  let hitKnown = false;
+  for (const ch of newest) {
+    if (knownIds.has(ch.id)) {
+      hitKnown = true;
+      break;
+    }
+    chapters.push(ch);
+  }
+  return { chapters, hitKnown };
 }
 
 /** Check if ID is MangaDex UUID format */
@@ -244,7 +282,7 @@ async function fetchMangaDexChapterPages(
     try {
       const res = await axiosInstance.get<MangaDexAtHomeResponse>(
         `${MANGADEX_API}/at-home/server/${chapterId}`,
-        { timeout: 15000 }
+        { headers: MANGADEX_HEADERS, timeout: 15000 }
       );
       const { baseUrl, chapter } = res.data;
       if (!chapter?.hash) {

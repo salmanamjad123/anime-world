@@ -5,7 +5,6 @@
 
 import type { Metadata } from 'next';
 import { SITE_NAME } from '@/constants/site';
-import { MangaSocialBar } from '@/components/ads/MangaSocialBar';
 
 export const metadata: Metadata = {
   title: `Manga | ${SITE_NAME}`,
@@ -17,10 +16,5 @@ export default function MangaLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <>
-      {children}
-      <MangaSocialBar />
-    </>
-  );
+  return children;
 }

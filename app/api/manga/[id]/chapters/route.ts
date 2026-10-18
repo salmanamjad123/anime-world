@@ -45,6 +45,7 @@ export async function GET(
       }
     );
 
+    const empty = result.total === 0;
     return NextResponse.json(
       {
         chapters: result.chapters,
@@ -61,10 +62,18 @@ export async function GET(
         firstChapter: result.firstChapter ?? null,
       },
       {
-        headers: {
-          // Short CDN/browser hint — durable freshness is handled server-side (SWR)
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-        },
+        headers: empty
+          ? {
+              'Cache-Control': 'private, no-store',
+              'CDN-Cache-Control': 'no-store',
+              'Vercel-CDN-Cache-Control': 'no-store',
+              'Cloudflare-CDN-Cache-Control': 'no-store',
+            }
+          : {
+              'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+              'CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+              'Cloudflare-CDN-Cache-Control': 'no-store',
+            },
       }
     );
   } catch (error) {

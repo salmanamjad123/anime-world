@@ -50,7 +50,26 @@ const nextConfig: NextConfig = {
       { source: "/api/anime", headers: catalogHeaders },
       { source: "/api/anime/:path*", headers: catalogHeaders },
       { source: "/api/manga", headers: catalogHeaders },
-      { source: "/api/manga/:path*", headers: catalogHeaders },
+      { source: "/api/manga/:id", headers: catalogHeaders },
+      { source: "/api/manga/:id/info", headers: catalogHeaders },
+      {
+        source: "/api/manga/:id/chapters",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
+      {
+        source: "/api/manga/chapter",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
       { source: "/api/azlist/:path*", headers: catalogHeaders },
       { source: "/api/search/:path*", headers: catalogHeaders },
       { source: "/api/search", headers: catalogHeaders },

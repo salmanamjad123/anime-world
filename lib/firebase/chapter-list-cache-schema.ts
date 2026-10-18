@@ -19,6 +19,8 @@ export const CHAPTER_LIST_SOFT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 export const CHAPTER_LIST_HARD_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d
 /** Empty / failed lists — retry sooner */
 export const CHAPTER_LIST_EMPTY_TTL_MS = 5 * 60 * 1000; // 5 min
+/** Re-check all sources for a longer list */
+export const CHAPTER_LIST_RECONTEST_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d
 /** Prevent refresh stampedes */
 export const CHAPTER_LIST_REFRESH_LOCK_MS = 2 * 60 * 1000; // 2 min
 
@@ -46,6 +48,8 @@ export interface ChapterListPayload {
   mangadexId?: string | null;
   source: 'mangadex' | 'consumet' | 'asura' | 'none';
   unavailableReason?: 'empty' | 'title_mismatch';
+  /** Last time Auto compared all sources. Incremental refreshes leave this set. */
+  lastContestedAt?: string;
 }
 
 export interface ChapterListCacheDocument {

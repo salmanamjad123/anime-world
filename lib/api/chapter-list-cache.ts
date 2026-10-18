@@ -29,6 +29,7 @@ export {
   CHAPTER_LIST_SOFT_TTL_MS,
   CHAPTER_LIST_HARD_TTL_MS,
   CHAPTER_LIST_EMPTY_TTL_MS,
+  CHAPTER_LIST_RECONTEST_TTL_MS,
 } from '@/lib/firebase/chapter-list-cache-schema';
 
 export type { ChapterListPayload };

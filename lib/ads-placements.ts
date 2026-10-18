@@ -70,8 +70,8 @@ export const AD_PLACEMENTS = [
   {
     id: 'manga_social_bar',
     label: 'Social bar (once / 2 hours)',
-    page: 'Manga',
-    path: '/manga/…',
+    page: 'Manga main + detail',
+    path: '/manga, /manga/[id]',
     format: 'In-page push',
     units: 1,
   },
