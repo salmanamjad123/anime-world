@@ -12,6 +12,8 @@ import { Play, ChevronRight, ChevronLeft, Tv, Clock, Calendar } from 'lucide-rea
 import { getPreferredTitle, stripHtml } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import type { Anime } from '@/types';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchAnimeDetail } from '@/hooks/useAnime';
 
 function formatSpotlightDate(startDate?: { year?: number; month?: number; day?: number }): string | null {
   if (!startDate?.year) return null;
@@ -33,6 +35,7 @@ const SWIPE_THRESHOLD = 50;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
 
 export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: Props) {
+  const queryClient = useQueryClient();
   const total = anime.length;
   const [index, setIndex] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(true);
@@ -309,6 +312,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                   <div className="flex flex-row flex-wrap gap-2 sm:gap-3">
                     <Link
                       href={ROUTES.ANIME_DETAIL(item)}
+                      onPointerEnter={() => prefetchAnimeDetail(queryClient, item)}
                       className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-colors"
                     >
                       <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current shrink-0" />
@@ -316,6 +320,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                     </Link>
                     <Link
                       href={ROUTES.ANIME_DETAIL(item)}
+                      onPointerEnter={() => prefetchAnimeDetail(queryClient, item)}
                       className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-white text-sm sm:text-base font-medium transition-colors"
                     >
                       Detail

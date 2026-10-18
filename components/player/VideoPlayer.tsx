@@ -251,10 +251,6 @@ export function VideoPlayer({
           startLevel: autoQuality ? -1 : undefined,
           capLevelToPlayerSize: true,
           maxMaxBufferLength: 30,
-          // Fail faster so Megaplay embed can take over instead of spinning on 502s
-          manifestLoadingMaxRetry: embedUrl ? 1 : 2,
-          levelLoadingMaxRetry: embedUrl ? 1 : 2,
-          fragLoadingMaxRetry: embedUrl ? 1 : 3,
         });
 
         hlsRef.current = hls;
@@ -274,34 +270,10 @@ export function VideoPlayer({
           }
         });
 
-        // Non-fatal fragment 502s can leave the player stuck at 0:00 — bail to embed
-        let fragErrors = 0;
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (
-            !data.fatal &&
-            embedUrl &&
-            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
-            (data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR ||
-              data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT ||
-              data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
-              data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR)
-          ) {
-            fragErrors += 1;
-            if (fragErrors >= 2) {
-              failOrFallback();
-              return;
-            }
-          }
-
           if (!data.fatal) return;
 
-          // With embed available, skip transport thrash — go iframe immediately
-          if (embedUrl) {
-            failOrFallback();
-            return;
-          }
-
-          // Alternate transport before giving up (direct ↔ proxy)
+          // Stay on Worker HLS: try the other transport before Megaplay embed
           if (
             data.type === Hls.ErrorTypes.NETWORK_ERROR &&
             proxyEnabled

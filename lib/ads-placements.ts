@@ -28,10 +28,10 @@ export const AD_PLACEMENTS = [
     units: 1,
   },
   {
-    id: 'watch_social_bar',
+    id: 'anime_social_bar',
     label: 'Social bar (once / 2 hours)',
-    page: 'Watch',
-    path: '/watch/…',
+    page: 'Anime detail',
+    path: '/anime/[id]',
     format: 'In-page push',
     units: 1,
   },

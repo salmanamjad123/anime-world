@@ -12,6 +12,8 @@ import { getPreferredTitle, formatNumber } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import type { Anime } from '@/types';
 import { Star } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchAnimeDetail } from '@/hooks/useAnime';
 
 interface AnimeCardProps {
   anime: Anime;
@@ -20,9 +22,15 @@ interface AnimeCardProps {
 export function AnimeCard({ anime }: AnimeCardProps) {
   const title = getPreferredTitle(anime.title);
   const score = anime.averageScore ? anime.averageScore / 10 : null;
+  const queryClient = useQueryClient();
 
   return (
-    <Link href={ROUTES.ANIME_DETAIL(anime)} className="block h-full">
+    <Link
+      href={ROUTES.ANIME_DETAIL(anime)}
+      className="block h-full"
+      onPointerEnter={() => prefetchAnimeDetail(queryClient, anime)}
+      onFocus={() => prefetchAnimeDetail(queryClient, anime)}
+    >
       <Card hover className="overflow-hidden group h-full flex flex-col">
         {/* Image Container */}
         <div className="relative aspect-[2/3] overflow-hidden">

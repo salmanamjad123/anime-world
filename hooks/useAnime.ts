@@ -3,9 +3,10 @@
  * React Query hooks for anime data fetching
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Anime, AnimeSearchResult, AnimeFilters } from '@/types';
 import { CACHE_DURATIONS } from '@/constants/api';
+import { getPublicAnimeSegment } from '@/lib/seo/anime-path';
 
 const CLIENT_FETCH_TIMEOUT_MS = 25_000;
 
@@ -74,20 +75,62 @@ export function useTopRatedAnime(page = 1, perPage = 20) {
   });
 }
 
+type AnimeDetailPayload = { data: { Media: Anime } };
+
+function animeMatchesSegment(anime: Anime, segment: string): boolean {
+  if (String(anime.id) === segment) return true;
+  if (anime.slug && anime.slug === segment) return true;
+  return getPublicAnimeSegment(String(anime.id), anime.slug) === segment;
+}
+
+function findAnimeInListCache(
+  queryClient: QueryClient,
+  segment: string
+): Anime | undefined {
+  for (const query of queryClient.getQueryCache().getAll()) {
+    const media = (query.state.data as AnimeSearchResult | undefined)?.data?.Page?.media;
+    if (!Array.isArray(media)) continue;
+    const hit = media.find((item) => animeMatchesSegment(item, segment));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Warm the detail query on card hover so the first click is not a cold fetch. */
+export function prefetchAnimeDetail(queryClient: QueryClient, anime: Anime) {
+  const segment = getPublicAnimeSegment(String(anime.id), anime.slug);
+  void queryClient.prefetchQuery({
+    queryKey: ['anime', segment],
+    queryFn: () =>
+      fetchJsonWithTimeout<AnimeDetailPayload>(
+        `/api/anime/${encodeURIComponent(segment)}`
+      ),
+    staleTime: CACHE_DURATIONS.ANIME_DETAIL * 1000,
+  });
+}
+
 /**
  * Get anime by ID
  */
 export function useAnimeById(id: string | null) {
-  return useQuery<{ data: { Media: Anime } }>({
+  const queryClient = useQueryClient();
+  return useQuery<AnimeDetailPayload>({
     queryKey: ['anime', id],
     queryFn: () => {
       if (!id) throw new Error('Anime ID is required');
-      return fetchJsonWithTimeout<{ data: { Media: Anime } }>(`/api/anime/${encodeURIComponent(id)}`);
+      return fetchJsonWithTimeout<AnimeDetailPayload>(
+        `/api/anime/${encodeURIComponent(id)}`
+      );
     },
     enabled: !!id,
     staleTime: CACHE_DURATIONS.ANIME_DETAIL * 1000,
     retry: 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    placeholderData: () => {
+      if (!id) return undefined;
+      const fromList = findAnimeInListCache(queryClient, id);
+      return fromList ? { data: { Media: fromList } } : undefined;
+    },
   });
 }
 

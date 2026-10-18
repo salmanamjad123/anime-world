@@ -26,7 +26,7 @@ export async function fetchAnimeByRouteSegment(
   try {
     const info = await getHiAnimeInfo(target.slug);
     const mapped = mapHiAnime(info);
-    return enrichAnimeImagesFromAnilist(mapped, { hiAnimeSlug: target.slug, force: true });
+    return enrichAnimeImagesFromAnilist(mapped, { hiAnimeSlug: target.slug });
   } catch {
     return null;
   }

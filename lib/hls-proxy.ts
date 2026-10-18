@@ -7,7 +7,7 @@
 
 /** Hosts that must go through proxy (browser Origin is blocked) */
 const PROXY_REQUIRED_HOST_RE =
-  /imgnex\.|nexabloom\.|megaplay\.|megacloud\.|norami\.|shiora\.|mikora\.|akirax\.|^megap\./i;
+  /imgnex\.|nexabloom\.|megaplay\.|megacloud\.|norami\.|shiora\.|mikora\.|akirax\.|^megap\.|cloudflarestream\./i;
 
 /** Deployed Worker — production media egress. */
 export const CLOUDFLARE_WORKER_ORIGIN =
@@ -136,11 +136,7 @@ export function shouldPreferDirectHls(streamUrl: string): boolean {
 export function isFragileCdnHost(streamUrl: string): boolean {
   try {
     const host = new URL(streamUrl).hostname.toLowerCase();
-    return (
-      host.includes('nexabloom') ||
-      host.includes('pages.dev') ||
-      host.endsWith('cloudflarestream.com')
-    );
+    return host.includes('nexabloom') || host.includes('pages.dev');
   } catch {
     return false;
   }

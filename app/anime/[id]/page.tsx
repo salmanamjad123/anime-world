@@ -24,6 +24,8 @@ import { useState, useEffect, useRef } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
 import { AnimeSynopsisAd } from '@/components/ads/AnimeSynopsisAd';
+import { AnimeSocialBar } from '@/components/ads/MangaSocialBar';
+import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
 
 export default function AnimeDetailPage() {
   const params = useParams();
@@ -152,30 +154,17 @@ export default function AnimeDetailPage() {
   );
   if (isAnimeLoading && !anime) {
     return (
-      <div className="min-h-screen bg-gray-900">
-        <Header />
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] px-4 text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mb-6" />
-          <p className="text-gray-400 text-sm mb-2">Loading anime details…</p>
-          {slowLoad && (
-            <>
-              <p className="text-gray-500 text-xs max-w-sm mb-4">
-                This is taking longer than usual. The metadata API may be slow or rate-limited.
-              </p>
-              <Button variant="secondary" size="sm" onClick={() => refetchAnime()} className="gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <>
+        <AnimeSocialBar />
+        <AnimeDetailSkeleton slowLoad={slowLoad} onRetry={() => refetchAnime()} />
+      </>
     );
   }
 
   if (isAnimeError && !anime) {
     return (
       <div className="min-h-screen bg-gray-900">
+        <AnimeSocialBar />
         <Header />
         <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] px-4 text-center">
           <h1 className="text-2xl font-bold text-white mb-2">Couldn&apos;t load anime</h1>
@@ -201,6 +190,7 @@ export default function AnimeDetailPage() {
   if (!anime) {
     return (
       <div className="min-h-screen bg-gray-900">
+        <AnimeSocialBar />
         <Header />
         <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
           <div className="text-center">
@@ -251,6 +241,7 @@ export default function AnimeDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <AnimeSocialBar />
       <AnimeSlugUrlSync slug={anime.slug} />
       <Header />
 

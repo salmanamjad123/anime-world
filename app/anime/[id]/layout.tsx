@@ -1,7 +1,9 @@
 /**
- * Anime Detail Layout - Dynamic SEO metadata per anime
+ * Anime Detail Layout - Dynamic SEO metadata per anime.
+ * Metadata and JSON-LD must not block the page on HiAnime lookups.
  */
 
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { cache } from 'react';
 import { getAnimeById } from '@/lib/api/anilist';
@@ -15,10 +17,26 @@ import {
   resolveAnimeSlug,
   resolveAnilistIdFromSegment,
   resolveAnimeRouteTarget,
+  slugToSearchQuery,
 } from '@/lib/seo/anime-slug';
 import type { Anime } from '@/types';
 
-const getAnimeForMetadata = cache(async (id: string): Promise<Anime | null> => {
+/** Cache / numeric AniList only — no HiAnime search. */
+const getAnimeForMetadataFast = cache(async (id: string): Promise<Anime | null> => {
+  try {
+    const anilistId = isAniListNumericId(id)
+      ? id
+      : await resolveAnilistIdFromSegment(id, { allowLookup: false });
+    if (!anilistId) return null;
+    const result = await getAnimeById(anilistId);
+    return result?.data?.Media ?? null;
+  } catch {
+    return null;
+  }
+});
+
+/** Full resolve for JSON-LD (streamed, does not block children). */
+const getAnimeForJsonLd = cache(async (id: string): Promise<Anime | null> => {
   try {
     const target = await resolveAnimeRouteTarget(id);
 
@@ -60,7 +78,7 @@ const resolveSlugForPage = cache(
 
     const anilistId = isAniListNumericId(id)
       ? id
-      : (await resolveAnilistIdFromSegment(id)) ??
+      : (await resolveAnilistIdFromSegment(id, { allowLookup: false })) ??
         (isAniListNumericId(String(anime.id)) ? String(anime.id) : null);
 
     if (!anilistId) {
@@ -68,10 +86,19 @@ const resolveSlugForPage = cache(
     }
 
     return resolveAnimeSlug(anilistId, getPreferredTitle(anime.title), anime.episodes, {
-      allowLookup: true,
+      allowLookup: false,
     });
   }
 );
+
+function titleFromSegment(id: string): string {
+  const words = slugToSearchQuery(id)
+    .replace(/\b[a-z0-9]{4,6}\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!words) return 'Anime';
+  return words.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export async function generateMetadata({
   params,
@@ -79,15 +106,9 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const anime = await getAnimeForMetadata(id);
-  if (!anime) {
-    return {
-      title: 'Anime Not Found',
-    };
-  }
-
-  const title = getPreferredTitle(anime.title);
-  const synopsis = anime.description
+  const anime = await getAnimeForMetadataFast(id);
+  const title = anime ? getPreferredTitle(anime.title) : titleFromSegment(id);
+  const synopsis = anime?.description
     ? stripHtml(anime.description).replace(/\s+/g, ' ').trim()
     : '';
   const seoTail = `Watch ${title} online free with English sub and dub on ${SITE_NAME}.`;
@@ -98,23 +119,21 @@ export async function generateMetadata({
       )
     : seoTail;
   const pageTitle = `Watch ${title} Online Free (Sub & Dub)`;
-  const slug = await resolveSlugForPage(id, anime);
+  const slug = anime ? await resolveSlugForPage(id, anime) : id;
   const canonicalUrl = buildAnimeDetailUrl(id, slug);
   const image =
-    anime.bannerImage ||
-    anime.coverImage?.extraLarge ||
-    anime.coverImage?.large ||
+    anime?.bannerImage ||
+    anime?.coverImage?.extraLarge ||
+    anime?.coverImage?.large ||
     `${SITE_URL}/opengraph-image`;
 
-  // Title variants for alternate search terms (romaji, english, native)
-  const titleVariants = [
-    anime.title.english,
-    anime.title.romaji,
-    anime.title.native,
-  ].filter((t): t is string => Boolean(t?.trim()));
+  const titleVariants = anime
+    ? [anime.title.english, anime.title.romaji, anime.title.native].filter(
+        (t): t is string => Boolean(t?.trim())
+      )
+    : [title];
 
-  // AniList tags - high-rank tags are popular search terms
-  const tagKeywords = (anime.tags || [])
+  const tagKeywords = (anime?.tags || [])
     .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
     .slice(0, 10)
     .map((t) => t.name);
@@ -133,7 +152,7 @@ export async function generateMetadata({
       `${title} english dub`,
       `${title} sub`,
       `${title} dub`,
-      ...(anime.genres || []),
+      ...(anime?.genres || []),
       ...tagKeywords,
     ],
     openGraph: {
@@ -221,6 +240,25 @@ function buildAnimeJsonLd(anime: Anime, canonicalUrl: string) {
   return [tvSeries, breadcrumb];
 }
 
+async function AnimeJsonLd({ id }: { id: string }) {
+  const anime = await getAnimeForJsonLd(id);
+  if (!anime) return null;
+  const slug = await resolveSlugForPage(id, anime);
+  const canonicalUrl = buildAnimeDetailUrl(id, slug);
+
+  return (
+    <>
+      {buildAnimeJsonLd(anime, canonicalUrl).map((schema, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      ))}
+    </>
+  );
+}
+
 export default async function AnimeDetailLayout({
   children,
   params,
@@ -229,21 +267,12 @@ export default async function AnimeDetailLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const anime = await getAnimeForMetadata(id);
-
-  const slug = await resolveSlugForPage(id, anime);
-  const canonicalUrl = anime ? buildAnimeDetailUrl(id, slug) : `${SITE_URL}/anime/${id}`;
 
   return (
     <>
-      {anime &&
-        buildAnimeJsonLd(anime, canonicalUrl).map((schema, i) => (
-          <script
-            key={i}
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-          />
-        ))}
+      <Suspense fallback={null}>
+        <AnimeJsonLd id={id} />
+      </Suspense>
       {children}
     </>
   );

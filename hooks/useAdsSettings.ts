@@ -58,16 +58,18 @@ export function useAdsSettings() {
 export function useAdPlacementVisible(placement: AdPlacementId) {
   const { settings, isLoading } = useAdsSettings();
   const user = useUserStore((s) => s.user);
+  const authLoading = useUserStore((s) => s.isLoading);
+  const pending = isLoading || authLoading;
 
   const visible = useMemo(() => {
-    if (isLoading) return true;
+    if (pending) return false;
     return isPlacementVisible(settings, placement, {
       isLoggedIn: Boolean(user),
       userAdsHidden: user?.adsHidden === true,
     });
-  }, [isLoading, settings, placement, user]);
+  }, [pending, settings, placement, user]);
 
-  return { visible, isLoading };
+  return { visible, isLoading: pending };
 }
 
 /**
