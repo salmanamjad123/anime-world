@@ -277,7 +277,7 @@ export async function getHiAnimeStreamSources(
 
     // Convert tracks/subtitles to our format - API may return tracks (vidstreaming) or subtitles (megacloud)
     const rawTracks = data.tracks || data.subtitles || [];
-    let subtitles: any[] = rawTracks
+    const subtitles: any[] = rawTracks
       .filter((track: any) => {
         // Exclude thumbnail tracks
         if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
@@ -296,51 +296,6 @@ export async function getHiAnimeStreamSources(
         label: track.label || track.lang || 'English',
       }));
 
-    // Try ALL working servers to collect as many subtitles as possible
-    // This maximizes subtitle availability
-    const allWorkingServers = ['hd-1', 'hd-2'];
-    const serversToTry = allWorkingServers.filter(s => s !== server);
-
-    if (serversToTry.length > 0) {
-      for (const altServer of serversToTry) {
-        try {
-          const altResponse = await axiosInstance.get(url, {
-            params: { animeEpisodeId: episodeId, server: altServer, category },
-            timeout: 15000,
-          });
-          
-          const altData = altResponse.data?.data;
-          const altRawTracks = altData?.tracks || altData?.subtitles;
-          if (altRawTracks?.length) {
-            const altTracks = (altRawTracks || [])
-              .filter((track: any) => {
-                // Exclude thumbnail tracks
-                if (track.lang === 'thumbnails' || track.label === 'thumbnails' || track.kind === 'thumbnails') {
-                  return false;
-                }
-                // Include if it has subtitle/caption kind, or no kind at all (valid subtitle)
-                return track.kind === 'captions' || track.kind === 'subtitles' || !track.kind;
-              })
-              .map((track: any) => ({
-                url: track.url || track.file, // Some APIs use 'url', others use 'file'
-                lang: track.label?.toLowerCase().includes('english') ? 'en' : 
-                      track.label?.toLowerCase().includes('japanese') ? 'ja' :
-                      track.label?.toLowerCase().includes('spanish') ? 'es' :
-                      track.label?.toLowerCase().includes('french') ? 'fr' :
-                      track.label?.toLowerCase() || track.lang?.toLowerCase() || 'en',
-                label: track.label || track.lang || 'English',
-              }));
-            
-            if (altTracks.length > 0) {
-              subtitles.push(...altTracks);
-            }
-          }
-        } catch {
-          // Server failed or unavailable
-        }
-      }
-    }
-    
     // Remove duplicate subtitles (keep unique by language)
     const uniqueSubtitles: any[] = Array.from(
       new Map(subtitles.map((sub: any) => [sub.lang, sub])).values()

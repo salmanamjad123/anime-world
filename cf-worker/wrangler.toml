@@ -6,5 +6,8 @@ name = "anime-world-proxy"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
-# After deploy: https://anime-world-proxy.<your-subdomain>.workers.dev/proxy
-# Set NEXT_PUBLIC_PROXY_URL to that /proxy URL (Railway stays for API only).
+# After deploy:
+#   /proxy      HLS
+#   /image      manga / posters
+#   /subtitles  ASS/SRT → VTT
+# Set NEXT_PUBLIC_PROXY_URL to the /proxy URL (Railway stays catalog JSON only).

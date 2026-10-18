@@ -3,6 +3,7 @@
  *
  * GET /proxy?url=<encoded-url>[&referer=]
  * GET /image?url=<encoded-url>[&referer=]
+ * GET /subtitles?url=<encoded-url>[&referer=]  ASS/SRT → WebVTT
  *
  * Video + manga egress stays on Cloudflare. Railway is catalog JSON only.
  */
@@ -268,6 +269,138 @@ async function handleProxy(request, url) {
   });
 }
 
+function convertAssTime(assTime) {
+  const parts = String(assTime || '').split(':');
+  if (parts.length < 3) return '00:00:00.000';
+  const hours = parts[0].padStart(2, '0');
+  const minutes = parts[1].padStart(2, '0');
+  const secondsParts = parts[2].split('.');
+  const seconds = (secondsParts[0] || '00').padStart(2, '0');
+  const milliseconds = (secondsParts[1] || '00').padEnd(3, '0');
+  return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+}
+
+function convertAssToVtt(assContent) {
+  let vtt = 'WEBVTT\n\n';
+  for (const line of String(assContent).split('\n')) {
+    if (!line.startsWith('Dialogue:')) continue;
+    const parts = line.split(',');
+    if (parts.length < 10) continue;
+    const start = convertAssTime(parts[1]);
+    const end = convertAssTime(parts[2]);
+    const text = parts
+      .slice(9)
+      .join(',')
+      .replace(/\\N/g, '\n')
+      .replace(/\{[^}]*\}/g, '')
+      .trim();
+    if (!text) continue;
+    vtt += `${start} --> ${end}\n${text}\n\n`;
+  }
+  return vtt;
+}
+
+function convertSrtToVtt(srtContent) {
+  return (
+    'WEBVTT\n\n' +
+    String(srtContent).replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+  );
+}
+
+function ensureWebVtt(content, urlHint = '') {
+  const trimmed = String(content || '').replace(/^\uFEFF/, '');
+  const lowerUrl = String(urlHint).toLowerCase();
+  if (
+    lowerUrl.includes('.ass') ||
+    lowerUrl.includes('.ssa') ||
+    trimmed.includes('[Script Info]') ||
+    /Dialogue:/m.test(trimmed)
+  ) {
+    return convertAssToVtt(trimmed);
+  }
+  if (
+    lowerUrl.includes('.srt') ||
+    (trimmed.includes('-->') &&
+      trimmed.includes(',') &&
+      !trimmed.trimStart().startsWith('WEBVTT'))
+  ) {
+    return convertSrtToVtt(trimmed);
+  }
+  if (trimmed.trimStart().startsWith('WEBVTT')) return trimmed;
+  if (trimmed.includes('-->')) return convertSrtToVtt(trimmed);
+  return trimmed;
+}
+
+const SUBTITLE_VIDEO_RE = /\.(m3u8|ts|m4s|mp4|mkv|webm|jpg|jpeg|png|webp|gif)(\?|$)/i;
+
+async function handleSubtitles(request, url) {
+  const targetUrl = parseTarget(url.searchParams.get('url'));
+  if (!targetUrl) {
+    return new Response(JSON.stringify({ error: 'Invalid or missing url' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+  if (SUBTITLE_VIDEO_RE.test(targetUrl)) {
+    return new Response(JSON.stringify({ error: 'Not a subtitle URL' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const preferredReferer = url.searchParams.get('referer') || '';
+  const headerSets = [];
+  if (preferredReferer) {
+    try {
+      headerSets.push({
+        Referer: preferredReferer,
+        Origin: new URL(preferredReferer).origin,
+      });
+    } catch {
+      headerSets.push({ Referer: preferredReferer });
+    }
+  }
+  headerSets.push(
+    { Referer: 'https://megaplay.buzz/', Origin: 'https://megaplay.buzz' },
+    { Referer: 'https://megacloud.blog/', Origin: 'https://megacloud.blog' },
+    { Referer: 'https://hianime.to/', Origin: 'https://hianime.to' }
+  );
+
+  const response = await fetchWithHeaderSets(
+    targetUrl,
+    headerSets,
+    null,
+    'text/vtt,text/plain,*/*'
+  );
+  if (!response.ok) {
+    return new Response(
+      JSON.stringify({ error: `Upstream ${response.status}` }),
+      {
+        status: response.status === 403 ? 502 : response.status,
+        headers: { 'Content-Type': 'application/json', ...CORS },
+      }
+    );
+  }
+
+  const raw = await response.text();
+  if (raw.length > 2_000_000) {
+    return new Response(JSON.stringify({ error: 'Subtitle too large' }), {
+      status: 413,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
+  const vtt = ensureWebVtt(raw, targetUrl);
+  return new Response(vtt, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/vtt; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+      ...CORS,
+    },
+  });
+}
+
 async function handleImage(request, url) {
   const targetUrl = parseTarget(url.searchParams.get('url'));
   if (!targetUrl) {
@@ -347,6 +480,7 @@ export default {
           usage: {
             hls: 'GET /proxy?url=<encoded-https-url>',
             image: 'GET /image?url=<encoded-https-url>',
+            subtitles: 'GET /subtitles?url=<encoded-https-url>',
           },
         }),
         {
@@ -360,6 +494,7 @@ export default {
 
     try {
       if (path.endsWith('/image')) return await handleImage(request, url);
+      if (path.endsWith('/subtitles')) return await handleSubtitles(request, url);
       if (path.endsWith('/proxy')) return await handleProxy(request, url);
     } catch (e) {
       return new Response(JSON.stringify({ error: String(e?.message || e) }), {
@@ -369,7 +504,9 @@ export default {
     }
 
     return new Response(
-      JSON.stringify({ error: 'Not found. Use /proxy?url= or /image?url=' }),
+      JSON.stringify({
+        error: 'Not found. Use /proxy?url=, /image?url=, or /subtitles?url=',
+      }),
       {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...CORS },

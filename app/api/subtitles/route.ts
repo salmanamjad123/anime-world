@@ -1,9 +1,9 @@
 /**
- * Same-origin subtitle proxy. Converts ASS/SRT → WebVTT for <track>.
- * Tiny files only — video/manga stay on the Cloudflare Worker.
+ * Local subtitle proxy (ASS/SRT → WebVTT). Production 302s to the Worker.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { vercelMediaOffloadUrl } from '@/lib/hls-proxy';
 import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 
 const CORS = {
@@ -22,6 +22,11 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
+  const offload = vercelMediaOffloadUrl('subtitles', request.url);
+  if (offload) {
+    return NextResponse.redirect(offload, 302);
+  }
+
   const url = request.nextUrl.searchParams.get('url');
   const preferredReferer = request.nextUrl.searchParams.get('referer') || '';
 

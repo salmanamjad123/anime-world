@@ -201,23 +201,43 @@ function dedupeChaptersByNumber(chapters: MangaChapter[]): MangaChapter[] {
   return Array.from(byNumber.values());
 }
 
+function sortChaptersByNumber(chapters: MangaChapter[]): MangaChapter[] {
+  return [...chapters].sort((a, b) => {
+    const na = parseFloat(a.chapter || '');
+    const nb = parseFloat(b.chapter || '');
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    return String(a.chapter || a.id).localeCompare(String(b.chapter || b.id), undefined, {
+      numeric: true,
+    });
+  });
+}
+
+/** Keep English titles where they exist; fill missing numbers from other langs. */
+function preferEnglishByNumber(
+  english: MangaChapter[],
+  anyLang: MangaChapter[]
+): MangaChapter[] {
+  const byNum = new Map<string, MangaChapter>();
+  for (const ch of anyLang) {
+    const key = ch.chapter || ch.id;
+    if (!byNum.has(key)) byNum.set(key, ch);
+  }
+  for (const ch of english) {
+    const key = ch.chapter || ch.id;
+    byNum.set(key, ch);
+  }
+  return sortChaptersByNumber(Array.from(byNum.values()));
+}
+
 async function loadMangaDexChapterList(
   mangaId: string,
   lang = 'en'
 ): Promise<MangaChapter[]> {
-  let chapters = await fetchMangaDexChapterFeed(mangaId, lang);
-  // Merge other languages when EN is sparse (licensed titles often have few EN uploads)
-  if (lang === 'en') {
-    const anyLang = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
-    if (anyLang.length > chapters.length) {
-      chapters = anyLang;
-    } else {
-      chapters = dedupeChaptersByNumber(chapters);
-    }
-  } else {
-    chapters = dedupeChaptersByNumber(chapters);
-  }
-  return chapters;
+  const chapters = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId, lang));
+  if (lang !== 'en') return sortChaptersByNumber(chapters);
+
+  const anyLang = dedupeChaptersByNumber(await fetchMangaDexChapterFeed(mangaId));
+  return preferEnglishByNumber(chapters, anyLang);
 }
 
 export async function getMangaDexChapters(
@@ -228,7 +248,7 @@ export async function getMangaDexChapters(
   if (options?.skipCache) {
     return loadMangaDexChapterList(mangaId, lang);
   }
-  const key = `mangadex:chapters:v4:${mangaId}:${lang}`;
+  const key = `mangadex:chapters:v5:${mangaId}:${lang}`;
   return getCachedWhen(
     key,
     () => loadMangaDexChapterList(mangaId, lang),
@@ -245,7 +265,11 @@ export async function getMangaDexChaptersSince(
   mangaId: string,
   knownIds: ReadonlySet<string>
 ): Promise<{ chapters: MangaChapter[]; hitKnown: boolean }> {
-  const newest = await fetchMangaDexChapterFeed(mangaId, undefined, 'desc', 3);
+  const [newestEn, newestAny] = await Promise.all([
+    fetchMangaDexChapterFeed(mangaId, 'en', 'desc', 3),
+    fetchMangaDexChapterFeed(mangaId, undefined, 'desc', 3),
+  ]);
+  const newest = preferEnglishByNumber(newestEn, newestAny).slice().reverse();
   const chapters: MangaChapter[] = [];
   let hitKnown = false;
   for (const ch of newest) {

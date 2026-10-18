@@ -11,6 +11,14 @@ import { getHiAnimeStreamSources } from '@/lib/api/hianime';
 import { getStreamCached } from '@/lib/api/stream-cache';
 import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
+import { uncachedJson } from '@/lib/http-cache';
+
+const STREAM_NO_STORE = {
+  'Cache-Control': 'private, no-store',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  'Cloudflare-CDN-Cache-Control': 'no-store',
+} as const;
 
 export async function GET(
   request: NextRequest,
@@ -31,10 +39,7 @@ export async function GET(
     }
 
     if (!episodeId) {
-      return NextResponse.json(
-        { error: 'Episode ID is required' },
-        { status: 400 }
-      );
+      return uncachedJson({ error: 'Episode ID is required' }, 400);
     }
 
     // Get language preference and server
@@ -45,13 +50,13 @@ export async function GET(
     // Validate episode ID format (HiAnime format required)
     if (!episodeId.includes('?ep=')) {
       console.error('❌ [Stream API] Invalid episode ID format (missing ?ep=)');
-      return NextResponse.json(
-        { 
+      return uncachedJson(
+        {
           error: 'Streaming server down',
           message: 'The streaming server was unavailable when this page loaded. Please go back to the anime page and refresh, then try again.',
           episodeId,
         },
-        { status: 503 }
+        503
       );
     }
 
@@ -70,8 +75,8 @@ export async function GET(
               retry(
                 () => getHiAnimeStreamSources(episodeId, category, tryServer),
                 {
-                  maxAttempts: tryServer === server ? 2 : 1,
-                  delayMs: 1000,
+                  maxAttempts: 1,
+                  delayMs: 0,
                   shouldRetry: (error: unknown) => {
                     const err = error as { response?: { status?: number }; status?: number; name?: string };
                     const status = err?.response?.status ?? err?.status ?? 0;
@@ -87,7 +92,7 @@ export async function GET(
             (sources?.sources && sources.sources.length > 0) ||
             sources?.embedUrl
           ) {
-            return NextResponse.json(sources);
+            return NextResponse.json(sources, { headers: STREAM_NO_STORE });
           }
         } catch (err) {
           lastError = err;
@@ -114,30 +119,30 @@ export async function GET(
       console.error('═══════════════════════════════════════════════');
     }
     
-    return NextResponse.json(
-      { 
+    return uncachedJson(
+      {
         error: 'Streaming server down',
         message: 'The streaming server is temporarily unavailable. Please try again later.',
         episodeId,
         suggestions: [
           `Ensure HiAnime API is running at ${HIANIME_API_URL}`,
           'Refresh the page and try again',
-        ]
+        ],
       },
-      { status: 503 }
+      503
     );
   } catch (error: any) {
     console.error('═══════════════════════════════════════════════');
     console.error('[API Error] /api/stream/[episodeId]:', error.message);
     console.error('═══════════════════════════════════════════════');
     
-    return NextResponse.json(
-      { 
+    return uncachedJson(
+      {
         error: 'Failed to fetch streaming sources',
         message: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
-      { status: 500 }
+      500
     );
   }
 }

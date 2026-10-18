@@ -47,6 +47,7 @@ const nextConfig: NextConfig = {
       { source: "/", headers: htmlHeaders },
       { source: "/anime/:path*", headers: htmlHeaders },
       { source: "/manga/:path*", headers: htmlHeaders },
+      { source: "/watch/:path*", headers: htmlHeaders },
       { source: "/api/anime", headers: catalogHeaders },
       { source: "/api/anime/:path*", headers: catalogHeaders },
       { source: "/api/manga", headers: catalogHeaders },
@@ -89,6 +90,33 @@ const nextConfig: NextConfig = {
           { key: "CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
           { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
           { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
+        ],
+      },
+      {
+        source: "/api/stream/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
+      {
+        source: "/api/subtitles",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
+      {
+        source: "/api/subtitles/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
         ],
       },
     ];

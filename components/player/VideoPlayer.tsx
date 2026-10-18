@@ -294,7 +294,7 @@ export function VideoPlayer({
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               hlsFatalRetriesRef.current += 1;
-              if (hlsFatalRetriesRef.current >= 3) {
+              if (hlsFatalRetriesRef.current >= 2) {
                 failOrFallback();
               } else {
                 hls.startLoad();

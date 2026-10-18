@@ -1,11 +1,11 @@
-# Cloudflare Worker – HLS + image proxy
+# Cloudflare Worker – HLS + image + subtitle proxy
 
 Moves **video and manga image egress** off Vercel and Railway. Keep Railway for search / episodes / sources only.
 
 ```
 Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts)
 Browser  →  CF Worker /image  →  CDN (manga pages, locked posters)
-Browser  →  Vercel /api/subtitles  →  tiny VTT only (ASS converted)
+Browser  →  CF Worker /subtitles  →  VTT (ASS/SRT converted)
 Browser  →  Railway streaming-api  →  catalog JSON only
 Browser  →  Vercel  →  website HTML/JS only
 ```
@@ -34,6 +34,7 @@ Smoke test:
 - `https://…workers.dev/` → `{ ok: true }`
 - `https://…workers.dev/proxy?url=` → HLS proxy
 - `https://…workers.dev/image?url=` → image proxy
+- `https://…workers.dev/subtitles?url=` → VTT subtitle proxy
 
 ## 2. Vercel env + redeploy
 
@@ -57,6 +58,6 @@ Local images still use Next `/api/image`.
 
 ## 3. Verify
 
-1. Play an episode: `.m3u8` / `.ts` / subtitles → **`*.workers.dev/proxy`**, not Vercel.
+1. Play an episode: `.m3u8` / `.ts` → **`*.workers.dev/proxy`**, subtitles → **`*.workers.dev/subtitles`**, not Vercel.
 2. Read a manga chapter: images → **`*.workers.dev/image`**, not `/api/image`.
 3. Vercel Fast Data Transfer should drop. Cloudflare Worker bandwidth is the stream cost.

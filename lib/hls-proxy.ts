@@ -1,8 +1,8 @@
 /**
  * Media proxy helpers — Megaplay / manga CDNs need Referer injection.
  *
- * Production: Cloudflare Worker (HLS + images). Never Vercel, never Railway video.
- * Localhost: local streaming-api for HLS, Next /api/image for images.
+ * Production: Cloudflare Worker (HLS + images + subtitles). Never Vercel, never Railway video.
+ * Localhost: local streaming-api for HLS, Next /api/image and /api/subtitles.
  */
 
 /** Hosts that must go through proxy (browser Origin is blocked) */
@@ -15,6 +15,7 @@ export const CLOUDFLARE_WORKER_ORIGIN =
 
 const DEFAULT_WORKER_PROXY = `${CLOUDFLARE_WORKER_ORIGIN}/proxy`;
 const DEFAULT_WORKER_IMAGE = `${CLOUDFLARE_WORKER_ORIGIN}/image`;
+const DEFAULT_WORKER_SUBTITLES = `${CLOUDFLARE_WORKER_ORIGIN}/subtitles`;
 
 function isLocalHost(url: string): boolean {
   return url.includes('localhost') || url.includes('127.0.0.1');
@@ -82,26 +83,34 @@ export function wrapHlsUrl(
   return `${base}?${params.toString()}`;
 }
 
-/** On Vercel, leftover /api/proxy and /api/image must 302 to the Worker. */
+/** On Vercel, leftover /api/proxy, /api/image, /api/subtitles must 302 to the Worker. */
 export function vercelMediaOffloadUrl(
-  kind: 'proxy' | 'image',
+  kind: 'proxy' | 'image' | 'subtitles',
   requestUrl: string
 ): string | null {
   if (useLocalMediaProxy()) return null;
 
   const incoming = new URL(requestUrl);
   const destBase =
-    kind === 'proxy' ? DEFAULT_WORKER_PROXY : DEFAULT_WORKER_IMAGE;
+    kind === 'proxy'
+      ? DEFAULT_WORKER_PROXY
+      : kind === 'image'
+        ? DEFAULT_WORKER_IMAGE
+        : DEFAULT_WORKER_SUBTITLES;
   return `${destBase}${incoming.search}`;
 }
 
-/** Same-origin /api/subtitles: native tracks + ASS/SRT → WebVTT. Tiny; not video. */
+function getSubtitleProxyBase(): string {
+  if (useLocalMediaProxy()) return '/api/subtitles';
+  return DEFAULT_WORKER_SUBTITLES;
+}
+
+/** Production: Worker /subtitles (ASS/SRT → VTT). Localhost: Next /api/subtitles. */
 export function wrapSubtitleUrl(subtitleUrl: string, referer?: string): string {
   if (!subtitleUrl.startsWith('http')) return subtitleUrl;
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const params = new URLSearchParams({ url: subtitleUrl });
   if (referer) params.set('referer', referer);
-  return `${origin}/api/subtitles?${params.toString()}`;
+  return `${getSubtitleProxyBase()}?${params.toString()}`;
 }
 
 export function wrapImageProxyUrl(imageUrl: string, referer?: string): string {
@@ -115,6 +124,7 @@ export function isMediaProxyUrl(src: string): boolean {
   return (
     src.includes('/api/image?') ||
     src.includes('/api/subtitles?') ||
+    src.includes('/subtitles?url=') ||
     src.includes('/image?url=') ||
     src.includes('/proxy?url=')
   );
