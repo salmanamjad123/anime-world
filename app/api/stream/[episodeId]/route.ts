@@ -13,6 +13,8 @@ import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
 import { uncachedJson } from '@/lib/http-cache';
 
+export const maxDuration = 20;
+
 const STREAM_NO_STORE = {
   'Cache-Control': 'private, no-store',
   'CDN-Cache-Control': 'no-store',

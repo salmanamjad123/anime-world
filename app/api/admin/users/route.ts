@@ -13,6 +13,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import {
+  FIRESTORE_QUOTA_MESSAGE,
+  isFirestoreQuotaBlocked,
+  noteFirestoreError,
+} from '@/lib/firebase/quota';
 import { writeAdminAudit } from '@/lib/admin-audit';
 import { toIso } from '@/lib/admin-serialize';
 
@@ -55,6 +60,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  if (isFirestoreQuotaBlocked()) {
+    return NextResponse.json({ error: FIRESTORE_QUOTA_MESSAGE }, { status: 503 });
+  }
+
   const db = getAdminFirestore();
   if (!db) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
@@ -68,7 +77,68 @@ export async function GET(request: NextRequest) {
   const verifiedFilter = (sp.get('verified') || 'all').toLowerCase();
   const sort = (sp.get('sort') || 'email').toLowerCase();
 
+  const gameDemoFilter = (sp.get('gameDemo') || 'all').toLowerCase();
+  const adsHiddenFilter = (sp.get('adsHidden') || 'all').toLowerCase();
+  const needsFullScan =
+    limit === 0 ||
+    !!q ||
+    verifiedFilter !== 'all' ||
+    gameDemoFilter !== 'all' ||
+    adsHiddenFilter !== 'all';
+
   try {
+    // Overview / first page: do not read the entire users collection.
+    if (!needsFullScan && page === 1 && limit > 0) {
+      const pageSize = limit;
+      const [countSnap, listSnap] = await Promise.all([
+        db.collection('users').count().get(),
+        db.collection('users').limit(pageSize).get(),
+      ]);
+      const totalUsers = countSnap.data().count;
+      const users: AdminUserRow[] = listSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          uid: d.id,
+          email: (data.email as string) || '',
+          displayName: (data.displayName as string) || '',
+          photoURL: (data.photoURL as string) || null,
+          emailVerified: !!data.emailVerified,
+          emailVerifiedAt: toIso(data.emailVerifiedAt),
+          createdAt: toIso(data.createdAt),
+          lastLogin: toIso(data.lastLogin),
+          gameDemoAccess: data.gameDemoAccess === true,
+          adsHidden: data.adsHidden === true,
+        };
+      });
+      if (sort === 'createdat') {
+        users.sort((a, b) => timeMs(b.createdAt) - timeMs(a.createdAt));
+      } else if (sort === 'lastlogin') {
+        users.sort((a, b) => timeMs(b.lastLogin) - timeMs(a.lastLogin));
+      } else {
+        users.sort((a, b) =>
+          a.email.localeCompare(b.email, undefined, { sensitivity: 'base' })
+        );
+      }
+      return NextResponse.json({
+        users,
+        page: 1,
+        pageSize,
+        total: totalUsers,
+        totalPages: Math.max(1, Math.ceil(totalUsers / pageSize)),
+        stats: {
+          totalUsers,
+          verified: users.filter((u) => u.emailVerified).length,
+          unverified: users.filter((u) => !u.emailVerified).length,
+          recentSignups: users.filter(
+            (u) => timeMs(u.createdAt) >= Date.now() - 7 * 24 * 60 * 60 * 1000
+          ).length,
+          gameDemoAccess: users.filter((u) => u.gameDemoAccess).length,
+          adsHidden: users.filter((u) => u.adsHidden).length,
+        },
+        statsPartial: true,
+      });
+    }
+
     const snap = await db.collection('users').get();
     let users: AdminUserRow[] = snap.docs.map((d) => {
       const data = d.data();
@@ -100,14 +170,12 @@ export async function GET(request: NextRequest) {
       users = users.filter((u) => !u.emailVerified);
     }
 
-    const gameDemoFilter = (sp.get('gameDemo') || 'all').toLowerCase();
     if (gameDemoFilter === 'yes') {
       users = users.filter((u) => u.gameDemoAccess);
     } else if (gameDemoFilter === 'no') {
       users = users.filter((u) => !u.gameDemoAccess);
     }
 
-    const adsHiddenFilter = (sp.get('adsHidden') || 'all').toLowerCase();
     if (adsHiddenFilter === 'yes') {
       users = users.filter((u) => u.adsHidden);
     } else if (adsHiddenFilter === 'no') {
@@ -169,6 +237,12 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error('[admin/users]', e);
+    if (noteFirestoreError(e)) {
+      return NextResponse.json(
+        { error: FIRESTORE_QUOTA_MESSAGE },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: 'Failed to list users' }, { status: 500 });
   }
 }

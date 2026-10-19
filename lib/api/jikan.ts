@@ -221,7 +221,7 @@ export async function getJikanAZList(
       sort: 'asc',
       ...(letterParam ? { letter: letterParam } : {}),
     },
-    timeout: 8000,
+    timeout: 4000,
   });
 
   const items = response.data?.data ?? [];
@@ -263,7 +263,7 @@ export async function searchJikanAnime(
       order_by: 'popularity',
       sort: 'desc',
     },
-    timeout: JIKAN_TIMEOUT,
+    timeout: 5000,
   });
 
   const items = response.data?.data ?? [];

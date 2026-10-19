@@ -251,8 +251,11 @@ async function handleProxy(request, url) {
     });
   }
 
+  const disguisedSegment =
+    /seg-/i.test(targetUrl) ||
+    /\.(jpg|jpeg|png|html|js|css|txt|webp|ico|gif)(\?|$)/i.test(targetUrl);
   const outHeaders = {
-    'Content-Type': contentType,
+    'Content-Type': disguisedSegment ? 'video/mp2t' : contentType,
     'Cache-Control': 'public, max-age=3600',
     ...CORS,
   };

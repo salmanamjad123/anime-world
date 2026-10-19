@@ -10,6 +10,7 @@ import {
   getAdminFirestore,
   isFirebaseAdminConfigured,
 } from '@/lib/firebase/admin';
+import { isFirestoreQuotaBlocked, noteFirestoreError } from '@/lib/firebase/quota';
 import {
   CHAPTER_LIST_CACHE_COLLECTION,
   CHAPTER_LIST_CACHE_SCHEMA_VERSION,
@@ -154,6 +155,7 @@ async function readFirestore(
   mode: string,
   mangadexIdHint?: string | null
 ): Promise<ChapterListCacheEnvelope | null> {
+  if (isFirestoreQuotaBlocked()) return null;
   const db = getAdminFirestore();
   if (!db) return null;
 
@@ -171,6 +173,7 @@ async function readFirestore(
       schemaVersion: data.schemaVersion,
     };
   } catch (err) {
+    noteFirestoreError(err);
     console.warn('[ChapterList Cache] Firestore read failed:', (err as Error).message);
     return null;
   }
@@ -182,6 +185,7 @@ async function writeFirestore(
   mangadexIdHint: string | null | undefined,
   envelope: ChapterListCacheEnvelope
 ): Promise<void> {
+  if (isFirestoreQuotaBlocked()) return;
   const db = getAdminFirestore();
   if (!db) return;
 
@@ -195,8 +199,13 @@ async function writeFirestore(
     schemaVersion: envelope.schemaVersion,
   };
 
-  await db.collection(CHAPTER_LIST_CACHE_COLLECTION).doc(docId).set(doc);
-  console.log(`💾 [ChapterList Cache SET] ${CHAPTER_LIST_CACHE_COLLECTION}/${docId}`);
+  try {
+    await db.collection(CHAPTER_LIST_CACHE_COLLECTION).doc(docId).set(doc);
+    console.log(`💾 [ChapterList Cache SET] ${CHAPTER_LIST_CACHE_COLLECTION}/${docId}`);
+  } catch (err) {
+    noteFirestoreError(err);
+    console.warn('[ChapterList Cache] Firestore write failed:', (err as Error).message);
+  }
 }
 
 export async function saveChapterListCache(

@@ -117,8 +117,7 @@ export async function updateReadingProgress(
     },
     { merge: true }
   );
-
-  await trimContinueReadingToMax(userId);
+  // Trim on login only — not every reading-progress write.
 }
 
 export async function markMangaChapterRead(

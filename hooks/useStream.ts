@@ -114,8 +114,9 @@ export function useStreamingSourcesWithFallback(
       }
     },
     enabled: !!episodeId,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
     retry: 1,
   });

@@ -20,8 +20,10 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { updateWatchProgress } from '@/lib/firebase/firestore';
 import { getPreferredTitle, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
-import { isAniListNumericId, resolveHiAnimeEpisodeId } from '@/lib/seo/anime-path';
-import { isFragileCdnHost } from '@/lib/hls-proxy';
+import {
+  isAniListNumericId,
+  resolveHiAnimeEpisodeId,
+} from '@/lib/seo/anime-path';
 import { WatchCanonicalUrlSync } from '@/components/anime/WatchCanonicalUrlSync';
 import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
@@ -117,15 +119,6 @@ export default function WatchPage() {
     setPlaybackFailed(false);
     setStreamRefreshNonce(0);
   }, [episodeId, selectedServer, selectedLanguage]);
-
-  // nexabloom / blocked CDNs rarely play — bust cache once for a fresh Megaplay URL
-  useEffect(() => {
-    const url = streamData?.sources?.[0]?.url;
-    if (!url || streamRefreshNonce > 0) return;
-    if (isFragileCdnHost(url)) {
-      setStreamRefreshNonce(1);
-    }
-  }, [streamData, streamRefreshNonce]);
 
   const { updateProgress, getProgress } = useHistoryStore();
   const { user } = useUserStore();
@@ -237,7 +230,7 @@ export default function WatchPage() {
               (err) => console.error('[Watch] Failed to save progress:', err)
             );
           }
-        }, 3000);
+        }, 15000);
       }
     }
   };
@@ -331,8 +324,9 @@ export default function WatchPage() {
               )}
             </div>
 
-            {/* Video Player - wait for stream + episodes so initialTime is stable (no mid-playback seek) */}
-            {isStreamLoading || isStreamFetching || resolvingFallback || isEpisodesLoading ? (
+            {/* Keep the player mounted once a source exists — refetches must not hide HLS */}
+            {!hasPlayback &&
+            (isStreamLoading || isStreamFetching || resolvingFallback || isEpisodesLoading) ? (
               <div className="w-full aspect-video bg-gray-800 rounded-lg flex items-center justify-center min-h-[200px]">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
@@ -402,7 +396,7 @@ export default function WatchPage() {
             ) : (
               <div className="w-full overflow-visible rounded-lg relative">
                 <VideoPlayer
-                  key={`${streamEpisodeId}-${streamRefreshNonce}-${videoSource ?? ''}`}
+                  key={`${streamEpisodeId}-${selectedServer}-${selectedLanguage}-${videoSource ?? ''}`}
                   src={videoSource ?? ''}
                   sources={streamData?.sources}
                   subtitles={allSubtitles}

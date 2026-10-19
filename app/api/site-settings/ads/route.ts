@@ -1,20 +1,19 @@
 /**
- * GET /api/site-settings/ads — public ads policy (default: all on)
+ * GET /api/site-settings/ads — public ads policy.
+ * Never CDN-cache: admin hide/show must apply on the next home load.
  */
 
-import { NextResponse } from 'next/server';
-import { cacheHeaders } from '@/lib/http-cache';
+import { uncachedJson } from '@/lib/http-cache';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { defaultAdPlacements } from '@/lib/ads-placements';
 import { readSiteAdsSettings, toPublicAdsSettings } from '@/lib/site-settings-ads';
-
-const CACHE_HEADERS = cacheHeaders(60, 120);
+import { noteFirestoreError } from '@/lib/firebase/quota';
 
 function defaultPublicSettings() {
   return toPublicAdsSettings({
     enabled: true,
     hideForLoggedInUsers: true,
-    showAdFreeLoginBanner: true,
+    showAdFreeLoginBanner: false,
     placements: defaultAdPlacements(),
     updatedAt: null,
     updatedBy: null,
@@ -24,18 +23,16 @@ function defaultPublicSettings() {
 export async function GET() {
   const db = getAdminFirestore();
   if (!db) {
-    return NextResponse.json(defaultPublicSettings(), { headers: CACHE_HEADERS });
+    return uncachedJson(defaultPublicSettings(), 200);
   }
 
   try {
     const settings = await readSiteAdsSettings(db);
-    return NextResponse.json(toPublicAdsSettings(settings), {
-      headers: CACHE_HEADERS,
-    });
+    return uncachedJson(toPublicAdsSettings(settings), 200);
   } catch (e) {
+    noteFirestoreError(e);
     console.error('[site-settings/ads]', e);
-    return NextResponse.json(defaultPublicSettings(), {
-      headers: cacheHeaders(30, 60),
-    });
+    const fallback = await readSiteAdsSettings(db).catch(() => null);
+    return uncachedJson(fallback ? toPublicAdsSettings(fallback) : defaultPublicSettings(), 200);
   }
 }

@@ -1,5 +1,6 @@
 /**
  * Client-safe anime URL helpers (no server/API imports).
+ * Keep this module free of server-only imports so client pages can import it.
  */
 
 export function isAniListNumericId(id: string): boolean {
@@ -51,3 +52,4 @@ export function resolveHiAnimeEpisodeId(
   if (epQuery) return `${decoded}?ep=${epQuery}`;
   return decoded;
 }
+

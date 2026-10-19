@@ -138,8 +138,7 @@ export async function updateWatchProgress(
     episodeTitle,
     lastWatched: serverTimestamp(),
   });
-
-  await trimContinueWatchingToMax(userId);
+  // Trim on login only — not every 3s progress tick (that was burning reads + deletes).
 }
 
 /**

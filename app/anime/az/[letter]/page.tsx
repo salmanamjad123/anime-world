@@ -42,9 +42,13 @@ export default function AnimeAZPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['azlist', letter, page],
     queryFn: async () => {
-      const res = await fetch(`/api/azlist/${encodeURIComponent(letter)}?page=${page}`);
+      const res = await fetch(`/api/azlist/${encodeURIComponent(letter)}?page=${page}`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      const json = await res.json().catch(() => null);
+      if (json?.animes?.length) return json;
       if (!res.ok) throw new Error('Failed to fetch');
-      return res.json();
+      return json ?? { animes: [] };
     },
   });
 
@@ -76,7 +80,7 @@ export default function AnimeAZPage() {
           Browse all anime starting with &quot;{displayLetter}&quot;
         </p>
 
-        {error && (
+        {error && anime.length === 0 && (
           <div className="text-center py-12">
             <p className="text-red-400">Failed to load anime list. Please try again.</p>
           </div>

@@ -19,18 +19,18 @@ export const ADS_ENABLED_QUERY_KEY = ADS_SETTINGS_QUERY_KEY;
 const DEFAULT_SETTINGS: AdPolicySettings = {
   enabled: true,
   hideForLoggedInUsers: true,
-  showAdFreeLoginBanner: true,
+  showAdFreeLoginBanner: false,
   placements: defaultAdPlacements(),
 };
 
 async function fetchAdsSettings(): Promise<AdPolicySettings> {
-  const res = await fetch('/api/site-settings/ads');
+  const res = await fetch('/api/site-settings/ads', { cache: 'no-store' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return DEFAULT_SETTINGS;
   return {
     enabled: data.enabled !== false,
     hideForLoggedInUsers: data.hideForLoggedInUsers !== false,
-    showAdFreeLoginBanner: data.showAdFreeLoginBanner !== false,
+    showAdFreeLoginBanner: data.showAdFreeLoginBanner === true,
     placements: {
       ...DEFAULT_SETTINGS.placements,
       ...(data.placements && typeof data.placements === 'object'
@@ -44,7 +44,8 @@ export function useAdsSettings() {
   const query = useQuery({
     queryKey: ADS_SETTINGS_QUERY_KEY,
     queryFn: fetchAdsSettings,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchOnMount: 'always',
   });
 
   const settings = query.data ?? DEFAULT_SETTINGS;

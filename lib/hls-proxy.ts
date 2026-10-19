@@ -38,12 +38,15 @@ function useLocalMediaProxy(): boolean {
 }
 
 /**
- * HLS proxy. Production / live hostname always uses the Cloudflare Worker.
- * Localhost uses streaming-api. Never animevillage.org/api/proxy.
+ * HLS proxy. Worker wins whenever NEXT_PUBLIC_PROXY_URL is workers.dev
+ * (including localhost). Local streaming-api proxy is 429-prone.
+ * Never animevillage.org/api/proxy.
  */
 export function getHlsProxyBase(): string {
   const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
+
+  if (explicit && isCloudflareWorkerProxy(explicit)) return explicit;
 
   if (useLocalMediaProxy()) {
     if (explicit && isLocalHost(explicit)) return explicit;
@@ -52,7 +55,6 @@ export function getHlsProxyBase(): string {
     }
   }
 
-  if (explicit && isCloudflareWorkerProxy(explicit)) return explicit;
   return DEFAULT_WORKER_PROXY;
 }
 
@@ -101,6 +103,10 @@ export function vercelMediaOffloadUrl(
 }
 
 function getSubtitleProxyBase(): string {
+  const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
+  if (explicit && isCloudflareWorkerProxy(explicit)) {
+    return explicit.replace(/\/proxy\/?$/, '/subtitles');
+  }
   if (useLocalMediaProxy()) return '/api/subtitles';
   return DEFAULT_WORKER_SUBTITLES;
 }
@@ -131,7 +137,7 @@ export function isMediaProxyUrl(src: string): boolean {
 }
 
 export function initialHlsViaProxy(_streamUrl: string): boolean {
-  return process.env.NEXT_PUBLIC_USE_PROXY === 'true';
+  return process.env.NEXT_PUBLIC_USE_PROXY === 'true' || !useLocalMediaProxy();
 }
 
 export function shouldPreferDirectHls(streamUrl: string): boolean {

@@ -29,6 +29,11 @@ export function cachedJson(
 export function uncachedJson(data: unknown, status = 500) {
   return NextResponse.json(data, {
     status,
-    headers: { 'Cache-Control': 'private, no-store' },
+    headers: {
+      'Cache-Control': 'private, no-store',
+      'CDN-Cache-Control': 'no-store',
+      'Vercel-CDN-Cache-Control': 'no-store',
+      'Cloudflare-CDN-Cache-Control': 'no-store',
+    },
   });
 }

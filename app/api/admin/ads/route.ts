@@ -19,6 +19,7 @@ import {
   SITE_SETTINGS_ADS_DOC,
   SITE_SETTINGS_COLLECTION,
   readSiteAdsSettings,
+  writeAdsSettingsCache,
 } from '@/lib/site-settings-ads';
 
 function isPlacementId(value: string): value is AdPlacementId {
@@ -89,8 +90,29 @@ export async function PATCH(request: NextRequest) {
       patch.placements = next;
     }
 
+    const current = await readSiteAdsSettings(db);
     const ref = db.collection(SITE_SETTINGS_COLLECTION).doc(SITE_SETTINGS_ADS_DOC);
     await ref.set(patch, { merge: true });
+
+    const settings = {
+      ...current,
+      enabled: typeof body.enabled === 'boolean' ? body.enabled : current.enabled,
+      hideForLoggedInUsers:
+        typeof body.hideForLoggedInUsers === 'boolean'
+          ? body.hideForLoggedInUsers
+          : current.hideForLoggedInUsers,
+      showAdFreeLoginBanner:
+        typeof body.showAdFreeLoginBanner === 'boolean'
+          ? body.showAdFreeLoginBanner
+          : current.showAdFreeLoginBanner,
+      placements:
+        patch.placements && typeof patch.placements === 'object'
+          ? normalizeAdPlacements(patch.placements as Record<string, unknown>)
+          : current.placements,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.email,
+    };
+    writeAdsSettingsCache(settings);
 
     await writeAdminAudit(db, {
       actorUid: auth.uid,
@@ -104,7 +126,6 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    const settings = await readSiteAdsSettings(db);
     return NextResponse.json({
       ...settings,
       placementsCatalog: AD_PLACEMENTS,

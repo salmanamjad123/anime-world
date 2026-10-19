@@ -3,7 +3,7 @@
  * GraphQL client for manga metadata with Redis cache and outage fallback
  */
 
-import { getCached, CACHE_TTL } from '@/lib/cache';
+import { getCached, getCachedWhen, CACHE_TTL } from '@/lib/cache';
 import { axiosInstance } from './axios';
 import { ANILIST_API_URL } from '@/constants/api';
 import {
@@ -113,7 +113,7 @@ const MANGA_SEARCH_QUERY = `
         hasNextPage
         perPage
       }
-      media(type: MANGA, search: $search, sort: [POPULARITY_DESC]) {
+      media(type: MANGA, search: $search, sort: [SEARCH_MATCH]) {
         ${MANGA_FIELDS}
       }
     }
@@ -140,18 +140,27 @@ const MANGA_BY_GENRE_QUERY = `
 async function executeQuery<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  retryCount = 0
+  retryCount = 0,
+  timeoutMs?: number,
+  options?: { retryOn429?: boolean; skipThrottle?: boolean }
 ): Promise<T> {
   try {
-    const response = await axiosInstance.post<T>(ANILIST_API_URL, {
-      query,
-      variables,
-    });
+    const response = await axiosInstance.post<T>(
+      ANILIST_API_URL,
+      {
+        query,
+        variables,
+      },
+      {
+        ...(timeoutMs ? { timeout: timeoutMs } : {}),
+        ...(options?.skipThrottle ? { skipAnilistThrottle: true } : {}),
+      }
+    );
     return response.data;
   } catch (error: unknown) {
     const status = (error as { response?: { status?: number; headers?: { 'retry-after'?: string } } })
       ?.response?.status;
-    if (status === 429 && retryCount < 1) {
+    if (status === 429 && options?.retryOn429 !== false && retryCount < 1) {
       const retryAfter = (error as { response?: { headers?: { 'retry-after'?: string } } })
         ?.response?.headers?.['retry-after'];
       const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : RATE_LIMIT_RETRY_MS;
@@ -161,7 +170,7 @@ async function executeQuery<T>(
       );
       console.warn(`[AniList Manga] 429 rate limit - brief wait ${waitMs / 1000}s then retry`);
       await new Promise((r) => setTimeout(r, waitMs));
-      return executeQuery<T>(query, variables, retryCount + 1);
+      return executeQuery<T>(query, variables, retryCount + 1, timeoutMs, options);
     }
     console.error('[AniList Manga API Error]', error);
     throw error;
@@ -241,23 +250,29 @@ export async function searchManga(
   page = 1,
   perPage = 25
 ): Promise<MangaSearchResult> {
-  const key = `manga:search:${search}:${page}:${perPage}`;
+  const key = `manga:search:${search.toLowerCase()}:${page}:${perPage}`;
 
-  try {
-    return await getCached(
-      key,
-      () =>
-        executeQuery<MangaSearchResult>(MANGA_SEARCH_QUERY, {
-          search,
-          page,
-          perPage,
-        }),
-      CACHE_TTL.MANGA_LIST
-    );
-  } catch (error) {
-    if (!isAnilistOutage(error)) throw error;
-    return searchMangaOutageFallback(search, page, perPage);
-  }
+  return getCachedWhen(
+    key,
+    async () => {
+      try {
+        const result = await executeQuery<MangaSearchResult>(
+          MANGA_SEARCH_QUERY,
+          { search, page, perPage },
+          0,
+          2200,
+          { retryOn429: false, skipThrottle: true }
+        );
+        if (result?.data?.Page?.media?.length) return result;
+      } catch {
+        /* MangaDex / Jikan below */
+      }
+      return searchMangaOutageFallback(search, page, perPage);
+    },
+    CACHE_TTL.MANGA_LIST,
+    (data) => Boolean(data?.data?.Page?.media?.length),
+    12_000
+  );
 }
 
 export async function getMangaByGenre(

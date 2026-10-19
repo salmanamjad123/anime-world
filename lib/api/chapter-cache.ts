@@ -9,6 +9,7 @@ import {
   getAdminFirestore,
   isFirebaseAdminConfigured,
 } from '@/lib/firebase/admin';
+import { isFirestoreQuotaBlocked, noteFirestoreError } from '@/lib/firebase/quota';
 import {
   CHAPTER_CACHE_COLLECTION,
   CHAPTER_CACHE_SCHEMA_VERSION,
@@ -33,6 +34,7 @@ export async function getChapterFromFirestore(
   chapterId: string,
   provider: string
 ): Promise<MangaChapterPage[] | null> {
+  if (isFirestoreQuotaBlocked()) return null;
   const db = getAdminFirestore();
   if (!db) return null;
 
@@ -49,6 +51,7 @@ export async function getChapterFromFirestore(
     console.log(`💾 [Chapter Cache HIT] ${CHAPTER_CACHE_COLLECTION}/${docId}`);
     return data.pages;
   } catch (err) {
+    noteFirestoreError(err);
     console.warn('[Chapter Cache] Firestore read failed:', (err as Error).message);
     return null;
   }
@@ -62,7 +65,7 @@ export function saveChapterToFirestoreBackground(
   provider: string,
   pages: MangaChapterPage[]
 ): void {
-  if (!isFirebaseAdminConfigured()) return;
+  if (!isFirebaseAdminConfigured() || isFirestoreQuotaBlocked()) return;
   if (!pages?.length) return;
 
   const doc: ChapterCacheDocument = {
@@ -79,6 +82,7 @@ export function saveChapterToFirestoreBackground(
 }
 
 async function saveChapterToFirestoreInternal(doc: ChapterCacheDocument): Promise<void> {
+  if (isFirestoreQuotaBlocked()) return;
   const db = getAdminFirestore();
   if (!db) return;
 

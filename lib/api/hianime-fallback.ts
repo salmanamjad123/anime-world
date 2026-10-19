@@ -95,11 +95,14 @@ function pickBestMatch(results: HiAnimeSearchResult[], query: string): HiAnimeSe
   return results[0];
 }
 
-async function searchHiAnimeFast(query: string): Promise<HiAnimeSearchResult[]> {
+async function searchHiAnimeFast(
+  query: string,
+  timeoutMs = FALLBACK_TIMEOUT
+): Promise<HiAnimeSearchResult[]> {
   const url = `${HIANIME_API_URL}/api/v2/hianime/search`;
   const response = await axiosInstance.get(url, {
     params: { q: query, page: 1 },
-    timeout: FALLBACK_TIMEOUT,
+    timeout: timeoutMs,
   });
   return response.data?.data?.animes ?? [];
 }
@@ -213,9 +216,10 @@ export async function getHiAnimeBrowseList(
 export async function searchHiAnimeAsList(
   query: string,
   page = 1,
-  perPage = 20
+  perPage = 20,
+  timeoutMs = FALLBACK_TIMEOUT
 ): Promise<AnimeSearchResult> {
-  const results = await searchHiAnimeFast(query.trim());
+  const results = await searchHiAnimeFast(query.trim(), timeoutMs);
   const media = results.slice(0, perPage).map(mapHiAnimeSearchToAnime);
 
   return {

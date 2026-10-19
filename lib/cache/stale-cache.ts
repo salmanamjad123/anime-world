@@ -22,10 +22,12 @@ function getRedisClient(): typeof redisClient {
     try {
       const Redis = require('ioredis').default;
       redisClient = new Redis(url, {
-        maxRetriesPerRequest: 2,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 1500,
+        commandTimeout: 1500,
         retryStrategy(times: number) {
-          if (times > 2) return null;
-          return Math.min(times * 100, 2000);
+          if (times > 1) return null;
+          return 200;
         },
       });
       redisClient.on('error', () => {

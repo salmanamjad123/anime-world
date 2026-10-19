@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ThumbsUp, ThumbsDown, Reply, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUserStore } from '@/store/useUserStore';
 import { useReplies } from '@/hooks/useComments';
-import { useUserPhoto } from '@/hooks/useUserPhoto';
 import { CommentInput } from './CommentInput';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
@@ -44,8 +43,8 @@ export function CommentItem({
   isReply,
 }: CommentItemProps) {
   const { user } = useUserStore();
-  const fetchedPhoto = useUserPhoto(comment.userId);
-  const photoURL = user?.uid === comment.userId ? user.photoURL : fetchedPhoto;
+  const photoURL =
+    user?.uid === comment.userId ? user.photoURL : comment.photoURL;
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -57,7 +56,7 @@ export function CommentItem({
   const { replies, isLoading: repliesLoading } = useReplies(
     animeId,
     episodeId,
-    comment.id
+    showReplies ? comment.id : null
   );
 
   const isOwn = user?.uid === comment.userId;

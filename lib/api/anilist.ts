@@ -5,6 +5,7 @@
 
 import { axiosInstance } from './axios';
 import { ANILIST_API_URL } from '@/constants/api';
+import { CACHE_TTL, getCached, getCachedWhen } from '@/lib/cache';
 import {
   fetchAnilistListWithFallback,
   fetchAnilistDetailWithFallback,
@@ -16,6 +17,7 @@ import {
 import { searchJikanAnime } from './jikan';
 import { getHiAnimeBrowseList, searchHiAnimeAsList } from './hianime-fallback';
 import { keepWatchableSearchResult, WATCHABLE_CATALOG_STATUSES } from './watchable-catalog';
+import { expandSearchQueries, titleMatchesCompactQuery } from '@/lib/search-query';
 import type {
   Anime,
   AnimeSearchResult,
@@ -111,6 +113,27 @@ const POPULAR_QUERY = `
   }
 `;
 
+const SEARCH_PAGE_INFO = `
+        total
+        currentPage
+        lastPage
+        hasNextPage
+        perPage
+`;
+
+const TYPEAHEAD_FIELDS = `
+  id
+  idMal
+  title { romaji english native }
+  synonyms
+  coverImage { large medium }
+  genres
+  averageScore
+  format
+  episodes
+  status
+`;
+
 const SEARCH_QUERY = `
   query (
     $search: String
@@ -126,11 +149,7 @@ const SEARCH_QUERY = `
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo {
-        total
-        currentPage
-        lastPage
-        hasNextPage
-        perPage
+        ${SEARCH_PAGE_INFO}
       }
       media(
         type: ANIME
@@ -149,6 +168,24 @@ const SEARCH_QUERY = `
   }
 `;
 
+const TYPEAHEAD_SEARCH_QUERY = `
+  query (
+    $search: String
+    $page: Int
+    $perPage: Int
+    $sort: [MediaSort]
+  ) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        ${SEARCH_PAGE_INFO}
+      }
+      media(type: ANIME, search: $search, sort: $sort) {
+        ${TYPEAHEAD_FIELDS}
+      }
+    }
+  }
+`;
+
 const ANIME_BY_ID_QUERY = `
   query ($id: Int) {
     Media(id: $id, type: ANIME) {
@@ -160,24 +197,37 @@ const ANIME_BY_ID_QUERY = `
 /**
  * Execute GraphQL query. On 429, fail fast to stale/Jikan/HiAnime fallbacks (no long blocking wait).
  */
-async function executeQuery<T>(query: string, variables: Record<string, any> = {}, retryCount = 0): Promise<T> {
+async function executeQuery<T>(
+  query: string,
+  variables: Record<string, any> = {},
+  retryCount = 0,
+  timeoutMs?: number,
+  options?: { retryOn429?: boolean; skipThrottle?: boolean }
+): Promise<T> {
   try {
-    const response = await axiosInstance.post<T>(ANILIST_API_URL, {
-      query,
-      variables,
-    });
+    const response = await axiosInstance.post<T>(
+      ANILIST_API_URL,
+      {
+        query,
+        variables,
+      },
+      {
+        ...(timeoutMs ? { timeout: timeoutMs } : {}),
+        ...(options?.skipThrottle ? { skipAnilistThrottle: true } : {}),
+      }
+    );
     return response.data;
   } catch (error: unknown) {
     const status = (error as { response?: { status?: number; headers?: { 'retry-after'?: string } } })?.response?.status;
     if (status === 429) {
-      if (retryCount < 1) {
+      if (options?.retryOn429 !== false && retryCount < 1) {
         const retryAfter =
           (error as { response?: { headers?: { 'retry-after'?: string } } })?.response?.headers?.['retry-after'];
         const parsed = retryAfter ? parseInt(retryAfter, 10) * 1000 : RATE_LIMIT_RETRY_MS;
         const waitMs = Math.min(Number.isNaN(parsed) ? RATE_LIMIT_RETRY_MS : parsed, RATE_LIMIT_MAX_WAIT_MS);
         console.warn(`[AniList] 429 rate limit - brief wait ${waitMs / 1000}s then retry`);
         await new Promise((r) => setTimeout(r, waitMs));
-        return executeQuery<T>(query, variables, retryCount + 1);
+        return executeQuery<T>(query, variables, retryCount + 1, timeoutMs, options);
       }
       console.warn('[AniList] 429 rate limit - failing over to cached/fallback sources');
     }
@@ -228,6 +278,98 @@ function mapGenresForAniList(genres: string[]): string[] {
   return genres.map((g) => GENRE_ANILIST_MAP[g] ?? g);
 }
 
+const SEARCH_EMPTY_TTL_MS = 12_000;
+const TYPEAHEAD_TIMEOUT_MS = 2200;
+
+function emptySearchResult(page: number, perPage: number): AnimeSearchResult {
+  return {
+    data: {
+      Page: {
+        pageInfo: { total: 0, currentPage: page, lastPage: 1, hasNextPage: false, perPage },
+        media: [],
+      },
+    },
+  };
+}
+
+function searchMediaCount(result: AnimeSearchResult | null | undefined): number {
+  return result?.data?.Page?.media?.length ?? 0;
+}
+
+function mergeSearchResults(
+  results: Array<AnimeSearchResult | null>,
+  query: string,
+  page: number,
+  perPage: number
+): AnimeSearchResult | null {
+  const seen = new Set<string>();
+  const media: Anime[] = [];
+  let fallback: AnimeSearchFallbackSource | undefined;
+
+  for (const result of results) {
+    if (!result?.data?.Page?.media?.length) continue;
+    if (!fallback && result._fallback) fallback = result._fallback;
+    for (const item of result.data.Page.media) {
+      const id = String(item.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      media.push(item);
+    }
+  }
+
+  const matched = media.filter((item) =>
+    titleMatchesCompactQuery(item.title, query, item.synonyms)
+  );
+  const picked = matched.length > 0 ? matched : media;
+  if (!picked.length) return null;
+
+  const sliced = picked.slice(0, perPage);
+  return {
+    ...(fallback ? { _fallback: fallback } : {}),
+    data: {
+      Page: {
+        pageInfo: {
+          total: sliced.length,
+          currentPage: page,
+          lastPage: 1,
+          hasNextPage: false,
+          perPage,
+        },
+        media: sliced,
+      },
+    },
+  };
+}
+
+async function runFastTextSearch(
+  query: string,
+  page: number,
+  perPage: number
+): Promise<AnimeSearchResult | null> {
+  const anilistPromise = executeQuery<AnimeSearchResult>(
+    TYPEAHEAD_SEARCH_QUERY,
+    { search: query, page, perPage, sort: ['SEARCH_MATCH'] },
+    0,
+    TYPEAHEAD_TIMEOUT_MS,
+    { retryOn429: false, skipThrottle: true }
+  ).catch(() => null);
+
+  const hianimePromise = searchHiAnimeAsList(
+    query,
+    page,
+    perPage,
+    TYPEAHEAD_TIMEOUT_MS
+  ).catch(() => null);
+
+  const anilist = await anilistPromise;
+  if (searchMediaCount(anilist) > 0) return anilist;
+  const hianime = await hianimePromise;
+  if (searchMediaCount(hianime) > 0) {
+    return { ...(hianime as AnimeSearchResult), _fallback: 'hianime-search' };
+  }
+  return null;
+}
+
 /** HiAnime/Jikan fallback when AniList search is unavailable */
 async function searchAnimeOutageFallback(
   filters: AnimeFilters,
@@ -238,20 +380,17 @@ async function searchAnimeOutageFallback(
   const genreQuery = filters.genres?.length ? filters.genres.join(' ') : '';
 
   if (textQuery) {
-    const query = genreQuery ? `${textQuery} ${genreQuery}` : textQuery;
-    const fallback: AnimeSearchFallbackSource = genreQuery
-      ? 'hianime-genre'
-      : 'hianime-search';
-
-    console.warn('[AniList] Outage — HiAnime search fallback');
     try {
-      const result = await searchHiAnimeAsList(query, page, perPage);
-      return { ...result, _fallback: fallback };
+      const hianime = await searchHiAnimeAsList(textQuery, page, perPage, TYPEAHEAD_TIMEOUT_MS);
+      if (searchMediaCount(hianime) > 0) {
+        return { ...hianime, _fallback: 'hianime-search' };
+      }
     } catch {
-      console.warn('[AniList] Outage — Jikan search fallback');
-      const result = await searchJikanAnime(textQuery, page, perPage);
-      return { ...result, _fallback: 'hianime-search' };
+      /* Jikan next */
     }
+    console.warn('[AniList] Outage — Jikan search fallback');
+    const result = await searchJikanAnime(textQuery, page, perPage);
+    return { ...result, _fallback: 'hianime-search' };
   }
 
   if (genreQuery) {
@@ -280,42 +419,106 @@ export async function searchAnime(
   page = 1,
   perPage = 20
 ): Promise<AnimeSearchResult> {
+  const textQuery = filters.search?.trim() ?? '';
   const variables: Record<string, unknown> = {
     page,
     perPage,
     sort: filters.sort
       ? [filters.sort]
-      : filters.search?.trim()
+      : textQuery
         ? ['SEARCH_MATCH']
         : ['POPULARITY_DESC'],
   };
 
-  if (filters.search?.trim()) variables.search = filters.search.trim();
+  if (textQuery) variables.search = textQuery;
   if (filters.genres?.length) variables.genres = mapGenresForAniList(filters.genres);
   if (filters.year) variables.year = filters.year;
   if (filters.season) variables.season = filters.season;
   if (filters.format) variables.format = filters.format;
   if (filters.status) {
     variables.status = filters.status;
-  } else if (!filters.search?.trim()) {
+  } else if (!textQuery) {
     // Genre / browse grids are watch catalogs — hide unreleased titles
     variables.status_in = WATCHABLE_CATALOG_STATUSES;
   }
 
-  try {
-    const result = await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
-    if (!filters.status && !filters.search?.trim()) {
+  const runBrowse = async (): Promise<AnimeSearchResult> => {
+    try {
+      const result = await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables);
       return keepWatchableSearchResult(result);
+    } catch (error) {
+      if (!isAnilistOutage(error)) throw error;
+      return keepWatchableSearchResult(
+        await searchAnimeOutageFallback(filters, page, perPage)
+      );
     }
-    return result;
-  } catch (error) {
-    if (!isAnilistOutage(error)) throw error;
-    const fallback = await searchAnimeOutageFallback(filters, page, perPage);
-    if (!filters.status && !filters.search?.trim()) {
-      return keepWatchableSearchResult(fallback);
-    }
-    return fallback;
+  };
+
+  if (!textQuery) return runBrowse();
+
+  const hasExtraFilters = Boolean(
+    filters.genres?.length || filters.year || filters.season || filters.format || filters.status
+  );
+
+  const cacheKey = `anilist:search:v2:${textQuery.toLowerCase()}:${page}:${perPage}:${String(
+    filters.sort || 'SEARCH_MATCH'
+  )}:${(filters.genres || []).join(',')}:${filters.year || ''}:${filters.season || ''}:${filters.format || ''}:${filters.status || ''}`;
+
+  if (hasExtraFilters) {
+    return getCachedWhen(
+      cacheKey,
+      async () => {
+        try {
+          return await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables, 0, 4000, {
+            retryOn429: false,
+            skipThrottle: true,
+          });
+        } catch (error) {
+          if (!isAnilistOutage(error)) throw error;
+          return searchAnimeOutageFallback(filters, page, perPage);
+        }
+      },
+      CACHE_TTL.ANIME_SEARCH,
+      (data) => searchMediaCount(data) > 0,
+      SEARCH_EMPTY_TTL_MS
+    );
   }
+
+  return getCachedWhen(
+    cacheKey,
+    async () => {
+      const variants = expandSearchQueries(textQuery);
+      const variantHits = await Promise.all(
+        variants.map((variant) => runFastTextSearch(variant, page, perPage))
+      );
+      const merged = mergeSearchResults(variantHits, textQuery, page, perPage);
+      if (merged) return merged;
+
+      try {
+        const jikanHits = await Promise.all(
+          variants.map((variant) =>
+            searchJikanAnime(variant, page, perPage).catch(() => null)
+          )
+        );
+        const jikanMerged = mergeSearchResults(
+          jikanHits.map((result) =>
+            result ? { ...result, _fallback: 'hianime-search' as const } : null
+          ),
+          textQuery,
+          page,
+          perPage
+        );
+        if (jikanMerged) return jikanMerged;
+      } catch {
+        /* empty */
+      }
+
+      return emptySearchResult(page, perPage);
+    },
+    CACHE_TTL.ANIME_SEARCH,
+    (data) => searchMediaCount(data) > 0,
+    SEARCH_EMPTY_TTL_MS
+  );
 }
 
 /**

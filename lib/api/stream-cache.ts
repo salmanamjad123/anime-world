@@ -1,13 +1,15 @@
 /**
- * Stream Cache - 3-tier: Redis → Firestore → HiAnime
- *
- * HLS CDN links expire in ~5–8 minutes (Megaplay). Keep cache TTL short.
+ * Stream cache: Redis/memory → HiAnime.
+ * HLS CDN links expire in ~5–8 minutes. Firestore is not used on the play path
+ * (Spark write/delete caps).
  */
 
+import { getAdminFirestore } from '@/lib/firebase/admin';
 import {
-  getAdminFirestore,
-  isFirebaseAdminConfigured,
-} from '@/lib/firebase/admin';
+  firestoreBudget,
+  isFirestoreQuotaBlocked,
+  noteFirestoreError,
+} from '@/lib/firebase/quota';
 import {
   STREAM_CACHE_COLLECTION,
   STREAM_CACHE_SCHEMA_VERSION,
@@ -15,7 +17,6 @@ import {
   type StreamCacheDocument,
 } from '@/lib/firebase/stream-cache-schema';
 import { deleteCacheKey, getCachedWhen } from '@/lib/cache';
-import { isFragileCdnHost } from '@/lib/hls-proxy';
 import type { StreamSourcesResponse } from '@/types';
 
 /** Megaplay/CDN m3u8 links expire quickly — align with streaming-api megaplay cache (~8 min) */
@@ -113,32 +114,25 @@ export async function getStreamFromFirestore(
   server: string,
   category: string
 ): Promise<StreamSourcesResponse | null> {
+  if (isFirestoreQuotaBlocked()) return null;
   const db = getAdminFirestore();
   if (!db) return null;
 
   try {
     const docId = toStreamCacheDocId(episodeId, server, category);
     const docRef = db.collection(STREAM_CACHE_COLLECTION).doc(docId);
-    const doc = await docRef.get();
-
-    if (!doc.exists) return null;
+    const doc = await firestoreBudget(docRef.get(), null);
+    if (!doc?.exists) return null;
 
     const data = doc.data() as StreamCacheDocument;
-    // Ignore pre-ad-probe cache entries (schema 1.0 stored poisoned megap HLS)
-    if (data?.schemaVersion !== STREAM_CACHE_SCHEMA_VERSION) {
-      await docRef.delete().catch(() => {});
-      return null;
-    }
-    // Embed-only is valid; HLS-only empty was previously required
+    // Stale/wrong schema: ignore. Do not delete — Spark delete quota is 20k/day.
+    if (data?.schemaVersion !== STREAM_CACHE_SCHEMA_VERSION) return null;
     if (!data?.sources?.length && !data?.embedUrl) return null;
-
-    if (isCacheExpired(data)) {
-      await docRef.delete().catch(() => {});
-      return null;
-    }
+    if (isCacheExpired(data)) return null;
 
     return fromCachedDocument(data);
   } catch (err) {
+    noteFirestoreError(err);
     console.warn('[Stream Cache] Firestore read failed:', (err as Error).message);
     return null;
   }
@@ -150,6 +144,7 @@ export async function saveStreamToFirestore(
   category: string,
   data: StreamSourcesResponse
 ): Promise<void> {
+  if (isFirestoreQuotaBlocked()) return;
   const db = getAdminFirestore();
   if (!db) return;
 
@@ -158,34 +153,18 @@ export async function saveStreamToFirestore(
     const docId = toStreamCacheDocId(episodeId, server, category);
     await db.collection(STREAM_CACHE_COLLECTION).doc(docId).set(doc);
   } catch (err) {
+    noteFirestoreError(err);
     console.warn('[Stream Cache] Firestore write failed:', (err as Error).message);
   }
 }
 
-export async function deleteStreamFromFirestore(
-  episodeId: string,
-  server: string,
-  category: string
-): Promise<void> {
-  const db = getAdminFirestore();
-  if (!db) return;
-
-  try {
-    const docId = toStreamCacheDocId(episodeId, server, category);
-    await db.collection(STREAM_CACHE_COLLECTION).doc(docId).delete();
-  } catch (err) {
-    console.warn('[Stream Cache] Firestore delete failed:', (err as Error).message);
-  }
-}
-
-/** Clear Redis + Firestore for an episode/server (use before force refresh) */
+/** Memory/Redis only. Do not delete Firestore docs (Spark delete cap). */
 export async function invalidateStreamCache(
   episodeId: string,
   server: string,
   category: string
 ): Promise<void> {
   deleteCacheKey(toRedisKey(episodeId, server, category));
-  await deleteStreamFromFirestore(episodeId, server, category);
 }
 
 /**
@@ -199,56 +178,17 @@ export async function getStreamCached(
   fetchFn: () => Promise<StreamSourcesResponse>,
   forceRefresh: boolean = false
 ): Promise<StreamSourcesResponse> {
-  if (forceRefresh) {
-    await invalidateStreamCache(episodeId, server, category);
-    // Also clear alternate server cache (route tries hd-1 then hd-2)
-    const altServer = server === 'hd-1' ? 'hd-2' : 'hd-1';
-    await invalidateStreamCache(episodeId, altServer, category);
-
-    const fresh = await fetchFn();
-    // Only persist real HLS — embed-only / fragile CDNs must not stick in Firestore
-    if (
-      fresh?.sources?.some(
-        (s) => s?.url?.includes('.m3u8') && !isFragileCdnHost(s.url)
-      ) &&
-      isFirebaseAdminConfigured()
-    ) {
-      await saveStreamToFirestore(episodeId, server, category, fresh);
-    }
-    deleteCacheKey(toRedisKey(episodeId, server, category));
-    return fresh;
-  }
-
   const redisKey = toRedisKey(episodeId, server, category);
   const hasStableHls = (data: StreamSourcesResponse) =>
-    Boolean(
-      data?.sources?.some(
-        (s) => s?.url?.includes('.m3u8') && !isFragileCdnHost(s.url)
-      )
-    );
+    Boolean(data?.sources?.some((s) => s?.url?.includes('.m3u8')));
 
-  return getCachedWhen(
-    redisKey,
-    async () => {
-      if (isFirebaseAdminConfigured()) {
-        const fromFirestore = await getStreamFromFirestore(
-          episodeId,
-          server,
-          category
-        );
-        // Skip stale fragile CDN links stuck in Firestore
-        if (fromFirestore && hasStableHls(fromFirestore)) return fromFirestore;
-      }
+  // HLS TTL is ~5 min — Redis/memory only. Firestore L2 burned Spark write/delete quota.
+  if (forceRefresh) {
+    deleteCacheKey(redisKey);
+    const altServer = server === 'hd-1' ? 'hd-2' : 'hd-1';
+    deleteCacheKey(toRedisKey(episodeId, altServer, category));
+    return fetchFn();
+  }
 
-      const fresh = await fetchFn();
-      // Only persist real HLS — embed-only / fragile CDN fallbacks must not stick
-      if (hasStableHls(fresh) && isFirebaseAdminConfigured()) {
-        await saveStreamToFirestore(episodeId, server, category, fresh);
-      }
-      return fresh;
-    },
-    STREAM_CACHE_TTL_MS,
-    hasStableHls
-    // embed-only / fragile: do not cache so next request retries HLS
-  );
+  return getCachedWhen(redisKey, fetchFn, STREAM_CACHE_TTL_MS, hasStableHls);
 }

@@ -20,6 +20,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useDebounce } from '@/hooks/useDebounce';
 import { getPreferredTitle } from '@/lib/utils';
+import { compactSearchText } from '@/lib/search-query';
 import { cn } from '@/lib/utils';
 import type { Anime, Manga } from '@/types';
 import { canAccessGameDemo } from '@/lib/game-demo-access';
@@ -27,6 +28,42 @@ import { Sidebar, type SidebarTab } from './Sidebar';
 
 type SearchResultItem = (Anime | Manga) & { id: string };
 type ActiveTab = SidebarTab;
+
+function searchHaystack(item: SearchResultItem): string {
+  const synonyms = 'synonyms' in item && Array.isArray(item.synonyms) ? item.synonyms.join(' ') : '';
+  return [item.title?.english, item.title?.romaji, item.title?.native, synonyms]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function mediaMatchesQuery(item: SearchResultItem, query: string): boolean {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = searchHaystack(item);
+  if (words.every((word) => hay.includes(word))) return true;
+  const compactQuery = compactSearchText(query);
+  return compactQuery.length >= 4 && compactSearchText(hay).includes(compactQuery);
+}
+
+function matchScore(item: SearchResultItem, query: string): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+  const english = (item.title?.english || '').toLowerCase();
+  const romaji = (item.title?.romaji || '').toLowerCase();
+  const hay = searchHaystack(item);
+  const compactQuery = compactSearchText(q);
+  const compactHay = compactSearchText(hay);
+  const words = q.split(/\s+/).filter(Boolean);
+  let score = 0;
+  if (english === q || romaji === q) score += 100;
+  if (english.startsWith(q) || romaji.startsWith(q)) score += 40;
+  if (compactQuery && compactHay.startsWith(compactQuery)) score += 35;
+  if (compactQuery && compactHay.includes(compactQuery)) score += 20;
+  if (words.every((word) => english.includes(word) || romaji.includes(word))) score += 25;
+  if (words.every((word) => hay.includes(word))) score += 10;
+  return score;
+}
 
 export function Header() {
   const pathname = usePathname();
@@ -104,9 +141,14 @@ export function Header() {
       setIsSearching(false);
       return;
     }
+
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 7000);
+
+    setSearchResults((prev) => prev.filter((item) => mediaMatchesQuery(item, debouncedQuery)));
+    setSearchOpen(true);
     setIsSearching(true);
-    setIsFallback(false);
 
     const finish = (results: SearchResultItem[], fallback: boolean) => {
       if (cancelled) return;
@@ -115,87 +157,44 @@ export function Header() {
       setIsSearching(false);
     };
 
-    if (activeTab === 'manga') {
-      (async () => {
-        try {
-          const res = await fetch(
-            `/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`,
-            { signal: AbortSignal.timeout(8000) }
-          );
-          const data = res.ok ? await res.json() : null;
-          const media = data?.data?.Page?.media ?? data?.Page?.media ?? [];
-          finish(Array.isArray(media) ? media : [], false);
-        } catch {
-          finish([], false);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
+    const mediaFromPayload = (data: unknown): SearchResultItem[] => {
+      const payload = data as {
+        data?: { Page?: { media?: SearchResultItem[] } };
+        Page?: { media?: SearchResultItem[] };
+        _fallback?: string;
+      } | null;
+      const media = payload?.data?.Page?.media ?? payload?.Page?.media ?? [];
+      return Array.isArray(media) ? media : [];
+    };
+
+    const endpoint =
+      activeTab === 'manga'
+        ? `/api/search/manga?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=15`
+        : `/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=15`;
 
     (async () => {
       try {
-        const res = await fetch(
-          `/api/search?search=${encodeURIComponent(debouncedQuery)}&page=1&perPage=25`,
-          { signal: AbortSignal.timeout(8000) }
-        );
-        const anilistData = res.ok ? await res.json() : null;
-        const media = anilistData?.data?.Page?.media ?? anilistData?.Page?.media ?? [];
-        finish(Array.isArray(media) ? media : [], false);
-
-        const first = media[0];
-        if (!first?.id || cancelled) return;
-
-        try {
-          const seasonsRes = await fetch(`/api/anime/${first.id}/seasons`, {
-            signal: AbortSignal.timeout(2500),
-          });
-          if (!seasonsRes.ok || cancelled) return;
-          const seasonsData = await seasonsRes.json();
-          const main = seasonsData.main;
-          const seasons = seasonsData.seasons ?? [];
-          const movies = seasonsData.movies ?? [];
-          const allRelations = [main, ...seasons, ...movies].filter(Boolean);
-          if (allRelations.length === 0) return;
-
-          const relationIds = new Set<string>();
-          allRelations.forEach((r: { id: string }) => relationIds.add(String(r.id)));
-
-          const mediaById = new Map<string, Anime>(media.map((m: Anime) => [String(m.id), m]));
-          const firstCover = (first as Anime).coverImage?.medium || (first as Anime).coverImage?.large;
-          const genericPlaceholder = '/images/anime-placeholder.svg';
-          const relationToAnime = (r: { id: string; title: string; coverImage?: string; format?: string }) => {
-            const original = mediaById.get(String(r.id)) as Anime | undefined;
-            const origCover = original?.coverImage as { medium?: string; large?: string } | undefined;
-            const img =
-              r.coverImage ||
-              origCover?.medium ||
-              origCover?.large ||
-              firstCover ||
-              genericPlaceholder;
-            return {
-              id: String(r.id),
-              slug: original?.slug,
-              title: { romaji: r.title, english: r.title, native: '' },
-              coverImage: { large: img, medium: img },
-              genres: r.format ? [r.format] : [],
-            } as Anime;
-          };
-
-          const enriched: Anime[] = allRelations.map(relationToAnime);
-          const rest = media.filter((m: Anime) => !relationIds.has(String(m.id)));
-          finish([...enriched, ...rest], false);
-        } catch {
-          /* typed matches already shown */
+        const res = await fetch(endpoint, { signal: controller.signal });
+        if (cancelled) return;
+        const data = res.ok ? await res.json() : null;
+        const media = mediaFromPayload(data);
+        if (media.length > 0) {
+          const ranked = [...media].sort(
+            (a, b) => matchScore(b, debouncedQuery) - matchScore(a, debouncedQuery)
+          );
+          finish(ranked, Boolean((data as { _fallback?: string } | null)?._fallback));
+          return;
         }
+        setIsSearching(false);
       } catch {
-        finish([], false);
+        if (!cancelled) setIsSearching(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeout);
     };
   }, [debouncedQuery, activeTab]);
 

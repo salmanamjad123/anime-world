@@ -11,6 +11,11 @@ import {
   isFirebaseAdminConfigured,
 } from '@/lib/firebase/admin';
 import {
+  firestoreBudget,
+  isFirestoreQuotaBlocked,
+  noteFirestoreError,
+} from '@/lib/firebase/quota';
+import {
   EPISODE_CACHE_COLLECTION,
   EPISODE_CACHE_SCHEMA_VERSION,
   toEpisodeCacheDocId,
@@ -25,15 +30,16 @@ export async function getEpisodesFromFirestore(
   animeId: string,
   category: 'sub' | 'dub'
 ): Promise<EpisodeListResponse | null> {
+  if (isFirestoreQuotaBlocked()) return null;
   const db = getAdminFirestore();
   if (!db) return null;
 
   try {
     const docId = toEpisodeCacheDocId(animeId, category);
     const docRef = db.collection(EPISODE_CACHE_COLLECTION).doc(docId);
-    const doc = await docRef.get();
+    const doc = await firestoreBudget(docRef.get(), null);
 
-    if (!doc.exists) return null;
+    if (!doc?.exists) return null;
 
     const data = doc.data() as EpisodeCacheDocument;
     if (!data?.episodes?.length) return null;
@@ -44,6 +50,7 @@ export async function getEpisodesFromFirestore(
       episodes: data.episodes,
     };
   } catch (err) {
+    noteFirestoreError(err);
     console.warn('[Episode Cache] Firestore read failed:', (err as Error).message);
     return null;
   }
@@ -59,7 +66,7 @@ export function saveEpisodesToFirestoreBackground(
   hiAnimeId: string,
   data: EpisodeListResponse
 ): void {
-  if (!isFirebaseAdminConfigured()) return;
+  if (!isFirebaseAdminConfigured() || isFirestoreQuotaBlocked()) return;
   if (!data.episodes?.length) return;
 
   const doc: EpisodeCacheDocument = {
@@ -80,6 +87,7 @@ export function saveEpisodesToFirestoreBackground(
 async function saveEpisodesToFirestoreInternal(
   doc: EpisodeCacheDocument
 ): Promise<void> {
+  if (isFirestoreQuotaBlocked()) return;
   const db = getAdminFirestore();
   if (!db) return;
 

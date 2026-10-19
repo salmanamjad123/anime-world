@@ -5,13 +5,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getComments,
   getReplies,
-  getCommentCount,
   createComment,
   updateComment,
   deleteComment,
   toggleLike,
   subscribeToComments,
-  subscribeToCommentCount,
   subscribeToReplies,
 } from '@/lib/firebase/comments';
 import type { Comment, CommentSortBy, CreateCommentInput } from '@/types/comment';
@@ -23,7 +21,6 @@ export function useComments(
 ) {
   const queryClient = useQueryClient();
   const queryKey = ['comments', animeId, episodeId, sortBy];
-  const countKey = ['comments-count', animeId, episodeId];
 
   const {
     data: comments = [],
@@ -36,23 +33,18 @@ export function useComments(
     enabled: !!animeId && !!episodeId,
   });
 
-  const { data: totalCount = 0 } = useQuery({
-    queryKey: countKey,
-    queryFn: () => getCommentCount(animeId, episodeId),
-    enabled: !!animeId && !!episodeId,
-  });
+  const totalCount = comments.reduce(
+    (n, c) => n + 1 + (c.replyCount || 0),
+    0
+  );
 
   useEffect(() => {
     if (!animeId || !episodeId) return;
     const unsubComments = subscribeToComments(animeId, episodeId, sortBy, (data) => {
       queryClient.setQueryData(['comments', animeId, episodeId, sortBy], data);
     });
-    const unsubCount = subscribeToCommentCount(animeId, episodeId, (count) => {
-      queryClient.setQueryData(['comments-count', animeId, episodeId], count);
-    });
     return () => {
       unsubComments();
-      unsubCount();
     };
   }, [animeId, episodeId, sortBy, queryClient]);
 
@@ -60,7 +52,6 @@ export function useComments(
     mutationFn: (input: CreateCommentInput) => createComment(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', animeId, episodeId] });
-      queryClient.invalidateQueries({ queryKey: ['comments-count', animeId, episodeId] });
       queryClient.invalidateQueries({ queryKey: ['comments-replies', animeId, episodeId] });
     },
   });
@@ -82,7 +73,6 @@ export function useComments(
     mutationFn: (commentId: string) => deleteComment(animeId, episodeId, commentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', animeId, episodeId] });
-      queryClient.invalidateQueries({ queryKey: ['comments-count', animeId, episodeId] });
       queryClient.invalidateQueries({ queryKey: ['comments-replies', animeId, episodeId] });
     },
   });

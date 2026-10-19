@@ -7,9 +7,9 @@
 
 import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
-import { getCached, getCachedWhen, CACHE_TTL } from '@/lib/cache';
+import { getCached, CACHE_TTL } from '@/lib/cache';
 import { retry } from '@/lib/utils/retry';
-import { getJikanAZList } from './jikan';
+import { getAzListForLetter } from './az-list';
 
 // HiAnime API base URL (default to localhost, override via env)
 const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
@@ -729,57 +729,12 @@ export interface HiAnimeAZListResponse {
   currentPage: number;
 }
 
-/**
- * Get A-Z anime list from HiAnime (with caching).
- * Production Railway often has no /azlist (404) or hangs — fail over to Jikan quickly.
- */
+/** Footer A–Z — AniList / Jikan / popular. Never Railway. */
 export async function getHiAnimeAZList(
   sortOption: string,
   page: number = 1
 ): Promise<HiAnimeAZListResponse> {
-  const normalized = sortOption.toLowerCase();
-  const validOptions = ['all', 'other', '0-9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
-  const apiOption = normalized === '0-9' ? '0-9' : normalized === 'other' ? 'other' : normalized === 'all' ? 'all' : normalized.toUpperCase();
-
-  if (!validOptions.includes(normalized)) {
-    throw new Error(`Invalid AZ sort option: ${sortOption}`);
-  }
-
-  const cacheKey = `hianime:azlist:v4:${apiOption}:${page}`;
-
-  return getCachedWhen(
-    cacheKey,
-    async () => {
-      const url = `${HIANIME_API_URL}/api/v2/hianime/azlist/${apiOption}`;
-      try {
-        const response = await axiosInstance.get(url, {
-          params: { page },
-          timeout: 4000,
-        });
-
-        const data = response.data?.data ?? response.data;
-        const animes = data.animes ?? [];
-        if (animes.length > 0) {
-          return {
-            sortOption: data.sortOption ?? apiOption,
-            animes,
-            totalPages: data.totalPages ?? 1,
-            hasNextPage: data.hasNextPage ?? false,
-            currentPage: data.currentPage ?? page,
-          };
-        }
-      } catch (error: any) {
-        const status = error?.response?.status;
-        console.warn(
-          `[HiAnime AZ] ${status || error?.code || 'fail'} — Jikan letter fallback`
-        );
-      }
-
-      return getJikanAZList(normalized, page);
-    },
-    CACHE_TTL.ANIME_SEARCH,
-    (data) => (data.animes?.length ?? 0) > 0
-  );
+  return getAzListForLetter(sortOption, page);
 }
 
 /**

@@ -71,7 +71,15 @@ const nextConfig: NextConfig = {
           { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
         ],
       },
-      { source: "/api/azlist/:path*", headers: catalogHeaders },
+      {
+        source: "/api/azlist/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=120, stale-while-revalidate=600" },
+        ],
+      },
       { source: "/api/search/:path*", headers: catalogHeaders },
       { source: "/api/search", headers: catalogHeaders },
       {

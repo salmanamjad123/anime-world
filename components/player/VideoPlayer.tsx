@@ -208,8 +208,8 @@ export function VideoPlayer({
     setIsLoading(true);
     hlsFatalRetriesRef.current = 0;
 
-    const proxyEnabled = process.env.NEXT_PUBLIC_USE_PROXY === 'true';
     const startViaProxy = initialHlsViaProxy(currentSrc);
+    const proxyEnabled = startViaProxy || process.env.NEXT_PUBLIC_USE_PROXY === 'true';
     hlsTransportRef.current = startViaProxy ? 'proxy' : 'direct';
     if (startViaProxy) triedProxyRef.current = true;
     else triedDirectRef.current = true;

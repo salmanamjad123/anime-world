@@ -320,7 +320,7 @@ function AdminAdsBody({
           <input
             type="checkbox"
             className="mt-1"
-            checked={settings.showAdFreeLoginBanner !== false}
+            checked={settings.showAdFreeLoginBanner === true}
             disabled={saving}
             onChange={(e) =>
               void patchSettings({ showAdFreeLoginBanner: e.target.checked })
