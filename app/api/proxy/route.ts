@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { vercelMediaOffloadUrl } from '@/lib/hls-proxy';
+import { cachedRedirect } from '@/lib/http-cache';
 import { rateLimiter, getClientIdentifier } from '@/lib/utils/rate-limiter';
 import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   // Vercel must never stream video bytes. Subtitles use /api/subtitles.
   const offload = vercelMediaOffloadUrl('proxy', request.url);
   if (offload) {
-    return NextResponse.redirect(offload, 302);
+    return cachedRedirect(offload, 308, 86400);
   }
 
   try {

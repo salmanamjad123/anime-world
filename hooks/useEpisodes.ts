@@ -9,6 +9,16 @@ import { CACHE_DURATIONS } from '@/constants/api';
 
 type EpisodesOptions = { refetchOnMount?: boolean | 'always' };
 
+const EPISODE_STALE_MS = CACHE_DURATIONS.EPISODE_LIST * 1000;
+
+/** Keep a full list for 5 min. Empty lists are stale immediately so we refetch. */
+function episodeListStaleTime(query: { state: { data?: EpisodeListResponse } }): number {
+  const data = query.state.data;
+  if (data?.code === 'NOT_YET_RELEASED') return EPISODE_STALE_MS;
+  if (data?.episodes?.length) return EPISODE_STALE_MS;
+  return 0;
+}
+
 /**
  * Get episodes for an anime
  */
@@ -23,8 +33,9 @@ export function useEpisodes(animeId: string | null, isDub: boolean = false, opti
       return response.json();
     },
     enabled: !!animeId,
-    staleTime: CACHE_DURATIONS.EPISODE_LIST * 1000,
-    ...(options?.refetchOnMount !== undefined && { refetchOnMount: options.refetchOnMount }),
+    staleTime: episodeListStaleTime,
+    refetchOnMount: options?.refetchOnMount ?? true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -45,7 +56,9 @@ export function useEpisodesForSeasons(
         return response.json() as Promise<EpisodeListResponse>;
       },
       enabled: seasons.length > 0,
-      staleTime: CACHE_DURATIONS.EPISODE_LIST * 1000,
+      staleTime: episodeListStaleTime,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     })),
   });
 

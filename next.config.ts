@@ -23,6 +23,28 @@ const nextConfig: NextConfig = {
       { key: "CDN-Cache-Control", value: htmlCdn },
       { key: "Cloudflare-CDN-Cache-Control", value: htmlCdn },
     ];
+    // Watch shell is anonymous client HTML — Cache-Control public so CF Eligible
+    // even if the Cache Rule does not ignore origin TTL.
+    const watchHeaders = [
+      { key: "Cache-Control", value: htmlCdn },
+      { key: "CDN-Cache-Control", value: htmlCdn },
+      { key: "Vercel-CDN-Cache-Control", value: htmlCdn },
+      { key: "Cloudflare-CDN-Cache-Control", value: htmlCdn },
+    ];
+    const streamCdn = "public, s-maxage=60, stale-while-revalidate=180";
+    const streamHeaders = [
+      { key: "Cache-Control", value: streamCdn },
+      { key: "CDN-Cache-Control", value: streamCdn },
+      { key: "Vercel-CDN-Cache-Control", value: streamCdn },
+      { key: "Cloudflare-CDN-Cache-Control", value: streamCdn },
+    ];
+    const redirectCdn = "public, s-maxage=86400, stale-while-revalidate=604800";
+    const redirectHeaders = [
+      { key: "Cache-Control", value: redirectCdn },
+      { key: "CDN-Cache-Control", value: redirectCdn },
+      { key: "Vercel-CDN-Cache-Control", value: redirectCdn },
+      { key: "Cloudflare-CDN-Cache-Control", value: redirectCdn },
+    ];
     return [
       {
         source: "/:path*",
@@ -47,7 +69,7 @@ const nextConfig: NextConfig = {
       { source: "/", headers: htmlHeaders },
       { source: "/anime/:path*", headers: htmlHeaders },
       { source: "/manga/:path*", headers: htmlHeaders },
-      { source: "/watch/:path*", headers: htmlHeaders },
+      { source: "/watch/:path*", headers: watchHeaders },
       { source: "/api/anime", headers: catalogHeaders },
       { source: "/api/anime/:path*", headers: catalogHeaders },
       { source: "/api/manga", headers: catalogHeaders },
@@ -100,33 +122,11 @@ const nextConfig: NextConfig = {
           { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" },
         ],
       },
-      {
-        source: "/api/stream/:path*",
-        headers: [
-          { key: "Cache-Control", value: "private, no-store" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
-        ],
-      },
-      {
-        source: "/api/subtitles",
-        headers: [
-          { key: "Cache-Control", value: "private, no-store" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
-        ],
-      },
-      {
-        source: "/api/subtitles/:path*",
-        headers: [
-          { key: "Cache-Control", value: "private, no-store" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
-        ],
-      },
+      { source: "/api/stream/:path*", headers: streamHeaders },
+      { source: "/api/proxy", headers: redirectHeaders },
+      { source: "/api/image", headers: redirectHeaders },
+      { source: "/api/subtitles", headers: redirectHeaders },
+      { source: "/api/subtitles/:path*", headers: redirectHeaders },
     ];
   },
   images: {

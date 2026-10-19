@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { vercelMediaOffloadUrl } from '@/lib/hls-proxy';
+import { cachedRedirect } from '@/lib/http-cache';
 import { ensureWebVtt } from '@/lib/utils/subtitle-scraper';
 
 const CORS = {
@@ -24,7 +25,7 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   const offload = vercelMediaOffloadUrl('subtitles', request.url);
   if (offload) {
-    return NextResponse.redirect(offload, 302);
+    return cachedRedirect(offload, 308, 86400);
   }
 
   const url = request.nextUrl.searchParams.get('url');

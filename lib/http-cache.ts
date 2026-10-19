@@ -37,3 +37,15 @@ export function uncachedJson(data: unknown, status = 500) {
     },
   });
 }
+
+/** Cacheable redirect so Cloudflare can HIT 308s (watch ?ep=, leftover /api/proxy). */
+export function cachedRedirect(
+  url: string | URL,
+  status: 301 | 302 | 307 | 308 = 308,
+  sMaxAge = 86400
+) {
+  return NextResponse.redirect(url, {
+    status,
+    headers: cacheHeaders(sMaxAge, sMaxAge * 7),
+  });
+}

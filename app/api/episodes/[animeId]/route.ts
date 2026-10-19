@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { cachedJson, uncachedJson } from '@/lib/http-cache';
+import type { EpisodeListResponse } from '@/types';
 import {
   getEpisodesMultiSource,
   EpisodesUnavailableError,
@@ -13,6 +14,17 @@ import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeEpisodesStandard } from '@/lib/api/hianime';
 import { saveEpisodesToFirestoreBackground } from '@/lib/api/episode-cache';
 import { resolveAnilistIdFromSegment } from '@/lib/seo/anime-slug';
+
+/** Full lists: 60s CDN. Empty: 5s so a bad scrape does not stick. */
+function episodesJson(result: EpisodeListResponse, unreleased = false) {
+  if (unreleased) {
+    return cachedJson({ ...result, code: 'NOT_YET_RELEASED' as const }, 60);
+  }
+  if (!result.episodes?.length) {
+    return cachedJson(result, 5, { swr: 5 });
+  }
+  return cachedJson(result, 60);
+}
 
 export async function GET(
   request: NextRequest,
@@ -80,14 +92,10 @@ export async function GET(
       dub
     );
 
-    if (result.episodes.length === 0 && anime.status === 'NOT_YET_RELEASED') {
-      return cachedJson({
-        ...result,
-        code: 'NOT_YET_RELEASED',
-      }, 60);
-    }
-
-    return cachedJson(result, 60);
+    return episodesJson(
+      result,
+      result.episodes.length === 0 && anime.status === 'NOT_YET_RELEASED'
+    );
   } catch (error) {
     if (error instanceof EpisodesUnavailableError) {
       return uncachedJson(

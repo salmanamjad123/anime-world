@@ -6,21 +6,17 @@
  * ?refresh=true - bypass cache for broken link recovery
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getHiAnimeStreamSources } from '@/lib/api/hianime';
 import { getStreamCached } from '@/lib/api/stream-cache';
 import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
-import { uncachedJson } from '@/lib/http-cache';
+import { cachedJson, uncachedJson } from '@/lib/http-cache';
 
 export const maxDuration = 20;
 
-const STREAM_NO_STORE = {
-  'Cache-Control': 'private, no-store',
-  'CDN-Cache-Control': 'no-store',
-  'Vercel-CDN-Cache-Control': 'no-store',
-  'Cloudflare-CDN-Cache-Control': 'no-store',
-} as const;
+/** HLS URLs expire in ~5–8 min. 60s CDN cache collapses duplicate plays. */
+const STREAM_CDN_TTL_S = 60;
 
 export async function GET(
   request: NextRequest,
@@ -94,7 +90,8 @@ export async function GET(
             (sources?.sources && sources.sources.length > 0) ||
             sources?.embedUrl
           ) {
-            return NextResponse.json(sources, { headers: STREAM_NO_STORE });
+            if (forceRefresh) return uncachedJson(sources, 200);
+            return cachedJson(sources, STREAM_CDN_TTL_S, { swr: 180 });
           }
         } catch (err) {
           lastError = err;
