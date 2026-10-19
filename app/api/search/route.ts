@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server';
 import { cachedJson } from '@/lib/http-cache';
 import { getPopularAnime, searchAnime } from '@/lib/api/anilist';
+import { indexAnimeDetailsFromList } from '@/lib/api/anilist-resilience';
 import {
   attachSlugsToSearchResult,
   warmAnimeSlugsInBackground,
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest) {
   try {
     const enriched = await attachSlugsToSearchResult(result, { allowLookup: false });
     const media = enriched.data?.Page?.media ?? [];
+    void indexAnimeDetailsFromList(media);
     if (!filters.search?.trim()) {
       warmAnimeSlugsInBackground(media);
     }

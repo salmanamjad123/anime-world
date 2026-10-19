@@ -7,6 +7,19 @@ export function isAniListNumericId(id: string): boolean {
   return /^\d+$/.test(id);
 }
 
+/**
+ * HiAnime public ids look like `arte-dug7c-2459` (title + short hash + number).
+ * Do not treat the trailing number as an AniList id.
+ */
+export function looksLikeHiAnimeSlug(segment: string): boolean {
+  if (!segment || isAniListNumericId(segment)) return false;
+  const parts = segment.split('-').filter(Boolean);
+  if (parts.length < 3) return false;
+  const last = parts[parts.length - 1];
+  const hash = parts[parts.length - 2];
+  return /^\d+$/.test(last) && /^[a-z0-9]{4,6}$/i.test(hash) && /\d/.test(hash);
+}
+
 /** Public path segment for /anime/{segment} */
 export function getPublicAnimeSegment(id: string, slug?: string | null): string {
   if (slug && slug !== id) return slug;

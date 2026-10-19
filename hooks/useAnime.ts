@@ -33,13 +33,14 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = CLIENT_FETCH_TIM
 /**
  * Get trending anime
  */
-export function useTrendingAnime(page = 1, perPage = 20) {
+export function useTrendingAnime(page = 1, perPage = 20, enabled = true) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['trending-anime', page, perPage],
     queryFn: () =>
       fetchJsonWithTimeout<AnimeSearchResult>(
         `/api/anime?type=trending&page=${page}&perPage=${perPage}`
       ),
+    enabled,
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
     placeholderData: (previous) => previous,
   });
@@ -48,13 +49,14 @@ export function useTrendingAnime(page = 1, perPage = 20) {
 /**
  * Get popular anime
  */
-export function usePopularAnime(page = 1, perPage = 20) {
+export function usePopularAnime(page = 1, perPage = 20, enabled = true) {
   return useQuery<AnimeSearchResult>({
     queryKey: ['popular-anime', page, perPage],
     queryFn: () =>
       fetchJsonWithTimeout<AnimeSearchResult>(
         `/api/anime?type=popular&page=${page}&perPage=${perPage}`
       ),
+    enabled,
     staleTime: CACHE_DURATIONS.ANIME_LIST * 1000,
     placeholderData: (previous) => previous,
   });
@@ -96,8 +98,34 @@ function findAnimeInListCache(
   return undefined;
 }
 
+function animeDetailKeys(anime: Anime): Array<readonly ['anime', string]> {
+  const id = String(anime.id);
+  const segment = getPublicAnimeSegment(id, anime.slug);
+  return segment === id
+    ? ([['anime', id]] as const)
+    : ([['anime', segment], ['anime', id]] as const);
+}
+
+function isPartialAnimeDetail(anime: Anime): boolean {
+  return !anime.description && !(anime.coverImage && 'extraLarge' in anime.coverImage);
+}
+
+/** Put search/card payload in the detail cache so the page paints immediately. */
+export function seedAnimeDetail(queryClient: QueryClient, anime: Anime) {
+  const payload: AnimeDetailPayload = { data: { Media: anime } };
+  for (const key of animeDetailKeys(anime)) {
+    const existing = queryClient.getQueryData<AnimeDetailPayload>(key);
+    if (existing?.data?.Media?.description) continue;
+    queryClient.setQueryData(key, payload);
+    if (isPartialAnimeDetail(anime)) {
+      void queryClient.invalidateQueries({ queryKey: key });
+    }
+  }
+}
+
 /** Warm the detail query on card hover so the first click is not a cold fetch. */
 export function prefetchAnimeDetail(queryClient: QueryClient, anime: Anime) {
+  seedAnimeDetail(queryClient, anime);
   const segment = getPublicAnimeSegment(String(anime.id), anime.slug);
   void queryClient.prefetchQuery({
     queryKey: ['anime', segment],
@@ -105,7 +133,7 @@ export function prefetchAnimeDetail(queryClient: QueryClient, anime: Anime) {
       fetchJsonWithTimeout<AnimeDetailPayload>(
         `/api/anime/${encodeURIComponent(segment)}`
       ),
-    staleTime: CACHE_DURATIONS.ANIME_DETAIL * 1000,
+    staleTime: isPartialAnimeDetail(anime) ? 0 : CACHE_DURATIONS.ANIME_DETAIL * 1000,
   });
 }
 
@@ -123,9 +151,13 @@ export function useAnimeById(id: string | null) {
       );
     },
     enabled: !!id,
-    staleTime: CACHE_DURATIONS.ANIME_DETAIL * 1000,
-    retry: 2,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    staleTime: (query) => {
+      const media = query.state.data?.data?.Media;
+      if (media && isPartialAnimeDetail(media)) return 0;
+      return CACHE_DURATIONS.ANIME_DETAIL * 1000;
+    },
+    retry: 1,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     placeholderData: () => {
       if (!id) return undefined;
       const fromList = findAnimeInListCache(queryClient, id);

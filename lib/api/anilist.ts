@@ -12,6 +12,7 @@ import {
   getJikanTrending,
   getJikanPopular,
   getJikanTopRated,
+  indexAnimeDetailsFromList,
   isAnilistOutage,
 } from './anilist-resilience';
 import { searchJikanAnime } from './jikan';
@@ -469,10 +470,12 @@ export async function searchAnime(
       cacheKey,
       async () => {
         try {
-          return await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables, 0, 4000, {
+          const result = await executeQuery<AnimeSearchResult>(SEARCH_QUERY, variables, 0, 4000, {
             retryOn429: false,
             skipThrottle: true,
           });
+          void indexAnimeDetailsFromList(result?.data?.Page?.media ?? []);
+          return result;
         } catch (error) {
           if (!isAnilistOutage(error)) throw error;
           return searchAnimeOutageFallback(filters, page, perPage);
@@ -488,18 +491,25 @@ export async function searchAnime(
     cacheKey,
     async () => {
       const variants = expandSearchQueries(textQuery);
-      const variantHits = await Promise.all(
-        variants.map((variant) => runFastTextSearch(variant, page, perPage))
-      );
+      const variantHits: Array<AnimeSearchResult | null> = [];
+      for (const variant of variants) {
+        const hit = await runFastTextSearch(variant, page, perPage);
+        variantHits.push(hit);
+        if (searchMediaCount(hit) > 0) break;
+      }
       const merged = mergeSearchResults(variantHits, textQuery, page, perPage);
-      if (merged) return merged;
+      if (merged) {
+        void indexAnimeDetailsFromList(merged.data?.Page?.media ?? []);
+        return merged;
+      }
 
       try {
-        const jikanHits = await Promise.all(
-          variants.map((variant) =>
-            searchJikanAnime(variant, page, perPage).catch(() => null)
-          )
-        );
+        const jikanHits: Array<AnimeSearchResult | null> = [];
+        for (const variant of variants) {
+          const hit = await searchJikanAnime(variant, page, perPage).catch(() => null);
+          jikanHits.push(hit);
+          if (searchMediaCount(hit) > 0) break;
+        }
         const jikanMerged = mergeSearchResults(
           jikanHits.map((result) =>
             result ? { ...result, _fallback: 'hianime-search' as const } : null
@@ -508,7 +518,10 @@ export async function searchAnime(
           page,
           perPage
         );
-        if (jikanMerged) return jikanMerged;
+        if (jikanMerged) {
+          void indexAnimeDetailsFromList(jikanMerged.data?.Page?.media ?? []);
+          return jikanMerged;
+        }
       } catch {
         /* empty */
       }
@@ -527,7 +540,13 @@ export async function searchAnime(
 export async function getAnimeById(id: string | number): Promise<{ data: { Media: Anime } }> {
   const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
   return fetchAnilistDetailWithFallback(numericId, () =>
-    executeQuery<{ data: { Media: Anime } }>(ANIME_BY_ID_QUERY, { id: numericId })
+    executeQuery<{ data: { Media: Anime } }>(
+      ANIME_BY_ID_QUERY,
+      { id: numericId },
+      0,
+      4000,
+      { retryOn429: false }
+    )
   );
 }
 

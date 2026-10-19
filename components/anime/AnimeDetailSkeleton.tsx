@@ -14,14 +14,14 @@ export function AnimeDetailSkeleton({
   return (
     <div className="min-h-screen bg-gray-900">
       <Header />
-      <div className="relative min-h-[380px] md:h-[500px] w-full">
-        <div className="absolute inset-0 bg-gray-800/60" />
-        <div className="relative container mx-auto px-4 h-full flex flex-col items-center md:items-start pt-4 pb-5 md:pt-0 md:pb-12 md:justify-end">
-          <div className="flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl">
-            <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48 md:-mb-24">
+      <div className="relative w-full">
+        <div className="absolute inset-0 bg-gray-800/40" />
+        <div className="relative container mx-auto px-4 flex flex-col items-center md:items-start pt-6 pb-6 md:pt-8 md:pb-8">
+          <div className="flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl items-center md:items-start">
+            <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48">
               <div className="aspect-[2/3] rounded-lg bg-gray-700 animate-pulse" />
             </div>
-            <div className="flex-1 md:pb-8 space-y-3 text-center md:text-left">
+            <div className="flex-1 space-y-3 text-center md:text-left">
               <div className="h-8 md:h-10 w-2/3 mx-auto md:mx-0 rounded bg-gray-700 animate-pulse" />
               <div className="h-4 w-1/3 mx-auto md:mx-0 rounded bg-gray-800 animate-pulse" />
               <div className="h-4 w-1/2 mx-auto md:mx-0 rounded bg-gray-800 animate-pulse" />
@@ -43,7 +43,7 @@ export function AnimeDetailSkeleton({
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 pb-12 mt-6">
+      <div className="container mx-auto px-4 pb-12 mt-4 md:mt-8">
         <div className="h-40 rounded-lg bg-gray-800/50 animate-pulse" />
       </div>
     </div>

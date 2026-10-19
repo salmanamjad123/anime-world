@@ -15,10 +15,11 @@ import { SITE_URL } from '@/constants/site';
 import {
   getPublicAnimeSegment,
   isAniListNumericId,
+  looksLikeHiAnimeSlug,
 } from '@/lib/seo/anime-path';
 import type { Anime } from '@/types';
 
-export { getPublicAnimeSegment, isAniListNumericId } from '@/lib/seo/anime-path';
+export { getPublicAnimeSegment, isAniListNumericId, looksLikeHiAnimeSlug } from '@/lib/seo/anime-path';
 export { getAnimeDetailPath } from '@/lib/seo/anime-path';
 
 const SLUG_CACHE_PREFIX = 'anilist:slugfor:';
@@ -82,6 +83,8 @@ function animeMatchesPublicSlug(
 
 /** Verify trailing `-{id}` suffix and match title prefix. */
 async function tryResolveEmbeddedAnilistId(segment: string): Promise<string | null> {
+  if (looksLikeHiAnimeSlug(segment)) return null;
+
   const match = segment.match(/-(\d+)$/);
   if (!match) return null;
 
@@ -179,6 +182,7 @@ export async function resolveAnilistIdFromSegment(
   if (cached) return cached;
 
   if (options?.allowLookup === false) return null;
+  if (looksLikeHiAnimeSlug(segment)) return null;
 
   const fromEmbedded = await tryResolveEmbeddedAnilistId(segment);
   if (fromEmbedded) return fromEmbedded;

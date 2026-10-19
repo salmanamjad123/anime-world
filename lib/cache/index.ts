@@ -42,6 +42,28 @@ function getRedisClient(): typeof redisClient {
   return redisClient;
 }
 
+/** Write cache without fetching. Skips if a value is already present. */
+export async function setCachedIfAbsent<T>(
+  key: string,
+  data: T,
+  ttl: number = CACHE_TTL.ANIME_INFO
+): Promise<void> {
+  if (memoryCache.get(key) !== null) return;
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const exists = await redis.exists(key);
+      if (exists) return;
+      await redis.setex(key, Math.floor(ttl / 1000), JSON.stringify(data));
+    } catch (err) {
+      console.warn('[Redis] Cache write failed:', (err as Error).message);
+    }
+  }
+
+  memoryCache.set(key, data, ttl);
+}
+
 /**
  * Get or fetch with caching.
  * Uses Redis when REDIS_URL is set, otherwise in-memory (per instance).

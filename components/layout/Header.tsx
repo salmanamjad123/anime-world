@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils';
 import type { Anime, Manga } from '@/types';
 import { canAccessGameDemo } from '@/lib/game-demo-access';
 import { Sidebar, type SidebarTab } from './Sidebar';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchAnimeDetail, seedAnimeDetail } from '@/hooks/useAnime';
 
 type SearchResultItem = (Anime | Manga) & { id: string };
 type ActiveTab = SidebarTab;
@@ -68,6 +70,7 @@ function matchScore(item: SearchResultItem, query: string): number {
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -382,6 +385,7 @@ export function Header() {
           : undefined;
       router.push(ROUTES.MANGA_DETAIL(String(item.id), md));
     } else {
+      seedAnimeDetail(queryClient, item as Anime);
       router.push(ROUTES.ANIME_DETAIL(item));
     }
   };
@@ -553,6 +557,12 @@ export function Header() {
                           <button
                             type="button"
                             onClick={() => handleResultClick(item)}
+                            onPointerEnter={() => {
+                              if (activeTab !== 'manga') prefetchAnimeDetail(queryClient, item as Anime);
+                            }}
+                            onFocus={() => {
+                              if (activeTab !== 'manga') prefetchAnimeDetail(queryClient, item as Anime);
+                            }}
                             className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-10 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-700">
@@ -751,6 +761,12 @@ export function Header() {
                           <button
                             type="button"
                             onClick={() => handleResultClick(item)}
+                            onPointerEnter={() => {
+                              if (activeTab !== 'manga') prefetchAnimeDetail(queryClient, item as Anime);
+                            }}
+                            onFocus={() => {
+                              if (activeTab !== 'manga') prefetchAnimeDetail(queryClient, item as Anime);
+                            }}
                             className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-700/80 transition-colors"
                           >
                             <div className="relative w-10 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-700">

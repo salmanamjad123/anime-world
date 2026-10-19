@@ -16,7 +16,7 @@ import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
 import { setListItem as setListItemDb, removeFromWatchlist as removeFromWatchlistDb } from '@/lib/firebase/firestore';
 import { AddToListDropdown } from '@/components/anime/AddToListDropdown';
-import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor } from '@/lib/utils';
+import { getPreferredTitle, stripHtml, formatSeasonYear, getScoreColor, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { isAniListNumericId } from '@/lib/seo/anime-path';
 import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-react';
@@ -48,6 +48,7 @@ export default function AnimeDetailPage() {
     error: animeError,
     refetch: refetchAnime,
   } = useAnimeById(animeId);
+  const animeReady = Boolean(animeData?.data?.Media);
 
   useEffect(() => {
     setSlowLoad(false);
@@ -55,15 +56,23 @@ export default function AnimeDetailPage() {
     const timer = setTimeout(() => setSlowLoad(true), 8000);
     return () => clearTimeout(timer);
   }, [isAnimeLoading, isAnimeFetching, animeId]);
-  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
-  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
+  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(
+    1,
+    18,
+    animeReady
+  );
+  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(
+    1,
+    18,
+    animeReady
+  );
   const {
     data: episodesData,
     isLoading: isEpisodesLoading,
     isError: isEpisodesError,
     refetch: refetchEpisodes,
-  } = useEpisodes(selectedSeasonId, selectedLanguage === 'dub');
-  const { data: animeInfo } = useAnimeInfo(selectedSeasonId);
+  } = useEpisodes(animeReady ? selectedSeasonId : null, selectedLanguage === 'dub');
+  const { data: animeInfo } = useAnimeInfo(animeReady ? selectedSeasonId : null);
   const seasonEpisodeCounts = useEpisodesForSeasons(seasons, selectedLanguage === 'dub');
 
   // Fetch seasons and movies
@@ -83,10 +92,10 @@ export default function AnimeDetailPage() {
       }
     }
 
-    if (animeId) {
+    if (animeId && animeReady) {
       fetchSeasons();
     }
-  }, [animeId]);
+  }, [animeId, animeReady]);
   
   const { addToList, removeFromList, getListStatus } = useWatchlistStore();
   const { user } = useUserStore();
@@ -204,6 +213,9 @@ export default function AnimeDetailPage() {
 
   const title = getPreferredTitle(anime.title);
   const description = anime.description ? stripHtml(anime.description) : 'No description available.';
+  const coverSrc = anime.coverImage?.extraLarge || anime.coverImage?.large || '';
+  const bannerSrc = anime.bannerImage || coverSrc;
+  const hasWideBanner = Boolean(anime.bannerImage);
 
   const handleListSelect = async (status: 'watching' | 'on-hold' | 'plan-to-watch' | 'dropped' | 'completed') => {
     addToList(animeId, title, anime.coverImage.large, status, anime.slug);
@@ -245,30 +257,30 @@ export default function AnimeDetailPage() {
       <AnimeSlugUrlSync slug={anime.slug} />
       <Header />
 
-      {/* Banner Section */}
-      <div className="relative min-h-[380px] md:h-[500px] w-full">
-        {/* Background Image */}
-        {anime.bannerImage && (
-          <div className="absolute inset-0">
+      {/* Hero: poster + title stay in one block so they never overlap seasons */}
+      <div className="anime-detail-hero relative w-full">
+        {bannerSrc && (
+          <div className="absolute inset-0 overflow-hidden">
             <SafeImage
-              src={anime.bannerImage}
-              alt={title}
+              src={bannerSrc}
+              alt=""
               fill
-              className="object-cover opacity-40"
+              className={cn(
+                'object-cover',
+                hasWideBanner ? 'opacity-35' : 'opacity-20 blur-sm scale-110'
+              )}
               priority
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/75 to-gray-900/50" />
           </div>
         )}
 
-        {/* Content: stack on mobile, side-by-side on md+ */}
-        <div className="relative container mx-auto px-4 h-full flex flex-col items-center md:items-start pt-4 pb-5  md:pt-0 md:pb-12 md:justify-end">
-          <div className="flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl">
-            {/* Cover Image: centered on mobile, left on desktop */}
-            <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48 md:-mb-24">
-              <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl">
+        <div className="relative container mx-auto px-4 pt-6 pb-6 md:pt-8 md:pb-8">
+          <div className="flex flex-col md:flex-row gap-5 md:gap-8 w-full max-w-6xl items-center md:items-start">
+            <div className="shrink-0 w-40 mx-auto md:mx-0 md:w-48">
+              <div className="relative aspect-[2/3] rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/10">
                 <SafeImage
-                  src={anime.coverImage.extraLarge || anime.coverImage.large}
+                  src={coverSrc}
                   alt={title}
                   fill
                   className="object-cover"
@@ -277,8 +289,7 @@ export default function AnimeDetailPage() {
               </div>
             </div>
 
-            {/* Info */}
-            <div className="flex-1 md:pb-8 text-center md:text-left">
+            <div className="flex-1 w-full text-center md:text-left">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">{title}</h1>
               {anime.title.native && (
                 <p className="text-gray-400 mb-3 md:mb-4 text-sm sm:text-base">{anime.title.native}</p>
@@ -377,7 +388,7 @@ export default function AnimeDetailPage() {
       </div>
 
       {/* Description and Episodes */}
-      <div className="container mx-auto px-4 pb-5 mt-0 md:pb-12 ">
+      <div className="container mx-auto px-4 pb-5 mt-6 md:mt-10 md:pb-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-8">
           {/* Main Content: Episodes first so users don't need to scroll */}
           <div className="lg:col-span-2">

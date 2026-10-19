@@ -2,8 +2,9 @@
  * AniList resilience — stale cache + Jikan fallback when AniList is down.
  */
 
-import { getCached, CACHE_TTL } from '@/lib/cache';
+import { getCached, setCachedIfAbsent, CACHE_TTL } from '@/lib/cache';
 import { getStaleCache, saveStaleCache } from '@/lib/cache/stale-cache';
+import { isAniListNumericId } from '@/lib/seo/anime-path';
 import type { Anime, AnimeSearchResult } from '@/types';
 import {
   getJikanTrending,
@@ -14,12 +15,53 @@ import {
 import { getHiAnimeBrowseList, searchHiAnimeAsList } from './hianime-fallback';
 
 export function isAnilistOutage(error: unknown): boolean {
-  const err = error as { response?: { status?: number }; request?: unknown };
+  const err = error as {
+    response?: { status?: number };
+    request?: unknown;
+    code?: string;
+    message?: string;
+  };
   const status = err.response?.status;
   if (status === 403 || status === 429 || status === 502 || status === 503) return true;
+  if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') return true;
+  if (typeof err.message === 'string' && /timeout/i.test(err.message)) return true;
   // AniList unreachable (timeout / no response)
   if (!err.response && err.request) return true;
   return false;
+}
+
+function isCompleteAnimeDetail(item: Anime): boolean {
+  return Boolean(item.coverImage && 'extraLarge' in item.coverImage) || Array.isArray(item.tags);
+}
+
+/**
+ * Persist list/search hits so the first detail open is a cache hit.
+ * Full AniList rows go in the hot cache; typeahead rows only fill stale fallback.
+ */
+export async function indexAnimeDetailsFromList(media: Anime[]): Promise<void> {
+  if (!media.length) return;
+
+  await Promise.all(
+    media.map(async (item) => {
+      const id = String(item.id);
+      if (!isAniListNumericId(id)) return;
+
+      const wrapped = { data: { Media: item } };
+      const cacheKey = `anilist:anime:${id}`;
+
+      if (isCompleteAnimeDetail(item)) {
+        await setCachedIfAbsent(cacheKey, wrapped, CACHE_TTL.ANIME_INFO);
+        await saveStaleCache(cacheKey, wrapped);
+      } else {
+        const existing = await getStaleCache<{ data?: { Media?: Anime } }>(cacheKey);
+        if (!existing?.data?.Media) {
+          await saveStaleCache(cacheKey, wrapped);
+        }
+      }
+    })
+  );
+
+  await indexMalMappings(media);
 }
 
 /** Save MAL ↔ AniList mapping from list/detail responses for future fallbacks. */
@@ -87,7 +129,7 @@ export async function fetchAnilistListWithFallback(
         const fresh = await fetchAnilist();
         await saveStaleCache(cacheKey, fresh);
         const media = fresh?.data?.Page?.media ?? [];
-        if (media.length) await indexMalMappings(media);
+        if (media.length) await indexAnimeDetailsFromList(media);
         return fresh;
       },
       CACHE_TTL.ANIME_LIST
