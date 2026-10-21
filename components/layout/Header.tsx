@@ -399,13 +399,13 @@ export function Header() {
   };
 
   const renderTabToggle = () => (
-    <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 w-full md:w-auto">
+    <div className="flex items-center rounded-full bg-gray-800/90 p-0.5 w-full md:w-auto border border-white/5">
       <Link
         href={ROUTES.HOME}
         className={cn(
-          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200',
           activeTab === 'anime'
-            ? 'bg-blue-600 text-white'
+            ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
             : 'text-gray-400 hover:text-white'
         )}
       >
@@ -414,9 +414,9 @@ export function Header() {
       <Link
         href={ROUTES.MANGA}
         className={cn(
-          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+          'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200',
           activeTab === 'manga'
-            ? 'bg-amber-600 text-white'
+            ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
             : 'text-gray-400 hover:text-white'
         )}
       >
@@ -426,9 +426,9 @@ export function Header() {
         <Link
           href={ROUTES.GAME}
           className={cn(
-            'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors',
+            'flex-1 md:flex-none text-center px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all duration-200',
             activeTab === 'game'
-              ? 'bg-orange-600 text-white'
+              ? 'bg-orange-600 text-white shadow-sm shadow-orange-600/30'
               : 'text-gray-400 hover:text-white'
           )}
         >
@@ -440,11 +440,11 @@ export function Header() {
 
   return (
     <>
-    <header ref={headerRef} className="sticky top-0 z-[100] w-full border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
+    <header ref={headerRef} className="sticky top-0 z-[100] w-full border-b border-white/10 bg-gray-950/80 backdrop-blur-xl supports-[backdrop-filter]:bg-gray-950/55">
       <div className="relative w-full">
         {/* Header row */}
         <div className="container mx-auto px-4 relative">
-          <div className="relative z-20 flex h-14 md:h-16 items-center justify-between gap-2 md:gap-4 bg-gray-900/95 supports-[backdrop-filter]:bg-gray-900/60">
+          <div className="relative z-20 flex h-14 md:h-16 items-center justify-between gap-2 md:gap-4">
             {/* Toggle + Logo (+ Tabs on desktop) */}
             <div className="flex items-center gap-1 sm:gap-2 min-w-0">
               <button
@@ -468,7 +468,7 @@ export function Header() {
                 <div className="text-lg sm:text-xl md:text-2xl font-bold whitespace-nowrap">
                   {activeTab === 'manga' ? (
                     <>
-                      <span className="text-amber-500">Manga</span>
+                      <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">Manga</span>
                       <span className="text-white">Village</span>
                     </>
                   ) : activeTab === 'game' ? (
@@ -478,7 +478,7 @@ export function Header() {
                     </>
                   ) : (
                     <>
-                      <span className="text-blue-500">Anime</span>
+                      <span className="bg-gradient-to-r from-blue-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">Anime</span>
                       <span className="text-white">Village</span>
                     </>
                   )}
@@ -509,7 +509,7 @@ export function Header() {
             {showFilter && (
               <Link
                 href={ROUTES.SEARCH}
-                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800 border border-white/10 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
                 aria-label="Filters"
               >
                 <Filter className="w-4 h-4" />
@@ -524,7 +524,7 @@ export function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchOpen(true)}
                 className={cn(
-                  'relative z-0 w-full pl-10 pr-4 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent text-sm',
+                  'relative z-0 w-full pl-10 pr-4 py-1.5 rounded-xl bg-gray-800/80 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent text-sm transition-all duration-200',
                   activeTab === 'manga' ? 'focus:ring-amber-500' : 'focus:ring-blue-500'
                 )}
               />
@@ -534,7 +534,7 @@ export function Header() {
 
             {/* Search results dropdown */}
             {showDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-0 rounded-lg bg-gray-800 border border-gray-700 shadow-2xl max-h-72 overflow-y-auto z-[110]">
+              <div className="absolute top-full left-0 right-0 mt-1 rounded-xl bg-gray-900/95 border border-white/10 shadow-2xl max-h-72 overflow-y-auto z-[110] backdrop-blur-xl">
                 {isSearching && searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
                 ) : searchResults.length === 0 ? (
@@ -614,7 +614,7 @@ export function Header() {
                     </span>
                   </button>
                   {userMenuOpen && (
-                    <div className="absolute right-0 top-full mt-1 py-2 w-64 rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl z-[110]">
+                    <div className="absolute right-0 top-full mt-1 py-2 w-64 rounded-2xl bg-gray-950/95 border border-white/10 shadow-2xl z-[110] backdrop-blur-xl">
                       <div className="px-4 pb-2">
                         <p className="text-sm font-semibold text-white truncate">
                           {user.displayName || user.email}
@@ -665,7 +665,7 @@ export function Header() {
                 <button
                   type="button"
                   onClick={() => openAuthModal()}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all duration-200 shadow-[0_8px_20px_-10px_rgba(88,102,242,0.9)]"
                 >
                   <LogIn className="w-4 h-4" />
                   <span className="hidden sm:inline">Login</span>
@@ -701,7 +701,7 @@ export function Header() {
         {mobileSearchOpen && !hideSearch && (
           <div
             ref={searchRef}
-            className="md:hidden absolute left-0 right-0 z-[110] w-full px-4 py-3 border-t border-gray-800 bg-gray-900 shadow-2xl"
+            className="md:hidden absolute left-0 right-0 z-[110] w-full px-4 py-3 border-t border-white/10 bg-gray-950/95 backdrop-blur-xl shadow-2xl"
             style={{
               // Stick to visible header bottom (main row + remaining tab strip when present)
               top: showMobileSectionTabs

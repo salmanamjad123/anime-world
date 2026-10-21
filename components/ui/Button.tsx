@@ -17,10 +17,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'md', isLoading, loadingVariant = 'spinner', children, disabled, ...props }, ref) => {
     const variants = {
-      default: 'bg-gray-800 hover:bg-gray-700 text-white',
-      primary: 'bg-blue-600 hover:bg-blue-700 text-white',
+      default: 'bg-gray-800 hover:bg-gray-700 text-white border border-white/5',
+      primary:
+        'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_10px_28px_-12px_rgba(88,102,242,0.85)]',
       secondary: 'bg-gray-600 hover:bg-gray-500 text-white',
-      ghost: 'bg-transparent hover:bg-gray-800 text-gray-300',
+      ghost: 'bg-transparent hover:bg-gray-800/80 text-gray-300',
       danger: 'bg-red-600 hover:bg-red-700 text-white',
     };
 
@@ -34,8 +35,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+          'inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200',
+          'focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:ring-offset-2 focus:ring-offset-gray-900',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           variants[variant],
           sizes[size],

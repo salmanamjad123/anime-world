@@ -238,7 +238,7 @@ export function AuthModal({ isOpen, onClose, defaultView = 'login' }: AuthModalP
 
         {/* Modal */}
         <motion.div
-          className="relative w-full max-w-md bg-gray-900 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden"
+          className="relative w-full max-w-md bg-gray-950/95 rounded-2xl shadow-2xl border border-white/10 overflow-hidden backdrop-blur-xl"
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}

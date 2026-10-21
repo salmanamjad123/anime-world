@@ -38,7 +38,7 @@ export function AnimeCard({ anime }: AnimeCardProps) {
             src={anime.coverImage.large}
             alt={title}
             fill
-            className="object-cover transition-transform duration-300 group-hover:scale-110"
+            className="object-cover transition-transform duration-500 group-hover:scale-110"
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
           />
           

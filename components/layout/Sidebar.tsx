@@ -101,7 +101,7 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = fa
 
           {/* Sidebar panel */}
           <motion.aside
-            className="fixed left-0 top-0 bottom-0 z-[101] w-[280px] max-w-[85vw] bg-gray-900 border-r border-gray-800 shadow-2xl overflow-y-auto"
+            className="fixed left-0 top-0 bottom-0 z-[101] w-[280px] max-w-[85vw] bg-gray-950/95 border-r border-white/10 shadow-2xl overflow-y-auto backdrop-blur-xl"
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}

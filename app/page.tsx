@@ -8,6 +8,7 @@ import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
 import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { AdFreeLoginBanner } from '@/components/ads/AdFreeLoginBanner';
+import { AnimeSocialBar } from '@/components/ads/MangaSocialBar';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
@@ -92,6 +93,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      <AnimeSocialBar />
       <Header />
 
       <main className="container mx-auto px-4 py-4">

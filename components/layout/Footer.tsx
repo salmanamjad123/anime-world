@@ -31,7 +31,7 @@ export function Footer() {
   const activeLetter = match ? decodeURIComponent(match[1]).toLowerCase() : null;
 
   return (
-    <footer className="mt-auto border-t border-gray-800 bg-gray-900/50">
+    <footer className="mt-auto border-t border-white/10 bg-gray-950/40 backdrop-blur-sm">
       <div className="container mx-auto px-4 py-8">
         {!isManga && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">

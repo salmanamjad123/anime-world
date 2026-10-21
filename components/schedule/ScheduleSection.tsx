@@ -72,7 +72,7 @@ export function ScheduleSection() {
           </div>
           <div className="h-8 w-24 bg-gray-800 rounded-full animate-pulse" />
         </div>
-        <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
+        <div className="bg-gray-800/50 rounded-2xl p-4 md:p-6 border border-white/5">
           <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
             {Array.from({ length: 7 }).map((_, i) => (
               <div key={i} className="h-10 w-24 bg-gray-700 rounded-lg animate-pulse shrink-0" />
@@ -106,7 +106,7 @@ export function ScheduleSection() {
         </div>
       </div>
 
-      <div className="bg-gray-800/50 rounded-lg p-4 md:p-6 pb-6 overflow-visible">
+      <div className="bg-gray-800/50 rounded-2xl p-4 md:p-6 pb-6 overflow-visible border border-white/5">
         {/* Day tabs - mobile: tabs scroll behind arrow overlays, desktop: all 7 */}
         <div className="relative mb-4 md:mb-6">
           {/* Prev arrow overlay - mobile only, tabs scroll behind */}

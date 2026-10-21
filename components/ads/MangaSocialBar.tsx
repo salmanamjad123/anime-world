@@ -21,8 +21,8 @@ function removeSocialBarArtifacts() {
 }
 
 /**
- * Adsterra social bar. Manga and anime details each have their own 2 hour
- * cooldown, separate from the smartlink.
+ * Adsterra social bar. Manga and anime each have their own 2 hour cooldown.
+ * Anime home and anime detail share the same timer.
  */
 export function AdsterraSocialBar({
   placement,

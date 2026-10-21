@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #111827;
-  --foreground: #f9fafb;
+  --background: #0b0d16;
+  --foreground: #f3f4fb;
+  --accent: #6d7cff;
+  --accent-soft: rgba(109, 124, 255, 0.16);
 }
 
 @theme inline {
@@ -12,15 +14,71 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  /* Ink neutrals — cool indigo instead of flat slate */
+  --color-gray-50: #f5f6fc;
+  --color-gray-100: #eaecf6;
+  --color-gray-200: #d2d6e8;
+  --color-gray-300: #b0b6cf;
+  --color-gray-400: #8b92b0;
+  --color-gray-500: #6d7393;
+  --color-gray-600: #545a78;
+  --color-gray-700: #3b415c;
+  --color-gray-800: #181c2c;
+  --color-gray-900: #0b0d16;
+  --color-gray-950: #07080f;
+
+  /* Anime accent — periwinkle / electric indigo */
+  --color-blue-50: #eef2ff;
+  --color-blue-100: #e0e7ff;
+  --color-blue-200: #c7d2fe;
+  --color-blue-300: #a8b6ff;
+  --color-blue-400: #8b9cff;
+  --color-blue-500: #6d7cff;
+  --color-blue-600: #5866f2;
+  --color-blue-700: #4654db;
+  --color-blue-800: #3b47b8;
+  --color-blue-900: #2f3894;
+  --color-blue-950: #1c2263;
+
+  /* Manga accent — warmer gold */
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f5a524;
+  --color-amber-600: #e08b14;
+  --color-amber-700: #c2740d;
+}
+
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #0b0d16;
+  --foreground: #f3f4fb;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 90% 55% at 8% -15%, rgba(109, 124, 255, 0.18), transparent 52%),
+    radial-gradient(ellipse 70% 45% at 100% -10%, rgba(167, 139, 250, 0.08), transparent 48%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+::selection {
+  background: rgba(109, 124, 255, 0.38);
+  color: #fff;
+}
+
+/* Full-page shells keep the atmospheric wash */
+.min-h-screen.bg-gray-900 {
+  background-color: var(--color-gray-900);
+  background-image:
+    radial-gradient(ellipse 90% 55% at 8% -15%, rgba(109, 124, 255, 0.16), transparent 52%),
+    radial-gradient(ellipse 70% 45% at 100% -10%, rgba(167, 139, 250, 0.07), transparent 48%);
+  background-attachment: fixed;
 }
 
 /* Hide scrollbar for horizontal lists */
@@ -39,16 +97,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #121526;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
+  background: #3b415c;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #6d7cff;
 }
 
 /* Loading Animation */
@@ -63,7 +121,7 @@ body {
 
 .animate-shimmer {
   animation: shimmer 2s infinite linear;
-  background: linear-gradient(to right, #374151 0%, #4b5563 50%, #374151 100%);
+  background: linear-gradient(to right, #3b415c 0%, #545a78 50%, #3b415c 100%);
   background-size: 1000px 100%;
 }
 
@@ -116,9 +174,9 @@ video.video-subtitles::-webkit-media-text-track-container {
   border-radius: 0;
   background: linear-gradient(
       to right,
-      #6c717b 0,
-      #6c717b var(--slider-fill, 50%),
-      #454a52 var(--slider-fill, 50%) 100%
+      #6d7cff 0,
+      #6d7cff var(--slider-fill, 50%),
+      #3b415c var(--slider-fill, 50%) 100%
     )
     0 50% / 100% 4px no-repeat;
   transition: background 0.12s ease-out;
@@ -131,7 +189,7 @@ video.video-subtitles::-webkit-media-text-track-container {
   height: 14px;
   margin-top: 5px;
   border-radius: 50%;
-  background: #4a90e2;
+  background: #8b9cff;
   cursor: pointer;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
   transition: transform 0.08s ease-out, box-shadow 0.12s ease;
@@ -147,14 +205,14 @@ video.video-subtitles::-webkit-media-text-track-container {
 .subtitle-position-slider::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: #454a52;
+  background: #3b415c;
   transition: background 0.12s ease-out;
 }
 .subtitle-position-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #4a90e2;
+  background: #8b9cff;
   border: 0;
   cursor: pointer;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);

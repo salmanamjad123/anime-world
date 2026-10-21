@@ -30,17 +30,9 @@ export const AD_PLACEMENTS = [
   {
     id: 'anime_social_bar',
     label: 'Social bar (once / 2 hours)',
-    page: 'Anime detail',
-    path: '/anime/[id]',
+    page: 'Anime home + detail',
+    path: '/, /anime/[id]',
     format: 'In-page push',
-    units: 1,
-  },
-  {
-    id: 'home_smartlink',
-    label: 'First-click smartlink (2 hour cooldown)',
-    page: 'Site-wide',
-    path: '/*',
-    format: 'Smartlink (new tab)',
     units: 1,
   },
   {

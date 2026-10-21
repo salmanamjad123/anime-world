@@ -198,7 +198,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
   if (!anime || anime.length === 0) return null;
 
   return (
-    <section className="relative w-full h-[320px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-xl overflow-hidden bg-gray-900 mb-8">
+    <section className="relative w-full h-[320px] sm:h-[360px] md:h-[360px] lg:h-[420px] rounded-2xl overflow-hidden bg-gray-900 mb-8 ring-1 ring-white/10">
       {/* Slides container - swipeable on touch and mouse drag */}
       <div
         className="relative w-full h-full overflow-hidden touch-pan-y select-none cursor-grab active:cursor-grabbing"
@@ -313,7 +313,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                     <Link
                       href={ROUTES.ANIME_DETAIL(item)}
                       onPointerEnter={() => prefetchAnimeDetail(queryClient, item)}
-                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm sm:text-base font-semibold transition-all duration-200 shadow-[0_10px_24px_-10px_rgba(88,102,242,0.9)]"
                     >
                       <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current shrink-0" />
                       Watch Now
@@ -321,7 +321,7 @@ export function SpotlightSlider({ anime, isLoading, autoPlayInterval = 10000 }: 
                     <Link
                       href={ROUTES.ANIME_DETAIL(item)}
                       onPointerEnter={() => prefetchAnimeDetail(queryClient, item)}
-                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-white text-sm sm:text-base font-medium transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-white text-sm sm:text-base font-medium transition-all duration-200 border border-white/10"
                     >
                       Detail
                       <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
