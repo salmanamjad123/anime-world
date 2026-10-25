@@ -18,7 +18,8 @@ export function HomeSmartlinkTracker() {
     if (!enabled) return;
 
     const onClick = () => {
-      if (window.location.pathname.startsWith('/admin')) return;
+      const path = window.location.pathname;
+      if (path === '/' || path.startsWith('/admin')) return;
       trackHomeSmartlinkClick(true);
     };
 

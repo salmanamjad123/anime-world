@@ -13,9 +13,11 @@ export const ADSTERRA_BANNER_160_300_KEY =
   'e1dc99e198aa7ca41d54eac4bb9bbfa4';
 
 export const ADSTERRA_NATIVE_SRC =
-  process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_SRC || '';
+  process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_SRC ||
+  'https://bauval.org/21/c4d0ca0dc3b7e178b2d82174dd9376d7';
 export const ADSTERRA_NATIVE_CONTAINER =
-  process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_CONTAINER || '';
+  process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_CONTAINER ||
+  'container-c4d0ca0dc3b7e178b2d82174dd9376d7';
 
 export const ADSTERRA_SOCIAL_SRC =
   process.env.NEXT_PUBLIC_ADSTERRA_SOCIAL_SRC ||

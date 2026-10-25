@@ -47,7 +47,7 @@ export function AdsterraBanner({
     if (!canFill || !liveRef.current) return;
     liveRef.current.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;overflow:hidden;background:transparent;}</style></head><body>
 <script>atOptions = { 'key' : '${key}', 'format' : 'iframe', 'height' : ${height}, 'width' : ${width}, 'params' : {} };</script>
-<script src="https://www.highrevenueformat.com/${key}/invoke.js"></script>
+<script src="https://bauval.org/22/${key}"></script>
 </body></html>`;
   }, [canFill, key, width, height]);
 
