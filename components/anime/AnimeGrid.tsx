@@ -5,41 +5,9 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
 import { AnimeCard } from './AnimeCard';
-import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { Button } from '@/components/ui/Button';
-import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import type { Anime } from '@/types';
-
-/** Matches AnimeGrid Tailwind breakpoints: 2 / sm:3 / md:4 / lg:5 / xl:6 */
-function useGridColumns() {
-  const [cols, setCols] = useState(6);
-
-  useEffect(() => {
-    const update = () => {
-      const w = window.innerWidth;
-      if (w >= 1280) setCols(6);
-      else if (w >= 1024) setCols(5);
-      else if (w >= 768) setCols(4);
-      else if (w >= 640) setCols(3);
-      else setCols(2);
-    };
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
-
-  return cols;
-}
-
-function visibleCountForAdRow(available: number, cols: number) {
-  const maxCards = Math.max(0, available - 2);
-  if (cols <= 2) return maxCards;
-  const wantRemainder = cols - 2;
-  const extra = (maxCards - wantRemainder + cols * 10) % cols;
-  return Math.max(0, maxCards - extra);
-}
 
 interface AnimeGridProps {
   anime: Anime[];
@@ -48,8 +16,6 @@ interface AnimeGridProps {
   errorMessage?: string;
   onRetry?: () => void;
   slowLoad?: boolean;
-  /** Place a 300x250 ad in the last two card slots so the grid stays even. */
-  adSlot?: boolean;
 }
 
 export function AnimeGrid({
@@ -59,13 +25,7 @@ export function AnimeGrid({
   errorMessage,
   onRetry,
   slowLoad,
-  adSlot = false,
 }: AnimeGridProps) {
-  const cols = useGridColumns();
-  const showAd = useReserveAdSlot(
-    'home_grid_300',
-    adSlot && (anime?.length ?? 0) >= 2
-  );
   const showSkeleton = isLoading && (!anime || anime.length === 0);
 
   if (showSkeleton) {
@@ -120,20 +80,11 @@ export function AnimeGrid({
     );
   }
 
-  const items = showAd
-    ? anime.slice(0, visibleCountForAdRow(anime.length, cols))
-    : anime;
-
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {items.map((item) => (
+      {anime.map((item) => (
         <AnimeCard key={item.id} anime={item} />
       ))}
-      {showAd && (
-        <div className="col-span-2">
-          <AdsterraBanner placement="home_grid_300" variant="grid" />
-        </div>
-      )}
     </div>
   );
 }

@@ -18,10 +18,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'md', isLoading, loadingVariant = 'spinner', children, disabled, ...props }, ref) => {
     const variants = {
       default: 'bg-gray-800 hover:bg-gray-700 text-white',
-      primary: 'bg-blue-600 hover:bg-blue-700 text-white',
+      primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-950/40',
       secondary: 'bg-gray-600 hover:bg-gray-500 text-white',
       ghost: 'bg-transparent hover:bg-gray-800 text-gray-300',
-      danger: 'bg-red-600 hover:bg-red-700 text-white',
+      danger: 'bg-red-700 hover:bg-red-800 text-white',
     };
 
     const sizes = {
@@ -35,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           variants[variant],
           sizes[size],

@@ -7,7 +7,6 @@
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { MangaGrid } from '@/components/manga/MangaGrid';
-import { MangaSocialBar } from '@/components/ads/MangaSocialBar';
 import { useTrendingManga, usePopularManga, useMangaByGenre } from '@/hooks/useManga';
 import { TrendingUp, Star, BookOpen } from 'lucide-react';
 
@@ -27,7 +26,6 @@ export function MangaPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <MangaSocialBar />
       <Header />
 
       <main className="container mx-auto px-4 py-8">
@@ -63,7 +61,7 @@ export function MangaPageContent() {
                 <TrendingUp className="w-6 h-6 text-amber-500" />
                 <h2 className="text-2xl font-bold text-white">Trending Now</h2>
               </div>
-              <MangaGrid manga={trendingManga} isLoading={isTrendingLoading} adSlot />
+              <MangaGrid manga={trendingManga} isLoading={isTrendingLoading} />
             </section>
 
             <section className="mb-12">

@@ -6,51 +6,8 @@ import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
-import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
-import { AdFreeLoginBanner } from '@/components/ads/AdFreeLoginBanner';
-import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-function TrendingNowHeader() {
-  const stripAllowed = useReserveAdSlot('home_trending_320', true);
-  const [dismissed, setDismissed] = useState(false);
-  const showStrip = !dismissed && stripAllowed;
-
-  return (
-    <div className="mb-6">
-      <div
-        className={cn(
-          'flex',
-          showStrip
-            ? 'flex-col sm:flex-row sm:items-center sm:justify-between'
-            : 'items-center'
-        )}
-      >
-        {showStrip && (
-          <AdsterraBanner
-            placement="home_trending_320"
-            variant="strip"
-            size="320x50"
-            dismissible
-            onDismiss={() => setDismissed(true)}
-            className="order-1 h-[50px] sm:order-2"
-          />
-        )}
-        <div
-          className={cn(
-            'flex items-center gap-2',
-            showStrip && 'order-2 sm:order-1'
-          )}
-        >
-          <TrendingUp className="h-6 w-6 text-blue-500" />
-          <h2 className="text-2xl font-bold text-white">Trending Now</h2>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function useSlowLoad(isLoading: boolean, isFetching: boolean, resetKey?: string) {
   const [slowLoad, setSlowLoad] = useState(false);
@@ -96,7 +53,6 @@ export default function Home() {
 
       <main className="container mx-auto px-4 py-4">
         <section className="mb-4 sm:mb-6">
-          <AdFreeLoginBanner />
           <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
             Anime Village – Watch Anime Online Free
           </h1>
@@ -112,7 +68,10 @@ export default function Home() {
         />
 
         <section className="mb-12">
-          <TrendingNowHeader />
+          <div className="mb-6 flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-blue-500" />
+            <h2 className="text-2xl font-bold text-white">Trending Now</h2>
+          </div>
           <AnimeGrid
             anime={trendingAnime}
             isLoading={isTrendingLoading}
@@ -120,7 +79,6 @@ export default function Home() {
             errorMessage={trendingError instanceof Error ? trendingError.message : undefined}
             onRetry={() => refetchTrending()}
             slowLoad={trendingSlow}
-            adSlot
           />
         </section>
 

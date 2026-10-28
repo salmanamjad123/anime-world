@@ -29,7 +29,6 @@ import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
-import { AdsterraNative } from '@/components/ads/AdsterraNative';
 
 export function WatchPage() {
   const params = useParams();
@@ -509,9 +508,6 @@ export function WatchPage() {
                 </div>
               </div>
             </div>
-
-            <AdsterraNative />
-
             {/* Episode Description */}
             {currentEpisode?.description && (
               <div className="mt-4 sm:mt-6 bg-gray-800/50 rounded-lg p-4 sm:p-6">

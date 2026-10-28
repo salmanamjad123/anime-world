@@ -13,7 +13,7 @@ export default async function Image() {
     (
       <div
         style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+          background: 'linear-gradient(145deg, #050506 0%, #1a0a10 45%, #08080a 100%)',
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -36,7 +36,7 @@ export default async function Image() {
         <div
           style={{
             fontSize: 28,
-            color: '#94a3b8',
+            color: '#fb7185',
             marginBottom: 24,
           }}
         >
@@ -45,7 +45,7 @@ export default async function Image() {
         <div
           style={{
             fontSize: 20,
-            color: '#64748b',
+            color: '#a1a1aa',
           }}
         >
           One Piece • Naruto • JJK • Demon Slayer • 10000+ anime

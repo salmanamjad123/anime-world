@@ -23,8 +23,6 @@ import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-r
 import { useState, useEffect, useRef } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
-import { AnimeSynopsisAd } from '@/components/ads/AnimeSynopsisAd';
-import { AnimeSocialBar } from '@/components/ads/MangaSocialBar';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
 
 export default function AnimeDetailPage() {
@@ -164,7 +162,6 @@ export default function AnimeDetailPage() {
   if (isAnimeLoading && !anime) {
     return (
       <>
-        <AnimeSocialBar />
         <AnimeDetailSkeleton slowLoad={slowLoad} onRetry={() => refetchAnime()} />
       </>
     );
@@ -173,7 +170,6 @@ export default function AnimeDetailPage() {
   if (isAnimeError && !anime) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <AnimeSocialBar />
         <Header />
         <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] px-4 text-center">
           <h1 className="text-2xl font-bold text-white mb-2">Couldn&apos;t load anime</h1>
@@ -199,7 +195,6 @@ export default function AnimeDetailPage() {
   if (!anime) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <AnimeSocialBar />
         <Header />
         <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
           <div className="text-center">
@@ -253,7 +248,6 @@ export default function AnimeDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <AnimeSocialBar />
       <AnimeSlugUrlSync slug={anime.slug} />
       <Header />
 
@@ -559,7 +553,6 @@ export default function AnimeDetailPage() {
 
           {/* Sidebar: Synopsis at top, then Studios & Status */}
           <div className="space-y-4 md:space-y-6">
-            <AnimeSynopsisAd />
             {/* Synopsis (accordion: 3 lines by default, expand to see full) */}
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button

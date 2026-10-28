@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #111827;
-  --foreground: #f9fafb;
+  --background: #08080a;
+  --foreground: #f5f5f5;
+  --brand: #e11d48;
+  --brand-hover: #be123c;
+  --brand-soft: #f43f5e;
 }
 
 @theme inline {
@@ -10,11 +13,42 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Brand: remap blue → crimson (anime + shared UI keep blue-* class names) */
+  --color-blue-50: #fff1f2;
+  --color-blue-100: #ffe4e6;
+  --color-blue-200: #fecdd3;
+  --color-blue-300: #fda4af;
+  --color-blue-400: #fb7185;
+  --color-blue-500: #f43f5e;
+  --color-blue-600: #e11d48;
+  --color-blue-700: #be123c;
+  --color-blue-800: #9f1239;
+  --color-blue-900: #881337;
+  --color-blue-950: #4c0519;
+
+  /* Manga amber → same crimson family for one brand */
+  --color-amber-50: #fff1f2;
+  --color-amber-100: #ffe4e6;
+  --color-amber-200: #fecdd3;
+  --color-amber-300: #fda4af;
+  --color-amber-400: #fb7185;
+  --color-amber-500: #f43f5e;
+  --color-amber-600: #e11d48;
+  --color-amber-700: #be123c;
+  --color-amber-800: #9f1239;
+  --color-amber-900: #881337;
+  --color-amber-950: #4c0519;
+
+  /* Deeper blacks for surfaces */
+  --color-gray-800: #1c1c20;
+  --color-gray-900: #0e0e11;
+  --color-gray-950: #050506;
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #050506;
+  --foreground: #f5f5f5;
 }
 
 body {
@@ -39,16 +73,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #0e0e11;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: #3f3f46;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #e11d48;
 }
 
 /* Loading Animation */
@@ -63,7 +97,7 @@ body {
 
 .animate-shimmer {
   animation: shimmer 2s infinite linear;
-  background: linear-gradient(to right, #374151 0%, #4b5563 50%, #374151 100%);
+  background: linear-gradient(to right, #1c1c20 0%, #2a2a30 50%, #1c1c20 100%);
   background-size: 1000px 100%;
 }
 
@@ -116,9 +150,9 @@ video.video-subtitles::-webkit-media-text-track-container {
   border-radius: 0;
   background: linear-gradient(
       to right,
-      #6c717b 0,
-      #6c717b var(--slider-fill, 50%),
-      #454a52 var(--slider-fill, 50%) 100%
+      #e11d48 0,
+      #e11d48 var(--slider-fill, 50%),
+      #3f3f46 var(--slider-fill, 50%) 100%
     )
     0 50% / 100% 4px no-repeat;
   transition: background 0.12s ease-out;
@@ -131,9 +165,9 @@ video.video-subtitles::-webkit-media-text-track-container {
   height: 14px;
   margin-top: 5px;
   border-radius: 50%;
-  background: #4a90e2;
+  background: #f43f5e;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
   transition: transform 0.08s ease-out, box-shadow 0.12s ease;
 }
 .subtitle-position-slider::-webkit-slider-thumb:hover {
@@ -147,17 +181,17 @@ video.video-subtitles::-webkit-media-text-track-container {
 .subtitle-position-slider::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: #454a52;
+  background: #3f3f46;
   transition: background 0.12s ease-out;
 }
 .subtitle-position-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #4a90e2;
+  background: #f43f5e;
   border: 0;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
   transition: transform 0.08s ease-out, box-shadow 0.12s ease;
 }
 .subtitle-position-slider::-moz-range-thumb:hover {

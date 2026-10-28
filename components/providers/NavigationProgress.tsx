@@ -94,7 +94,7 @@ export function NavigationProgress() {
     >
       <div
         className={cn(
-          'h-full w-[35%] bg-gradient-to-r from-transparent via-blue-800 to-blue-600 shadow-[0_0_8px_rgba(29,78,216,0.55)]',
+          'h-full w-[35%] bg-gradient-to-r from-transparent via-rose-800 to-rose-600 shadow-[0_0_10px_rgba(225,29,72,0.5)]',
           pending && 'animate-[nav-progress_2.2s_ease-in-out_infinite]'
         )}
       />

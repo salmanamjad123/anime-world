@@ -13,8 +13,6 @@ import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
 import { getPreferredTitle, stripHtml, getScoreColor, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { BookOpen, Star, ChevronDown, ArrowLeft, Plus, Bookmark } from 'lucide-react';
-import { MangaSynopsisAd } from '@/components/ads/MangaSynopsisAd';
-import { MangaSocialBar } from '@/components/ads/MangaSocialBar';
 import { useState, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
@@ -107,7 +105,6 @@ export default function MangaDetailPage() {
   if (isInfoLoading && !manga) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <MangaSocialBar />
         <Header />
         <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-500" />
@@ -119,7 +116,6 @@ export default function MangaDetailPage() {
   if (!manga || isInfoError) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <MangaSocialBar />
         <Header />
         <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
           <div className="text-center">
@@ -196,7 +192,6 @@ export default function MangaDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <MangaSocialBar />
       <Header />
 
       {/* Banner Section */}
@@ -500,7 +495,6 @@ export default function MangaDetailPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
-            <MangaSynopsisAd />
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button
                 type="button"

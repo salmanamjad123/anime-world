@@ -11,7 +11,6 @@ const LINKS: { href: string; label: string; exact?: boolean }[] = [
   { href: ROUTES.ADMIN_AUDITS, label: 'Audits' },
   { href: ROUTES.ADMIN_EMAIL, label: 'Email' },
   { href: ROUTES.ADMIN_GAME_DEMO, label: 'Game demo' },
-  { href: ROUTES.ADMIN_ADS, label: 'Ads' },
 ];
 
 export function AdminNav({ className }: { className?: string }) {
