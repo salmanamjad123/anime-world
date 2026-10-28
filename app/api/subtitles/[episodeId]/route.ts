@@ -25,6 +25,7 @@ import {
   downloadOpenSubtitle,
 } from '@/lib/utils/opensubtitles';
 import { Subtitle } from '@/types/stream';
+import { HIANIME_API_URL } from '@/lib/hianime-url';
 
 interface SubtitleSource {
   lang: string;
@@ -82,7 +83,7 @@ export async function GET(
       
       for (const server of workingServers) {
         try {
-          const hiAnimeUrl = `${process.env.NEXT_PUBLIC_HIANIME_API_URL}/api/v2/hianime/episode/sources`;
+          const hiAnimeUrl = `${HIANIME_API_URL}/api/v2/hianime/episode/sources`;
           const response = await fetch(
             `${hiAnimeUrl}?animeEpisodeId=${episodeId}&server=${server}&category=sub`,
             { 

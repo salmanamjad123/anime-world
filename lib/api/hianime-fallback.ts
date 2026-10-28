@@ -5,10 +5,9 @@
 
 import { axiosInstance } from './axios';
 import { resolveAnimeImageUrl } from '@/lib/utils/image-url';
+import { HIANIME_API_URL } from '@/lib/hianime-url';
 import type { HiAnimeSearchResult } from './hianime';
 import type { Anime, AnimeFormat, AnimeSearchResult } from '@/types';
-
-const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
 /** Keep fallback fast for Vercel serverless limits */
 const FALLBACK_TIMEOUT = 12_000;
 

@@ -11,11 +11,8 @@ export const ANILIST_API_URL =
 export const CONSUMET_API_URL = 
   process.env.NEXT_PUBLIC_CONSUMET_API_URL || 'https://api.consumet.org';
 
-// Streaming API — server-side HIANIME_API_URL overrides public URL when set (Vercel).
-export const HIANIME_API_URL =
-  process.env.HIANIME_API_URL ||
-  process.env.NEXT_PUBLIC_HIANIME_API_URL ||
-  'http://localhost:4000';
+// Streaming catalog URL: import from `@/lib/hianime-url` (server-only). Do not add it here —
+// client hooks import this file for CACHE_DURATIONS and would leak Railway into the JS bundle.
 
 // API Endpoints
 export const API_ENDPOINTS = {

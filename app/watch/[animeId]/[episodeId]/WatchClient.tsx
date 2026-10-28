@@ -373,13 +373,13 @@ export function WatchPage() {
                     The streaming server is temporarily unavailable. Please try again later.
                   </p>
                   <p className="text-gray-400 text-sm mb-6">
-                    Ensure the HiAnime API is running at {process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000'}, or check back when the server is back online.
+                    Please check back shortly, or try again in a moment.
                   </p>
                   <div className="bg-gray-700/50 rounded-lg p-4 mb-6 text-left">
                     <p className="text-gray-300 text-sm mb-2"><strong>What you can do:</strong></p>
                     <ul className="text-gray-400 text-sm space-y-1">
-                      <li>• Ensure HiAnime API is running at the configured URL</li>
                       <li>• Refresh the page and try again</li>
+                      <li>• Try a different episode or server</li>
                       <li>• Go back and try a different anime</li>
                     </ul>
                   </div>

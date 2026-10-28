@@ -4,10 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-
-const HIANIME_URL =
-  process.env.NEXT_PUBLIC_HIANIME_API_URL ||
-  'https://aniwatch-api-production-d3be.up.railway.app';
+import { HIANIME_API_URL } from '@/lib/hianime-url';
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -17,7 +14,7 @@ export async function GET(request: Request) {
 
   try {
     // Use /health (lightweight) - /home scrapes and can timeout
-    const res = await fetch(`${HIANIME_URL}/health`, {
+    const res = await fetch(`${HIANIME_API_URL}/health`, {
       signal: AbortSignal.timeout(15000),
     });
     return NextResponse.json({

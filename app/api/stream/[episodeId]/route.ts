@@ -9,7 +9,6 @@
 import { NextRequest } from 'next/server';
 import { getHiAnimeStreamSources } from '@/lib/api/hianime';
 import { getStreamCached } from '@/lib/api/stream-cache';
-import { HIANIME_API_URL } from '@/constants/api';
 import { retry } from '@/lib/utils/retry';
 import { cachedJson, uncachedJson } from '@/lib/http-cache';
 
@@ -114,7 +113,7 @@ export async function GET(
       console.error('💡 Solutions:');
       console.error('   1. Try a different server (hd-1, hd-2, megacloud)');
       console.error('   2. Verify the anime exists on hianime.to');
-      console.error('   3. Check HiAnime API at', HIANIME_API_URL);
+      console.error('   3. Check streaming catalog API (HIANIME_API_URL)');
       console.error('═══════════════════════════════════════════════');
     }
     
@@ -124,8 +123,8 @@ export async function GET(
         message: 'The streaming server is temporarily unavailable. Please try again later.',
         episodeId,
         suggestions: [
-          `Ensure HiAnime API is running at ${HIANIME_API_URL}`,
           'Refresh the page and try again',
+          'Try a different server (hd-1, hd-2)',
         ],
       },
       503

@@ -9,10 +9,8 @@ import { axiosInstance } from './axios';
 import type { Episode, EpisodeListResponse, StreamSourcesResponse } from '@/types';
 import { getCached, CACHE_TTL } from '@/lib/cache';
 import { retry } from '@/lib/utils/retry';
+import { HIANIME_API_URL } from '@/lib/hianime-url';
 import { getAzListForLetter } from './az-list';
-
-// HiAnime API base URL (default to localhost, override via env)
-const HIANIME_API_URL = process.env.NEXT_PUBLIC_HIANIME_API_URL || 'http://localhost:4000';
 
 // Railway cold start + scraping can take 15-25s. Use 28s to stay under proxy timeout.
 const HIANIME_TIMEOUT = 28000;

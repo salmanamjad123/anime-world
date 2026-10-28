@@ -32,27 +32,23 @@ function useLocalMediaProxy(): boolean {
     const host = window.location.hostname;
     return host === 'localhost' || host === '127.0.0.1';
   }
-  const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL || '';
-  return isLocalHost(hianimeUrl) || isLocalHost(explicit);
+  return isLocalHost(explicit);
 }
 
 /**
  * HLS proxy. Worker wins whenever NEXT_PUBLIC_PROXY_URL is workers.dev
  * (including localhost). Local streaming-api proxy is 429-prone.
- * Never animevillage.org/api/proxy.
+ * Never animevillage.org/api/proxy. Never expose Railway in the client.
  */
 export function getHlsProxyBase(): string {
-  const hianimeUrl = process.env.NEXT_PUBLIC_HIANIME_API_URL || '';
   const explicit = process.env.NEXT_PUBLIC_PROXY_URL?.replace(/\/$/, '') || '';
 
   if (explicit && isCloudflareWorkerProxy(explicit)) return explicit;
 
   if (useLocalMediaProxy()) {
     if (explicit && isLocalHost(explicit)) return explicit;
-    if (isLocalHost(hianimeUrl)) {
-      return `${hianimeUrl.replace(/\/$/, '')}/api/v2/proxy`;
-    }
+    return 'http://localhost:4000/api/v2/proxy';
   }
 
   return DEFAULT_WORKER_PROXY;

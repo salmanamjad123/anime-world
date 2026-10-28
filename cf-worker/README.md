@@ -6,18 +6,19 @@ Moves **video and manga image egress** off Vercel and Railway. Keep Railway for 
 Browser  →  CF Worker /proxy  →  CDN (m3u8 + .ts)
 Browser  →  CF Worker /image  →  CDN (manga pages, locked posters)
 Browser  →  CF Worker /subtitles  →  VTT (ASS/SRT converted)
-Browser  →  Railway streaming-api  →  catalog JSON only
+Browser  →  Vercel /api/*  →  Railway streaming-api (catalog JSON only; URL not public)
 Browser  →  Vercel  →  website HTML/JS only
 ```
 
 **Preferred production env:**
 
 ```env
-NEXT_PUBLIC_HIANIME_API_URL=https://streaming-api-july-production.up.railway.app
+HIANIME_API_URL=https://streaming-api-july-production.up.railway.app
 NEXT_PUBLIC_PROXY_URL=https://anime-world-proxy.animevillage-proxy.workers.dev/proxy
 NEXT_PUBLIC_USE_PROXY=true
 ```
 
+Do **not** set `NEXT_PUBLIC_HIANIME_API_URL` in production (leaks Railway to browsers).
 Do **not** set `NEXT_PUBLIC_PROXY_URL` to `animevillage.org/api/proxy` or Railway `/api/v2/proxy`.
 
 ## 1. Deploy the Worker
@@ -40,16 +41,16 @@ Smoke test:
 
 | Name | Value |
 |------|--------|
-| `NEXT_PUBLIC_HIANIME_API_URL` | Railway catalog API |
+| `HIANIME_API_URL` | Railway catalog API (**server-only**, not `NEXT_PUBLIC_`) |
 | `NEXT_PUBLIC_PROXY_URL` | `https://anime-world-proxy.<subdomain>.workers.dev/proxy` |
 | `NEXT_PUBLIC_USE_PROXY` | `true` |
 
-`NEXT_PUBLIC_*` requires a **redeploy**.
+Remove `NEXT_PUBLIC_HIANIME_API_URL` if present. `NEXT_PUBLIC_*` changes need a **redeploy**.
 
 ### Local
 
 ```env
-NEXT_PUBLIC_HIANIME_API_URL=http://localhost:4000
+HIANIME_API_URL=http://localhost:4000
 NEXT_PUBLIC_PROXY_URL=http://localhost:4000/api/v2/proxy
 NEXT_PUBLIC_USE_PROXY=true
 ```
