@@ -10,8 +10,40 @@ import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { AdFreeLoginBanner } from '@/components/ads/AdFreeLoginBanner';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
+import { useShowMirrorLink } from '@/hooks/useSiteGeneralSettings';
+import { MIRROR_SITE_LABEL, MIRROR_SITE_URL } from '@/constants/site';
 import { TrendingUp, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+function HomeIntro() {
+  const { show: showMirror } = useShowMirrorLink();
+
+  return (
+    <>
+      <h1 className="text-base sm:text-lg font-semibold text-gray-300 mb-1">
+        Anime Village – Watch Anime Online Free
+      </h1>
+      <p className="text-gray-500 text-[11px] sm:text-xs max-w-xl leading-relaxed">
+        Stream anime free with English sub &amp; dub.
+        {showMirror && (
+          <>
+            {' '}
+            Also at{' '}
+            <a
+              href={MIRROR_SITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              {MIRROR_SITE_LABEL}
+            </a>
+            .
+          </>
+        )}
+      </p>
+    </>
+  );
+}
 
 function TrendingNowHeader() {
   const stripAllowed = useReserveAdSlot('home_trending_320', true);
@@ -97,12 +129,7 @@ export default function Home() {
       <main className="container mx-auto px-4 py-4">
         <section className="mb-4 sm:mb-6">
           <AdFreeLoginBanner />
-          <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
-            Anime Village – Watch Anime Online Free
-          </h1>
-          <p className="text-gray-500 text-xs sm:text-sm max-w-2xl">
-            Anime Village is a free place to watch anime online. Stream thousands of series in English sub and dub.
-          </p>
+          <HomeIntro />
         </section>
 
         <SpotlightSlider

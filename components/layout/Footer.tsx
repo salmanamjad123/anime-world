@@ -6,7 +6,13 @@ import { Instagram } from 'lucide-react';
 import { ROUTES, AZ_LETTERS } from '@/constants/routes';
 import { genreToSlug } from '@/lib/utils/genre-slug';
 import { cn } from '@/lib/utils';
-import { SOCIAL_INSTAGRAM_URL, SOCIAL_TIKTOK_URL } from '@/constants/site';
+import {
+  MIRROR_SITE_LABEL,
+  MIRROR_SITE_URL,
+  SOCIAL_INSTAGRAM_URL,
+  SOCIAL_TIKTOK_URL,
+} from '@/constants/site';
+import { useShowMirrorLink } from '@/hooks/useSiteGeneralSettings';
 
 const POPULAR_GENRES = ['Action', 'Romance', 'Comedy', 'Isekai', 'Shounen', 'Fantasy', 'Drama', 'Adventure', 'Sports', 'Mystery'];
 
@@ -25,6 +31,7 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export function Footer() {
   const pathname = usePathname();
+  const { show: showMirror } = useShowMirrorLink();
   if (pathname.startsWith('/game')) return null;
   const isManga = pathname.startsWith('/manga');
   const match = pathname.match(/^\/anime\/az\/([^/]+)$/);
@@ -118,6 +125,19 @@ export function Footer() {
               <TikTokIcon className="h-5 w-5" />
             </a>
           </div>
+          {showMirror && (
+            <p className="mt-3 text-xs text-gray-500">
+              Also available at{' '}
+              <a
+                href={MIRROR_SITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                {MIRROR_SITE_LABEL}
+              </a>
+            </p>
+          )}
           <p className="mt-3 text-xs text-gray-600">2026 Anime Village. All rights reserved.</p>
         </div>
       </div>

@@ -20,3 +20,8 @@ export const SOCIAL_INSTAGRAM_URL =
   'https://www.instagram.com/animevillage_org/';
 export const SOCIAL_TIKTOK_URL = 'https://www.tiktok.com/@animevillage.org';
 export const SOCIAL_LINKS = [SOCIAL_INSTAGRAM_URL, SOCIAL_TIKTOK_URL] as const;
+
+/** Mirror / alternate site (admin can hide links site-wide) */
+export const MIRROR_SITE_URL = 'https://www.animevillage.my';
+export const MIRROR_SITE_LABEL = 'animevillage.my';
+
