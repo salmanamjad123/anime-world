@@ -125,7 +125,7 @@ export async function generateMetadata({
     anime?.bannerImage ||
     anime?.coverImage?.extraLarge ||
     anime?.coverImage?.large ||
-    `${SITE_URL}/opengraph-image`;
+    `${SITE_URL}/opengraph-image.jpeg`;
 
   const titleVariants = anime
     ? [anime.title.english, anime.title.romaji, anime.title.native].filter(

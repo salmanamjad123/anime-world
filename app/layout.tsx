@@ -112,10 +112,10 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: [
       {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: `${SITE_NAME} — watch anime online free with English sub and dub`,
+        url: "/opengraph-image.jpeg",
+        width: 1376,
+        height: 768,
+        alt: `${SITE_NAME} — Watch Your Favorite Anime`,
       },
     ],
   },
@@ -123,6 +123,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: SITE_TITLE_DEFAULT,
     description: SITE_DESCRIPTION,
+    images: ["/twitter-image.jpeg"],
   },
   robots: {
     index: true,
