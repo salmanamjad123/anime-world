@@ -4,6 +4,8 @@
  * For production, consider using Redis-based rate limiting
  */
 
+import { NextResponse } from 'next/server';
+
 interface RateLimitEntry {
   count: number;
   resetTime: number;
@@ -59,6 +61,34 @@ export const rateLimiter = new RateLimiter(
   parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
   parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000')
 );
+
+/** Hot public APIs — always on; generous for viewers, blocks scrape bursts. */
+export const catalogRateLimiter = new RateLimiter(120, 60_000);
+export const streamRateLimiter = new RateLimiter(60, 60_000);
+
+/** Returns a 429 response when over limit; otherwise null. */
+export function rejectIfRateLimited(
+  request: Request,
+  limiter: RateLimiter = rateLimiter,
+  keyPrefix = 'api'
+): NextResponse | null {
+  const clientId = `${keyPrefix}:${getClientIdentifier(request)}`;
+  const { allowed, remaining, resetTime } = limiter.check(clientId);
+  if (allowed) return null;
+  return NextResponse.json(
+    { error: 'Too many requests. Please try again later.' },
+    {
+      status: 429,
+      headers: {
+        'Cache-Control': 'private, no-store',
+        'CDN-Cache-Control': 'no-store',
+        'X-RateLimit-Remaining': String(remaining),
+        'X-RateLimit-Reset': new Date(resetTime).toISOString(),
+        'Retry-After': Math.ceil((resetTime - Date.now()) / 1000).toString(),
+      },
+    }
+  );
+}
 
 // Auth routes: stricter limits per IP
 const AUTH_FORGOT_PASSWORD_LIMIT = 3;

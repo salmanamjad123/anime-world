@@ -23,24 +23,30 @@ function HomeIntro() {
       <h1 className="text-base sm:text-lg font-semibold text-gray-300 mb-1">
         Anime Village – Watch Anime Online Free
       </h1>
-      <p className="text-gray-500 text-[11px] sm:text-xs max-w-xl leading-relaxed">
-        Stream anime free with English sub &amp; dub.
-        {showMirror && (
-          <>
-            {' '}
-            Also at{' '}
-            <a
-              href={MIRROR_SITE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              {MIRROR_SITE_LABEL}
-            </a>
-            .
-          </>
-        )}
-      </p>
+      {showMirror ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3">
+          <a
+            href={MIRROR_SITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm sm:text-base font-semibold text-red-400 hover:text-red-300 underline underline-offset-[3px] decoration-2 transition-colors"
+          >
+            Watch ad-free here
+          </a>
+          <a
+            href={MIRROR_SITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm sm:text-base text-gray-400 hover:text-gray-300 underline underline-offset-2 transition-colors"
+          >
+            {MIRROR_SITE_LABEL}
+          </a>
+        </div>
+      ) : (
+        <p className="text-gray-500 text-[11px] sm:text-xs max-w-xl leading-relaxed">
+          Stream anime free with English sub &amp; dub.
+        </p>
+      )}
     </>
   );
 }

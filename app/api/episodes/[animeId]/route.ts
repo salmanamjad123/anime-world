@@ -14,6 +14,7 @@ import { getAnimeById } from '@/lib/api/anilist';
 import { getHiAnimeEpisodesStandard } from '@/lib/api/hianime';
 import { saveEpisodesToFirestoreBackground } from '@/lib/api/episode-cache';
 import { resolveAnilistIdFromSegment } from '@/lib/seo/anime-slug';
+import { catalogRateLimiter, rejectIfRateLimited } from '@/lib/utils/rate-limiter';
 
 /** Full lists: 60s CDN. Empty: 5s so a bad scrape does not stick. */
 function episodesJson(result: EpisodeListResponse, unreleased = false) {
@@ -30,6 +31,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ animeId: string }> }
 ) {
+  const limited = rejectIfRateLimited(request, catalogRateLimiter, 'episodes');
+  if (limited) return limited;
+
   try {
     const { animeId } = await params;
     const searchParams = request.nextUrl.searchParams;

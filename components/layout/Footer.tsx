@@ -7,7 +7,6 @@ import { ROUTES, AZ_LETTERS } from '@/constants/routes';
 import { genreToSlug } from '@/lib/utils/genre-slug';
 import { cn } from '@/lib/utils';
 import {
-  MIRROR_SITE_LABEL,
   MIRROR_SITE_URL,
   SOCIAL_INSTAGRAM_URL,
   SOCIAL_TIKTOK_URL,
@@ -126,15 +125,14 @@ export function Footer() {
             </a>
           </div>
           {showMirror && (
-            <p className="mt-3 text-xs text-gray-500">
-              Also available at{' '}
+            <p className="mt-3">
               <a
                 href={MIRROR_SITE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
+                className="text-sm font-semibold text-red-400 hover:text-red-300 underline underline-offset-2 transition-colors"
               >
-                {MIRROR_SITE_LABEL}
+                Watch ad-free here
               </a>
             </p>
           )}

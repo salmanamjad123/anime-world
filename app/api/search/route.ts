@@ -12,10 +12,14 @@ import {
   warmAnimeSlugsInBackground,
 } from '@/lib/seo/enrich-slugs';
 import type { AnimeFilters, AnimeSearchResult } from '@/types';
+import { catalogRateLimiter, rejectIfRateLimited } from '@/lib/utils/rate-limiter';
 
 export const maxDuration = 12;
 
 export async function GET(request: NextRequest) {
+  const limited = rejectIfRateLimited(request, catalogRateLimiter, 'search');
+  if (limited) return limited;
+
   const searchParams = request.nextUrl.searchParams;
 
   const filters: AnimeFilters = {

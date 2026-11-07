@@ -10,7 +10,7 @@ import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
-import { useEpisodes, useEpisodesForSeasons, useAnimeInfo } from '@/hooks/useEpisodes';
+import { useEpisodes, useAnimeInfo } from '@/hooks/useEpisodes';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
@@ -73,7 +73,6 @@ export default function AnimeDetailPage() {
     refetch: refetchEpisodes,
   } = useEpisodes(animeReady ? selectedSeasonId : null, selectedLanguage === 'dub');
   const { data: animeInfo } = useAnimeInfo(animeReady ? selectedSeasonId : null);
-  const seasonEpisodeCounts = useEpisodesForSeasons(seasons, selectedLanguage === 'dub');
 
   // Fetch seasons and movies
   useEffect(() => {
@@ -247,9 +246,9 @@ export default function AnimeDetailPage() {
     }
   };
 
+  // AniList season.episodes for badges — selected season uses the live /api/episodes list.
   const selectedEpisodeCount =
-    seasonEpisodeCounts[selectedSeasonId] ??
-    (!isEpisodesLoading && !isEpisodesError ? episodes.length : null);
+    !isEpisodesLoading && !isEpisodesError ? episodes.length : null;
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -404,7 +403,11 @@ export default function AnimeDetailPage() {
                     <div className="flex flex-wrap gap-2">
                       {seasons.map((season, index) => {
                         const isSelected = String(selectedSeasonId) === String(season.id);
-                        const displayCount = seasonEpisodeCounts[season.id];
+                        const displayCount = isSelected
+                          ? selectedEpisodeCount
+                          : typeof season.episodes === 'number'
+                            ? season.episodes
+                            : null;
                         return (
                           <Button
                             key={season.id}
