@@ -11,6 +11,7 @@ import {
   SOCIAL_INSTAGRAM_URL,
   SOCIAL_TIKTOK_URL,
 } from '@/constants/site';
+import { IS_GAME_ARENA_ONLY } from '@/constants/site-mode';
 import { useShowMirrorLink } from '@/hooks/useSiteGeneralSettings';
 
 const POPULAR_GENRES = ['Action', 'Romance', 'Comedy', 'Isekai', 'Shounen', 'Fantasy', 'Drama', 'Adventure', 'Sports', 'Mystery'];
@@ -31,7 +32,7 @@ function TikTokIcon({ className }: { className?: string }) {
 export function Footer() {
   const pathname = usePathname();
   const { show: showMirror } = useShowMirrorLink();
-  if (pathname.startsWith('/game')) return null;
+  if (IS_GAME_ARENA_ONLY || pathname.startsWith('/game')) return null;
   const isManga = pathname.startsWith('/manga');
   const match = pathname.match(/^\/anime\/az\/([^/]+)$/);
   const activeLetter = match ? decodeURIComponent(match[1]).toLowerCase() : null;

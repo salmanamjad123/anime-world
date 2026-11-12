@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, BookOpen, Swords } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 import { GENRES } from '@/constants/genres';
+import { IS_GAME_ARENA_ONLY } from '@/constants/site-mode';
 
 export type SidebarTab = 'anime' | 'manga' | 'game';
 
@@ -51,14 +52,25 @@ const GAME_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.Componen
   { label: 'Manga', href: ROUTES.MANGA, icon: BookOpen },
 ];
 
+const ARENA_ONLY_NAV_ITEMS: Array<{ label: string; href: string; icon?: React.ComponentType<{ className?: string }> }> = [
+  { label: 'Arena', href: ROUTES.HOME, icon: Swords },
+  { label: 'Profile', href: ROUTES.PROFILE },
+];
+
 export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = false }: Props) {
   const pathname = usePathname();
 
-  const baseItems =
-    activeTab === 'manga' ? MANGA_NAV_ITEMS : activeTab === 'game' ? GAME_NAV_ITEMS : ANIME_NAV_ITEMS;
-  const navItems = showGameTab
-    ? baseItems
-    : baseItems.filter((item) => item.href !== ROUTES.GAME);
+  const baseItems = IS_GAME_ARENA_ONLY
+    ? ARENA_ONLY_NAV_ITEMS
+    : activeTab === 'manga'
+      ? MANGA_NAV_ITEMS
+      : activeTab === 'game'
+        ? GAME_NAV_ITEMS
+        : ANIME_NAV_ITEMS;
+  const navItems =
+    IS_GAME_ARENA_ONLY || showGameTab
+      ? baseItems
+      : baseItems.filter((item) => item.href !== ROUTES.GAME);
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -130,9 +142,12 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = fa
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isMangaLink = item.href === ROUTES.MANGA;
-                  const isGameLink = item.href === ROUTES.GAME;
+                  const isGameLink =
+                    item.href === ROUTES.GAME ||
+                    (IS_GAME_ARENA_ONLY && item.label === 'Arena');
                   const isActive =
-                    (isMangaLink && activeTab === 'manga') || (isGameLink && activeTab === 'game');
+                    (isMangaLink && activeTab === 'manga') ||
+                    (isGameLink && (activeTab === 'game' || IS_GAME_ARENA_ONLY));
                   return (
                     <Link
                       key={item.href}
@@ -154,7 +169,7 @@ export function Sidebar({ isOpen, onClose, activeTab = 'anime', showGameTab = fa
               </nav>
 
               {/* Genre section - anime genres or manga genres based on context */}
-              {activeTab !== 'game' && (
+              {!IS_GAME_ARENA_ONLY && activeTab !== 'game' && (
               <div className="mt-6">
                 <h3 className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Genre

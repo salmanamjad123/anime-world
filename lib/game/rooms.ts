@@ -89,6 +89,19 @@ export function normalizeGateCode(raw: string): string {
   return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }
 
+/** Shareable invite for Private Gate (lobby deep-links via ?room=CODE). */
+export function privateGateInviteUrl(code: string, origin?: string): string {
+  const normalized = normalizeGateCode(code);
+  const base =
+    origin ??
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  return `${base}/?room=${encodeURIComponent(normalized)}`;
+}
+
+export function roomTtlSecondsLeft(room: Pick<ArenaRoom, 'expiresAt'>, now = Date.now()): number {
+  return Math.max(0, Math.ceil((room.expiresAt - now) / 1000));
+}
+
 function storageKey(code: string): string {
   return `va-room-${code}`;
 }

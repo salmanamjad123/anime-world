@@ -24,6 +24,7 @@ import { compactSearchText } from '@/lib/search-query';
 import { cn } from '@/lib/utils';
 import type { Anime, Manga } from '@/types';
 import { canAccessGameDemo } from '@/lib/game-demo-access';
+import { IS_GAME_ARENA_ONLY } from '@/constants/site-mode';
 import { Sidebar, type SidebarTab } from './Sidebar';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchAnimeDetail, seedAnimeDetail } from '@/hooks/useAnime';
@@ -94,24 +95,36 @@ export function Header() {
   const HEADER_BORDER_PX = 1;
 
   const { user } = useUserStore();
-  const showGameTab = canAccessGameDemo(user);
+  const showGameTab = IS_GAME_ARENA_ONLY || canAccessGameDemo(user);
 
-  const activeTab: ActiveTab =
-    showGameTab && pathname.startsWith('/game')
+  const activeTab: ActiveTab = IS_GAME_ARENA_ONLY
+    ? 'game'
+    : showGameTab && pathname.startsWith('/game')
       ? 'game'
       : pathname.startsWith('/manga')
         ? 'manga'
         : 'anime';
-  const isGameBattlePage = showGameTab && pathname.startsWith('/game/battle');
+  const isGameBattlePage =
+    (showGameTab || IS_GAME_ARENA_ONLY) && pathname.startsWith('/game/battle');
   // Hide sticky chrome only on manga reader + game battle (watch keeps the header)
   const isReaderPage = pathname.includes('/read');
   const hideChrome = isGameBattlePage;
-  const hideSearch = activeTab === 'game';
+  const hideSearch = IS_GAME_ARENA_ONLY || activeTab === 'game';
   // Mobile: Anime/Manga toggle only on section homes (not detail/search/profile/watch)
   const showMobileSectionTabs =
-    !isReaderPage && !hideChrome && (pathname === ROUTES.HOME || pathname === ROUTES.MANGA);
-  const profileLinks =
-    activeTab === 'manga'
+    !IS_GAME_ARENA_ONLY &&
+    !isReaderPage &&
+    !hideChrome &&
+    (pathname === ROUTES.HOME || pathname === ROUTES.MANGA);
+  const profileLinks = IS_GAME_ARENA_ONLY
+    ? {
+        profile: ROUTES.PROFILE,
+        continue: ROUTES.HOME,
+        list: ROUTES.HOME,
+        continueLabel: 'Arena',
+        listLabel: 'Arena',
+      }
+    : activeTab === 'manga'
       ? {
           profile: ROUTES.MANGA_PROFILE,
           continue: ROUTES.MANGA_PROFILE_SECTION('reading'),
@@ -127,7 +140,7 @@ export function Header() {
           listLabel: 'Watch List',
         };
   const debouncedQuery = useDebounce(searchQuery.trim(), 300);
-  const showFilter = activeTab === 'anime';
+  const showFilter = !IS_GAME_ARENA_ONLY && activeTab === 'anime';
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -398,7 +411,8 @@ export function Header() {
     });
   };
 
-  const renderTabToggle = () => (
+  const renderTabToggle = () =>
+    IS_GAME_ARENA_ONLY ? null : (
     <div className="flex items-center rounded-lg bg-gray-800/80 p-0.5 w-full md:w-auto">
       <Link
         href={ROUTES.HOME}
@@ -457,23 +471,25 @@ export function Header() {
               </button>
               <Link
                 href={
-                  activeTab === 'manga'
-                    ? ROUTES.MANGA
-                    : activeTab === 'game'
-                      ? ROUTES.GAME
-                      : ROUTES.HOME
+                  IS_GAME_ARENA_ONLY
+                    ? ROUTES.HOME
+                    : activeTab === 'manga'
+                      ? ROUTES.MANGA
+                      : activeTab === 'game'
+                        ? ROUTES.GAME
+                        : ROUTES.HOME
                 }
                 className="flex-shrink-0 flex items-center"
               >
                 <div className="text-lg sm:text-xl md:text-2xl font-bold whitespace-nowrap">
-                  {activeTab === 'manga' ? (
+                  {IS_GAME_ARENA_ONLY || activeTab === 'game' ? (
+                    <>
+                      <span className="text-orange-500">Village</span>
+                      <span className="text-white"> Arena</span>
+                    </>
+                  ) : activeTab === 'manga' ? (
                     <>
                       <span className="text-amber-500">Manga</span>
-                      <span className="text-white">Village</span>
-                    </>
-                  ) : activeTab === 'game' ? (
-                    <>
-                      <span className="text-orange-500">Game</span>
                       <span className="text-white">Village</span>
                     </>
                   ) : (

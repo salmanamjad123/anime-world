@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Flag, CircleHelp, Copy, Check } from 'lucide-react';
+import { Flag, CircleHelp, Copy, Check, Link2, ScrollText } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { FighterArt } from '@/components/game/FighterArt';
 import { WeaveCost, WeaveBank } from '@/components/game/WeavePips';
@@ -18,9 +18,12 @@ import {
   type ArenaRoom,
   cancelRoom,
   commitTurnWrite,
+  createRoom,
   joinRoom,
   patchMySide,
+  privateGateInviteUrl,
   rememberedSeat,
+  roomTtlSecondsLeft,
   seatFor,
   shouldApplyRemoteMatch,
   subscribeRoom,
@@ -124,6 +127,7 @@ export function BattleSandbox({
   const shadeIds = useGameLobbyStore((s) => s.shadeIds);
   const setShadeIds = useGameLobbyStore((s) => s.setShadeIds);
   const lastMode = useGameLobbyStore((s) => s.lastMode);
+  const startBattle = useGameLobbyStore((s) => s.startBattle);
   const exitToLobby = useGameLobbyStore((s) => s.exitToLobby);
   const { user, isLoading: authLoading } = useUserStore();
   const openAuthModal = useAuthModalStore((s) => s.openAuthModal);
@@ -139,7 +143,11 @@ export function BattleSandbox({
   const [room, setRoom] = useState<ArenaRoom | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [rematchBusy, setRematchBusy] = useState(false);
   const [leavePrompt, setLeavePrompt] = useState(false);
+  const [waitNow, setWaitNow] = useState(() => Date.now());
   const lockingRef = useRef(false);
   const lockEchoRef = useRef<() => void>(() => {});
   const joiningRef = useRef(false);
@@ -177,7 +185,33 @@ export function BattleSandbox({
     if (onExit) onExit();
     else {
       exitToLobby();
-      router.replace(ROUTES.GAME);
+      router.replace(ROUTES.HOME);
+    }
+  };
+
+  const rematchShade = () => {
+    const shade = pickShadeTeam(teamIds, FIGHTERS);
+    setShadeIds(shade.map((fighter) => fighter.id));
+    startBattle({ mode: lastMode === 'ranked' ? 'quick' : lastMode ?? 'quick' });
+  };
+
+  const rematchPrivateHost = async () => {
+    if (!user || teamIds.length !== TEAM_SIZE) {
+      setNotice('Seal 3 fighters before rematch.');
+      return;
+    }
+    setRematchBusy(true);
+    try {
+      const { room: next } = await createRoom({
+        uid: user.uid,
+        name: arenaName(),
+        team: teamIds,
+      });
+      startBattle({ room: next.code, mode: 'private' });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not open a rematch gate.');
+    } finally {
+      setRematchBusy(false);
     }
   };
 
@@ -465,6 +499,23 @@ export function BattleSandbox({
     }
   };
 
+  const copyInviteLink = async () => {
+    if (!roomCode) return;
+    try {
+      await navigator.clipboard.writeText(privateGateInviteUrl(roomCode));
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 1600);
+    } catch {
+      setNotice('Copy failed — share the code instead.');
+    }
+  };
+
+  useEffect(() => {
+    if (!(pvp && room?.status === 'waiting')) return;
+    const id = window.setInterval(() => setWaitNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [pvp, room?.status, room?.code]);
+
   if (pvp && (authLoading || !hydrated)) {
     return (
       <>
@@ -520,6 +571,8 @@ export function BattleSandbox({
   }
 
   if (pvp && room && room.status === 'waiting') {
+    const ttl = roomTtlSecondsLeft(room, waitNow);
+    const ttlLabel = `${Math.floor(ttl / 60)}:${String(ttl % 60).padStart(2, '0')}`;
     return (
       <>
         <Header />
@@ -527,6 +580,10 @@ export function BattleSandbox({
           <p className="text-xs uppercase tracking-[0.3em] text-orange-300">Private Gate</p>
           <h1 className="text-2xl font-black">Waiting for a challenger</h1>
           <p className="font-mono text-4xl font-black tracking-[0.35em] text-amber-200">{room.code}</p>
+          <p className="text-xs uppercase tracking-widest text-amber-100/60">
+            Gate expires in {ttlLabel}
+            {room.transport === 'firestore' ? ' · cloud' : ' · this device'}
+          </p>
           <div className="flex justify-center gap-2">
             {room.hostTeam.map((id) => {
               const fighter = getFighter(id);
@@ -538,17 +595,29 @@ export function BattleSandbox({
               );
             })}
           </div>
-          <button
-            type="button"
-            onClick={copyCode}
-            className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold uppercase tracking-widest"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied' : 'Copy code'}
-          </button>
+          <div className="flex w-full max-w-xs flex-col gap-2">
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-bold uppercase tracking-widest hover:bg-orange-500"
+            >
+              {inviteCopied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+              {inviteCopied ? 'Invite link copied' : 'Copy invite link'}
+            </button>
+            <button
+              type="button"
+              onClick={copyCode}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-400/50 bg-black/40 px-4 py-2 text-sm font-bold uppercase tracking-widest hover:bg-black/60"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Code copied' : 'Copy code only'}
+            </button>
+          </div>
           <p className="max-w-sm text-sm text-amber-100/70">
-            Friend must seal 3 fighters, log in, then Join with this code.
-            {room.transport !== 'firestore' ? ' Local tab mode until Firestore rules are live.' : ''}
+            Send the invite link. Your friend signs in, seals 3 fighters, and the duel starts when they join.
+            {room.transport !== 'firestore'
+              ? ' Cloud sync unavailable — both players must use this browser/device for now.'
+              : ''}
           </p>
           <button
             type="button"
@@ -705,7 +774,8 @@ export function BattleSandbox({
   const opponentTurn =
     match.phase === 'pick' && (match.activeSide ?? 'player') !== mySide && !match.winner;
   const displaySeconds = secondsRemaining(match, clockMs);
-  const timerLabel = `${String(Math.floor(displaySeconds / 10))}${String(displaySeconds % 10)}`;
+  const timerLabel = `${Math.floor(displaySeconds / 60)}:${String(displaySeconds % 60).padStart(2, '0')}`;
+  const recentLog = (match.log ?? []).slice(-10);
   const selectedArt =
     pending?.art ??
     (selected
@@ -830,6 +900,8 @@ export function BattleSandbox({
 
             <div className="flex flex-col items-center gap-0.5">
               <div
+                role="status"
+                aria-live="polite"
                 className={cn(
                   'w-full max-w-md rounded-sm px-2 py-0.5 text-center text-[10px] font-black uppercase tracking-[0.16em]',
                   myTurn && 'bg-red-700 text-white',
@@ -1023,6 +1095,16 @@ export function BattleSandbox({
                     Help
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setLogOpen((open) => !open)}
+                  className="rounded-sm border border-[#5c3d1e] bg-[#3d2914] px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[#f5e6c8] shadow"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <ScrollText className="h-3.5 w-3.5" />
+                    Log
+                  </span>
+                </button>
                 <MusicToggle className="border-[#5c3d1e] bg-[#3d2914]/90 text-[#f5e6c8]" />
               </div>
 
@@ -1108,6 +1190,31 @@ export function BattleSandbox({
           </footer>
         </div>
 
+        {logOpen && (
+          <div className="absolute bottom-28 left-2 right-2 z-20 mx-auto max-w-md rounded-lg border border-amber-200/30 bg-black/90 p-3 shadow-xl sm:left-auto sm:right-4 sm:bottom-32">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-300">Combat log</p>
+              <button type="button" className="text-xs text-amber-200 underline" onClick={() => setLogOpen(false)}>
+                Close
+              </button>
+            </div>
+            <ul className="max-h-40 space-y-1 overflow-y-auto text-left text-[11px] text-amber-100/85">
+              {recentLog.length === 0 ? (
+                <li className="text-amber-100/50">No events yet.</li>
+              ) : (
+                recentLog.map((line, index) => (
+                  <li
+                    key={`${index}-${line.slice(0, 24)}`}
+                    className={cn(index === recentLog.length - 1 && 'font-semibold text-amber-50')}
+                  >
+                    {line}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        )}
+
         {match.winner && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
             <div className="w-full max-w-sm rounded-2xl border border-orange-400/40 bg-[#1c1008] p-6 text-center">
@@ -1122,13 +1229,39 @@ export function BattleSandbox({
                     : 'You surrendered.'
                   : match.log[match.log.length - 1]}
               </p>
-              <button
-                type="button"
-                onClick={() => goLobby()}
-                className="mt-5 w-full rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest hover:bg-orange-500"
-              >
-                Back to scroll
-              </button>
+              <div className="mt-5 flex flex-col gap-2">
+                {!pvp && (
+                  <button
+                    type="button"
+                    onClick={rematchShade}
+                    className="w-full rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest hover:bg-orange-500"
+                  >
+                    Fight again
+                  </button>
+                )}
+                {pvp && rememberedSeat(roomCode ?? '') === 'host' && (
+                  <button
+                    type="button"
+                    disabled={rematchBusy}
+                    onClick={() => void rematchPrivateHost()}
+                    className="w-full rounded-xl bg-orange-600 py-2.5 text-sm font-black uppercase tracking-widest hover:bg-orange-500 disabled:opacity-60"
+                  >
+                    {rematchBusy ? 'Opening…' : 'Rematch (new gate)'}
+                  </button>
+                )}
+                {pvp && rememberedSeat(roomCode ?? '') !== 'host' && (
+                  <p className="text-xs text-amber-100/60">
+                    Host can open a rematch gate — ask them for the new invite.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => goLobby()}
+                  className="w-full rounded-xl border border-amber-200/30 bg-black/40 py-2.5 text-sm font-bold uppercase tracking-widest hover:bg-black/60"
+                >
+                  Back to scroll
+                </button>
+              </div>
             </div>
           </div>
         )}

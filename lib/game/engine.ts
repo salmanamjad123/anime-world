@@ -110,8 +110,8 @@ export const ECHO_SECONDS = 60;
 export const MAX_ECHO = 12;
 /** Max banked Weave. Unused pips never expire — only spend or refuse new grants when full. */
 export const WEAVE_CAP = 10;
-/** ~30% of FIGHTER_HP (160) — bloodied is late-game, not mid-chip. */
-export const BLOODIED_HP = 48;
+/** ~30% of FIGHTER_HP (100) — bloodied is late-game, not mid-chip. */
+export const BLOODIED_HP = 30;
 export const VEIL_COUNTER = 8;
 export const COMBO_BONUS = 3;
 export const FOCUS_BONUS = 4;

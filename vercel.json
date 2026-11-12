@@ -1,63 +1,8 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/social-post",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/purge-audits",
-      "schedule": "15 3 * * *"
-    }
-  ],
+  "crons": [],
   "functions": {
-    "app/api/proxy/route.ts": {
-      "maxDuration": 30
-    },
     "app/api/admin/send-email/route.ts": {
       "maxDuration": 60
-    },
-    "app/api/cron/social-post/route.ts": {
-      "maxDuration": 30
-    },
-    "app/api/cron/purge-audits/route.ts": {
-      "maxDuration": 60
     }
-  },
-  "headers": [
-    {
-      "source": "/api/proxy",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "*"
-        }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "animevillage.org" }],
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=86400, stale-while-revalidate=604800"
-        },
-        {
-          "key": "CDN-Cache-Control",
-          "value": "public, s-maxage=86400, stale-while-revalidate=604800"
-        },
-        {
-          "key": "Cloudflare-CDN-Cache-Control",
-          "value": "public, s-maxage=86400, stale-while-revalidate=604800"
-        }
-      ]
-    }
-  ]
+  }
 }

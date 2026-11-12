@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { NavigationProgress } from "@/components/providers/NavigationProgress";
 import { Footer } from "@/components/layout/Footer";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, SITE_TITLE_DEFAULT, SOCIAL_LINKS } from "@/constants/site";
+import { IS_GAME_ARENA_ONLY } from "@/constants/site-mode";
 import { ALL_SEO_KEYWORDS } from "@/constants/seo";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { HomeSmartlinkTracker } from "@/components/ads/HomeSmartlinkTracker";
@@ -161,31 +162,48 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(WEB_SITE_JSON_LD),
+            __html: JSON.stringify(
+              IS_GAME_ARENA_ONLY
+                ? {
+                    ...WEB_SITE_JSON_LD,
+                    alternateName: ['Village Arena', 'Anime Village Arena'],
+                    potentialAction: undefined,
+                  }
+                : WEB_SITE_JSON_LD
+            ),
           }}
         />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(ORGANIZATION_JSON_LD),
+            __html: JSON.stringify(
+              IS_GAME_ARENA_ONLY
+                ? {
+                    ...ORGANIZATION_JSON_LD,
+                    alternateName: ['Village Arena'],
+                  }
+                : ORGANIZATION_JSON_LD
+            ),
           }}
         />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(FAQ_JSON_LD),
-          }}
-        />
+        {!IS_GAME_ARENA_ONLY && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(FAQ_JSON_LD),
+            }}
+          />
+        )}
         <QueryProvider>
           <ThemeProvider>
             <AuthProvider>
-              <HomeSmartlinkTracker />
+              {!IS_GAME_ARENA_ONLY && <HomeSmartlinkTracker />}
               <Suspense fallback={null}>
                 <NavigationProgress />
               </Suspense>
               <div className="flex min-h-screen flex-col">
                 <main className="flex-1">{children}</main>
-                <Footer />
+                {!IS_GAME_ARENA_ONLY && <Footer />}
               </div>
             </AuthProvider>
           </ThemeProvider>

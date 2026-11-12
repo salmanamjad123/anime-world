@@ -195,7 +195,7 @@ export function MusicToggle({ className }: Props) {
           className="inline-flex items-center gap-1 rounded-md border border-amber-200/30 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-amber-100 hover:bg-black/70"
         >
           {on ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-          {on ? 'Music' : 'Muted'}
+          <span className="max-sm:sr-only">{on ? 'Music' : 'Muted'}</span>
         </button>
         <button
           type="button"
@@ -208,7 +208,7 @@ export function MusicToggle({ className }: Props) {
           className="inline-flex items-center gap-1 rounded-md border border-amber-200/30 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-amber-100 hover:bg-black/70"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
-          Audio
+          <span className="max-sm:sr-only">Audio</span>
         </button>
       </div>
 

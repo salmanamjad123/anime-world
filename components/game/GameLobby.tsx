@@ -129,6 +129,20 @@ export function GameLobby() {
     return unsub;
   }, []);
 
+  // Deep-link: /?room=CODE opens Private Gate join with code filled.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const room = normalizeGateCode(params.get('room') ?? '');
+    if (room.length < 4) return;
+    setPrivateCode(room);
+    setPrivateOpen(true);
+    setNotice(`Invite received — seal ${TEAM_SIZE} fighters, then Join gate ${room}.`);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('room');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  }, []);
+
   useEffect(() => {
     if (!hydrated || !profileHydrated) return;
     if (!hasGameProfile()) {
@@ -163,12 +177,16 @@ export function GameLobby() {
   };
 
   const startMode = (mode: GameMode) => {
+    if (mode === 'ranked') {
+      setNotice('Ranked Forge matchmaking is coming soon. Use Quick Duel (vs Shade) or Private Gate for now.');
+      return;
+    }
     if (!ensureProfile()) return;
     if (!validation.ready) {
       setNotice(validation.reasons[0] ?? `Pick ${TEAM_SIZE} fighters first.`);
       return;
     }
-    if ((mode === 'ranked' || mode === 'private') && !user) {
+    if (mode === 'private' && !user) {
       openAuthModal('login');
       return;
     }
@@ -299,26 +317,40 @@ export function GameLobby() {
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <ModeButton
             label="Ranked Forge"
-            hint="MMR + stars"
+            hint="Matchmaking soon"
             icon={Swords}
             onClick={() => startMode('ranked')}
-            disabled={Boolean(queueMode)}
+            disabled
+            badge="Soon"
           />
           <ModeButton
             label="Quick Duel"
-            hint={user ? 'Human, then Shade' : 'Practice Shade'}
+            hint="Practice vs Shade"
             icon={Zap}
             onClick={() => startMode('quick')}
-            disabled={Boolean(queueMode)}
+            disabled={Boolean(queueMode) || !validation.ready}
+            lockedReason={!validation.ready ? validation.reasons[0] : undefined}
           />
           <ModeButton
             label="Private Gate"
-            hint="Create or join a code"
+            hint="Invite link or code"
             icon={Users}
             onClick={() => startMode('private')}
-            disabled={Boolean(queueMode)}
+            disabled={Boolean(queueMode) || !validation.ready}
+            lockedReason={!validation.ready ? validation.reasons[0] : undefined}
           />
         </div>
+        {!validation.ready && (
+          <p id="game-ready-status" className="mt-2 text-center text-[11px] text-orange-200/80" role="status">
+            Seal {TEAM_SIZE} fighters to unlock Quick Duel and Private Gate
+            {validation.reasons[0] ? ` — ${validation.reasons[0]}` : '.'}
+          </p>
+        )}
+        {validation.ready && (
+          <p id="game-ready-status" className="mt-2 text-center text-[11px] font-semibold text-emerald-400/90" role="status">
+            Team ready — pick a mode
+          </p>
+        )}
 
         <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
           <section className="game-parchment rounded-xl p-3 sm:p-4">
@@ -574,9 +606,9 @@ export function GameLobby() {
                 {queueMode === 'ranked' ? 'Ranked Forge' : queueMode === 'private' ? 'Private Gate' : 'Quick Duel'}
               </p>
               <p className="mt-2 text-sm text-amber-100/70">
-                {queueMode === 'quick' && !user
-                  ? 'No login — pairing you with a Shade bot.'
-                  : 'Pairing a Shade. Private Gate is for human vs human.'}
+                {queueMode === 'quick'
+                  ? 'Challenging a Shade bot — practice rules, no rank.'
+                  : 'Preparing the Echo…'}
               </p>
               <button
                 type="button"
@@ -606,7 +638,7 @@ export function GameLobby() {
                 </button>
               </div>
               <p className="mt-2 text-sm text-amber-100/70">
-                Both players must seal <span className="font-bold text-amber-50">3 fighters</span> first. Create a code and wait, or join a friend’s gate.
+                Both players seal <span className="font-bold text-amber-50">3 fighters</span>. Create a gate to get an invite link, or paste a friend’s code below.
               </p>
               {!validation.ready && (
                 <p className="mt-2 rounded-md bg-red-950/60 px-2 py-1.5 text-xs text-orange-200">
@@ -716,26 +748,58 @@ function ModeButton({
   icon: Icon,
   onClick,
   disabled,
+  badge,
+  lockedReason,
 }: {
   label: string;
   hint: string;
   icon: typeof Swords;
   onClick: () => void;
   disabled?: boolean;
+  badge?: string;
+  lockedReason?: string;
 }) {
+  const comingSoon = Boolean(badge);
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group relative overflow-hidden rounded-xl border border-orange-400/50 bg-gradient-to-r from-[#7c2d12] via-[#c2410c] to-[#9a3412] px-4 py-3 text-left shadow-lg disabled:opacity-60"
+      title={lockedReason ?? (comingSoon ? `${label} — ${badge}` : undefined)}
+      aria-describedby="game-ready-status"
+      className={cn(
+        'group relative overflow-hidden rounded-xl border px-4 py-3 text-left shadow-lg transition',
+        comingSoon
+          ? 'cursor-not-allowed border-orange-400/30 bg-gradient-to-r from-[#4a1c0c] via-[#6b2410] to-[#4a1c0c]'
+          : 'border-orange-400/50 bg-gradient-to-r from-[#7c2d12] via-[#c2410c] to-[#9a3412] disabled:cursor-not-allowed disabled:opacity-55'
+      )}
     >
-      <span className="absolute right-2 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-red-700/80 ring-2 ring-amber-200/40" />
-      <span className="relative flex items-center gap-2">
-        <Icon className="h-4 w-4 text-amber-100" />
-        <span>
-          <span className="block text-sm font-black uppercase tracking-wider text-amber-50">{label}</span>
-          <span className="block text-[10px] text-amber-100/70">{hint}</span>
+      {/* Decorative seal — leave room on the right; never sit under the Soon pill */}
+      {!comingSoon && (
+        <span
+          className="pointer-events-none absolute right-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-red-700/80 ring-2 ring-amber-200/40"
+          aria-hidden
+        />
+      )}
+      <span className="relative z-[1] flex items-start gap-2.5 pr-2">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-amber-100" />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-black uppercase tracking-wider text-amber-50">{label}</span>
+            {badge && (
+              <span className="inline-flex shrink-0 items-center rounded-full border border-amber-300/50 bg-amber-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#1c1008] shadow-sm">
+                {badge}
+              </span>
+            )}
+          </span>
+          <span
+            className={cn(
+              'mt-0.5 block text-[11px] leading-snug',
+              comingSoon ? 'text-amber-100/90' : 'text-amber-50/85'
+            )}
+          >
+            {lockedReason ? lockedReason : hint}
+          </span>
         </span>
       </span>
     </button>

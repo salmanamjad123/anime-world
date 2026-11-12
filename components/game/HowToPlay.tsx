@@ -19,7 +19,7 @@ const LOBBY_STEPS = [
   },
   {
     title: 'Start a duel',
-    body: 'Quick Duel = practice vs Shade. Private Gate = friend with a code. You must seal 3 before you can start.',
+    body: 'Quick Duel = practice vs Shade (no rank). Private Gate = invite a friend with a link or code. Ranked Forge matchmaking is coming soon. Seal 3 fighters first.',
   },
 ];
 

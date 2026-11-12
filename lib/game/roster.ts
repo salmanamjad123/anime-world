@@ -12,8 +12,8 @@ export function skillArtPath(fighterId: string, artId: string): string {
 }
 
 export const TEAM_SIZE = 3;
-/** Higher HP + softer chips = longer NA-style matches. */
-export const FIGHTER_HP = 160;
+/** Max HP / power per fighter. */
+export const FIGHTER_HP = 100;
 
 export const FACTIONS: Record<FactionId, FactionMeta> = {
   ashen: {
