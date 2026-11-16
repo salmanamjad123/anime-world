@@ -132,7 +132,7 @@ export function Footer() {
                 rel="noopener noreferrer"
                 className="text-sm font-semibold text-red-400 hover:text-red-300 underline underline-offset-2 transition-colors"
               >
-                Watch ad-free here
+                Watch here
               </a>
             </p>
           )}

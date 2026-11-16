@@ -31,7 +31,7 @@ function HomeIntro() {
             rel="noopener noreferrer"
             className="text-sm sm:text-base font-semibold text-red-400 hover:text-red-300 underline underline-offset-[3px] decoration-2 transition-colors"
           >
-            Watch ad-free here
+            Watch here
           </a>
           <a
             href={MIRROR_SITE_URL}
