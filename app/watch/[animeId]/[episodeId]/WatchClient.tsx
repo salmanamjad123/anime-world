@@ -7,7 +7,6 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +28,7 @@ import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
+import { AdsterraNative } from '@/components/ads/AdsterraNative';
 
 export function WatchPage() {
   const params = useParams();
@@ -57,33 +57,30 @@ export function WatchPage() {
 
   const { data: animeData } = useAnimeById(animeId);
   const anime = animeData?.data?.Media;
+  const animeReady = Boolean(anime);
   const episodesAnimeId =
     anime && isAniListNumericId(String(anime.id)) ? String(anime.id) : animeId;
-  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18);
-  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18);
+  // Below-fold rows — wait for anime so watch critical path isn't competing; reuse home cache when fresh.
+  const { data: trendingData, isLoading: isTrendingLoading } = useTrendingAnime(1, 18, animeReady);
+  const { data: popularData, isLoading: isPopularLoading } = usePopularAnime(1, 18, animeReady);
   const { data: episodesData, isLoading: isEpisodesLoading } = useEpisodes(
     episodesAnimeId,
-    selectedLanguage === 'dub',
-    { refetchOnMount: 'always' }
+    selectedLanguage === 'dub'
   );
   const isFallbackEpisode = episodeId.includes('-episode-') && !episodeId.includes('?ep=');
   const fallbackEpisodeNum = useMemo(
     () => (isFallbackEpisode ? parseInt(episodeId.match(/-episode-(\d+)$/)?.[1] ?? '0', 10) : null),
     [isFallbackEpisode, episodeId]
   );
-  // When URL is fallback format (e.g. 182587-episode-1), refetch episodes to get real HiAnime ID so we can load stream
-  const { data: resolvedEpisodeId } = useQuery({
-    queryKey: ['resolve-episode', episodesAnimeId, selectedLanguage === 'dub', fallbackEpisodeNum],
-    queryFn: async () => {
-      const res = await fetch(`/api/episodes/${episodesAnimeId}?dub=${selectedLanguage === 'dub'}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const ep = data.episodes?.find((e: { number: number; id: string }) => e.number === fallbackEpisodeNum);
-      return ep?.id?.includes('?ep=') ? ep.id : null;
-    },
-    enabled: !!episodesAnimeId && isFallbackEpisode && !!fallbackEpisodeNum,
-    staleTime: 0,
-  });
+  // Resolve fallback URL from the episodes query already in flight — no second /api/episodes call.
+  const resolvedEpisodeId = useMemo(() => {
+    if (!isFallbackEpisode || !fallbackEpisodeNum) return null;
+    if (isEpisodesLoading || !episodesData) return undefined;
+    const ep = episodesData.episodes?.find(
+      (e: { number: number; id: string }) => e.number === fallbackEpisodeNum
+    );
+    return ep?.id?.includes('?ep=') ? ep.id : null;
+  }, [isFallbackEpisode, fallbackEpisodeNum, isEpisodesLoading, episodesData]);
   const streamEpisodeId = isFallbackEpisode ? (resolvedEpisodeId ?? null) : episodeId;
   const {
     data: streamData,
@@ -508,6 +505,9 @@ export function WatchPage() {
                 </div>
               </div>
             </div>
+
+            <AdsterraNative />
+
             {/* Episode Description */}
             {currentEpisode?.description && (
               <div className="mt-4 sm:mt-6 bg-gray-800/50 rounded-lg p-4 sm:p-6">

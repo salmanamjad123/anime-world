@@ -34,8 +34,9 @@ export function useEpisodes(animeId: string | null, isDub: boolean = false, opti
     },
     enabled: !!animeId,
     staleTime: episodeListStaleTime,
+    // Respect staleTime — never force remount/focus refetches (burns Vercel invocations).
     refetchOnMount: options?.refetchOnMount ?? true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -55,10 +56,11 @@ export function useEpisodesForSeasons(
         if (!response.ok) throw new Error('Failed to fetch episodes');
         return response.json() as Promise<EpisodeListResponse>;
       },
-      enabled: seasons.length > 0,
+      // Prefer AniList season.episodes for badges — only fetch when count is unknown.
+      enabled: seasons.length > 0 && !(typeof (season as { episodes?: number }).episodes === 'number'),
       staleTime: episodeListStaleTime,
-      refetchOnMount: true,
-      refetchOnWindowFocus: true,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
     })),
   });
 

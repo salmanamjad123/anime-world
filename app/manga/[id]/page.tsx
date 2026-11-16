@@ -13,6 +13,7 @@ import { useMangaInfo, useMangaChapters } from '@/hooks/useManga';
 import { getPreferredTitle, stripHtml, getScoreColor, cn } from '@/lib/utils';
 import { ROUTES } from '@/constants/routes';
 import { BookOpen, Star, ChevronDown, ArrowLeft, Plus, Bookmark } from 'lucide-react';
+import { MangaSynopsisAd } from '@/components/ads/MangaSynopsisAd';
 import { useState, useEffect } from 'react';
 import type { MangaChapter, ListStatus } from '@/types';
 import { useUserStore } from '@/store/useUserStore';
@@ -495,6 +496,7 @@ export default function MangaDetailPage() {
 
           {/* Sidebar */}
           <div className="space-y-4">
+            <MangaSynopsisAd />
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button
                 type="button"

@@ -10,7 +10,7 @@ import { SafeImage } from '@/components/ui/SafeImage';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { useAnimeById, useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
-import { useEpisodes, useEpisodesForSeasons, useAnimeInfo } from '@/hooks/useEpisodes';
+import { useEpisodes, useAnimeInfo } from '@/hooks/useEpisodes';
 import { useWatchlistStore } from '@/store/useWatchlistStore';
 import { useUserStore } from '@/store/useUserStore';
 import { useAuthModalStore } from '@/store/useAuthModalStore';
@@ -23,6 +23,7 @@ import { Play, Plus, Star, Calendar, Tv, ChevronDown, RefreshCw } from 'lucide-r
 import { useState, useEffect, useRef } from 'react';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { AnimeSlugUrlSync } from '@/components/anime/AnimeSlugUrlSync';
+import { AnimeSynopsisAd } from '@/components/ads/AnimeSynopsisAd';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
 
 export default function AnimeDetailPage() {
@@ -71,7 +72,6 @@ export default function AnimeDetailPage() {
     refetch: refetchEpisodes,
   } = useEpisodes(animeReady ? selectedSeasonId : null, selectedLanguage === 'dub');
   const { data: animeInfo } = useAnimeInfo(animeReady ? selectedSeasonId : null);
-  const seasonEpisodeCounts = useEpisodesForSeasons(seasons, selectedLanguage === 'dub');
 
   // Fetch seasons and movies
   useEffect(() => {
@@ -242,9 +242,9 @@ export default function AnimeDetailPage() {
     }
   };
 
+  // AniList season.episodes for badges — selected season uses the live /api/episodes list.
   const selectedEpisodeCount =
-    seasonEpisodeCounts[selectedSeasonId] ??
-    (!isEpisodesLoading && !isEpisodesError ? episodes.length : null);
+    !isEpisodesLoading && !isEpisodesError ? episodes.length : null;
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -398,7 +398,11 @@ export default function AnimeDetailPage() {
                     <div className="flex flex-wrap gap-2">
                       {seasons.map((season, index) => {
                         const isSelected = String(selectedSeasonId) === String(season.id);
-                        const displayCount = seasonEpisodeCounts[season.id];
+                        const displayCount = isSelected
+                          ? selectedEpisodeCount
+                          : typeof season.episodes === 'number'
+                            ? season.episodes
+                            : null;
                         return (
                           <Button
                             key={season.id}
@@ -553,6 +557,7 @@ export default function AnimeDetailPage() {
 
           {/* Sidebar: Synopsis at top, then Studios & Status */}
           <div className="space-y-4 md:space-y-6">
+            <AnimeSynopsisAd />
             {/* Synopsis (accordion: 3 lines by default, expand to see full) */}
             <div className="bg-gray-800/50 rounded-lg p-4 md:p-6">
               <button

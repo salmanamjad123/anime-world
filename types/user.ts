@@ -20,7 +20,7 @@ export interface User {
   emailVerified?: boolean;
   /** Invite-only Village Arena access (testers). Managed in Admin → Game demo. */
   gameDemoAccess?: boolean;
-  /** Legacy profile flag (ads removed). Kept for Firestore compatibility. */
+  /** When true, no ad units for this account (Admin → Ads). */
   adsHidden?: boolean;
 }
 

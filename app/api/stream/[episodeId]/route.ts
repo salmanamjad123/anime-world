@@ -11,6 +11,7 @@ import { getHiAnimeStreamSources } from '@/lib/api/hianime';
 import { getStreamCached } from '@/lib/api/stream-cache';
 import { retry } from '@/lib/utils/retry';
 import { cachedJson, uncachedJson } from '@/lib/http-cache';
+import { rejectIfRateLimited, streamRateLimiter } from '@/lib/utils/rate-limiter';
 
 export const maxDuration = 20;
 
@@ -21,6 +22,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ episodeId: string }> }
 ) {
+  const limited = rejectIfRateLimited(request, streamRateLimiter, 'stream');
+  if (limited) return limited;
+
   try {
     const { episodeId: rawEpisodeId } = await params;
     let episodeId = decodeURIComponent(rawEpisodeId);
