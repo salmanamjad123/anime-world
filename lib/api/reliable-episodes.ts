@@ -23,8 +23,8 @@ import {
 import { deleteCacheKey } from '@/lib/cache';
 import { saveAnimeSlugMapping } from '@/lib/seo/anime-slug';
 import {
-  getRequiredHiAnimeSearch,
   HIANIME_REQUIRED_SEARCH,
+  HIANIME_REQUIRED_SLUG,
 } from '@/lib/api/hianime-required';
 
 /** Thrown when no episodes available (HiAnime down + Firebase miss) */
@@ -139,27 +139,43 @@ export async function getReliableEpisodes(
   try {
     let match: Awaited<ReturnType<typeof findHiAnimeMatch>> = null;
 
+    // Hard pin wins (e.g. Apothecary S3). Still verified after fetch by episode id prefix.
+    const requiredSlug = HIANIME_REQUIRED_SLUG[animeId];
+    if (requiredSlug) {
+      match = {
+        id: requiredSlug,
+        name: primaryTitle || requiredSlug,
+        poster: '',
+        episodes: { sub: episodeCount, dub: 0 },
+      };
+    }
+
     const requiredSearch = HIANIME_REQUIRED_SEARCH[animeId];
-    if (requiredSearch) {
+    if (!match && requiredSearch) {
       const results = await searchHiAnime(requiredSearch, 1);
       const filtered = results.filter(
         (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
       );
       const candidates = filtered.length > 0 ? filtered : results;
-      if (candidates.length > 0) {
-        const best = candidates.reduce((a, b) => {
+      const titleMatched = candidates.filter((r) =>
+        anyTitleMatchesSlug(titles, r.id, episodeCount, r.name)
+      );
+      if (titleMatched.length > 0) {
+        match = titleMatched.reduce((a, b) => {
           const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
           const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
           return aCount >= bCount ? a : b;
         });
-        match = best;
       }
       if (isDub && !match) {
         const dubResults = results.filter(
           (r) => r.id.includes('-dub') || r.name?.toLowerCase().includes('dub')
         );
-        if (dubResults.length > 0) {
-          match = dubResults.reduce((a, b) => {
+        const dubMatched = dubResults.filter((r) =>
+          anyTitleMatchesSlug(titles, r.id, episodeCount, r.name)
+        );
+        if (dubMatched.length > 0) {
+          match = dubMatched.reduce((a, b) => {
             const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
             const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
             return aCount >= bCount ? a : b;
@@ -178,7 +194,12 @@ export async function getReliableEpisodes(
       }
     }
 
-    if (match && !anyTitleMatchesSlug(titles, match.id, episodeCount, match.name)) {
+    const pinnedSlug = requiredSlug || null;
+    if (
+      match &&
+      match.id !== pinnedSlug &&
+      !anyTitleMatchesSlug(titles, match.id, episodeCount, match.name)
+    ) {
       console.warn(
         `⚠️ [Episodes] Rejected provider mismatch: ${match.id} for "${primaryTitle}"`
       );
@@ -198,7 +219,14 @@ export async function getReliableEpisodes(
         episodes = await getHiAnimeEpisodesStandard(animeId, match.id);
       }
 
-      if (episodes.episodes.length > 0) {
+      const firstId = episodes.episodes[0]?.id?.split('?')[0] || '';
+      const slugOk =
+        !episodes.episodes.length ||
+        firstId === match.id ||
+        firstId.startsWith(match.id) ||
+        match.id.startsWith(firstId);
+
+      if (episodes.episodes.length > 0 && slugOk) {
         saveAnimeSlugMapping(animeId, match.id).catch(() => {});
         // Save to Firebase in background (fire-and-forget, no extra latency)
         saveEpisodesToFirestoreBackground(
@@ -208,6 +236,12 @@ export async function getReliableEpisodes(
           episodes
         );
         return episodes;
+      }
+
+      if (episodes.episodes.length > 0 && !slugOk) {
+        console.warn(
+          `⚠️ [Episodes] Rejected episode id prefix mismatch: ${firstId} vs ${match.id}`
+        );
       }
     }
   } catch (error: any) {

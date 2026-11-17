@@ -474,7 +474,8 @@ function fuzzyIncludes(haystack: string, word: string): boolean {
 function titleOverlap(searchWords: string[], resultId: string, resultName: string): boolean {
   const text = normalizeForMatch(`${resultId} ${resultName}`);
   const core = searchWords.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
-  if (core.length === 0) return true;
+  // Native/non-Latin titles strip to no Latin words — never treat that as "matches anything".
+  if (core.length === 0) return false;
 
   const anchor = getAnchorWord(searchWords);
   if (anchor && !fuzzyIncludes(text, anchor)) return false;
@@ -523,6 +524,8 @@ export function hiAnimeSlugMatchesTitle(
 ): boolean {
   const words = extractSearchWords(animeTitle);
   const core = words.filter((w) => w.length >= 3 && !TITLE_STOP_WORDS.has(w));
+  if (core.length === 0) return false;
+
   const slug = hiAnimeId.toLowerCase();
   const resultName = options?.hiAnimeName ?? '';
 
@@ -536,8 +539,16 @@ export function hiAnimeSlugMatchesTitle(
   const minOverlap = Math.min(3, core.length);
   if (core.length >= 2 && overlap < minOverlap) return false;
 
+  // English "Apothecary Diaries" vs HiAnime romaji slug "kusuriya-..." — allow when
+  // every core word already matched via name/slug (overlap), not only slug prefix.
   const titleSlug = buildSearchTitleStripped(animeTitle).replace(/\s+/g, '-');
-  if (core.length <= 2 && !slug.startsWith(titleSlug) && overlap < 3) return false;
+  if (
+    core.length <= 2 &&
+    !slug.startsWith(titleSlug) &&
+    overlap < core.length
+  ) {
+    return false;
+  }
 
   const expectSeries =
     options?.episodeCount == null || options.episodeCount === 0 || options.episodeCount > 1;

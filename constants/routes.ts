@@ -30,6 +30,7 @@ export const ROUTES = {
   ADMIN_GAME_DEMO: '/admin/game-demo',
   ADMIN_ADS: '/admin/ads',
   ADMIN_SITE: '/admin/site',
+  ADMIN_COMMENTS: '/admin/comments',
   MANGA: '/manga',
   MANGA_GENRE: (genre: string) => `/manga?genres=${encodeURIComponent(genre)}`,
   MANGA_DETAIL: (id: string, mangadexId?: string) => {

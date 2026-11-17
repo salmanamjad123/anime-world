@@ -9,7 +9,10 @@ import {
   hiAnimeSlugMatchesTitle,
   searchHiAnime,
 } from '@/lib/api/hianime';
-import { getRequiredHiAnimeSearch } from '@/lib/api/hianime-required';
+import {
+  getRequiredHiAnimeSearch,
+  getRequiredHiAnimeSlug,
+} from '@/lib/api/hianime-required';
 import { getAnimeById, searchAnilistMediaByTitle } from '@/lib/api/anilist';
 import { SITE_URL } from '@/constants/site';
 import {
@@ -58,6 +61,23 @@ export async function saveAnimeSlugMapping(
 
 export async function getCachedAnimeSlug(anilistId: string): Promise<string | null> {
   return getStaleCache<string>(`${SLUG_CACHE_PREFIX}${anilistId}`);
+}
+
+/**
+ * SEO title slugs are always fine. HiAnime slugs must overlap the AniList title
+ * so a poisoned cache cannot send Apothecary → 365 Days to the Wedding links.
+ */
+export function isTrustedAnimeSlug(
+  slug: string,
+  title?: string | null,
+  episodeCount?: number
+): boolean {
+  if (!slug) return false;
+  if (!looksLikeHiAnimeSlug(slug)) return true;
+  if (!title?.trim()) return false;
+  return hiAnimeSlugMatchesTitle(title, slug, {
+    episodeCount: episodeCount ?? 0,
+  });
 }
 
 function collectPublicSlugsForAnime(anime: Pick<Anime, 'id' | 'title'>): string[] {
@@ -228,9 +248,25 @@ export async function resolveAnimeSlug(
   if (!isAniListNumericId(anilistId)) return anilistId;
 
   const cached = await getCachedAnimeSlug(anilistId);
-  if (cached) return cached;
+  if (cached) {
+    // Keep SEO title slugs. Re-resolve poisoned HiAnime slugs that no longer match.
+    if (!title?.trim() || !looksLikeHiAnimeSlug(cached)) return cached;
+    if (
+      hiAnimeSlugMatchesTitle(title, cached, {
+        episodeCount: episodeCount ?? 0,
+      })
+    ) {
+      return cached;
+    }
+  }
 
   if (!options?.allowLookup || !title?.trim()) return null;
+
+  const requiredSlug = getRequiredHiAnimeSlug(anilistId);
+  if (requiredSlug) {
+    await saveAnimeSlugMapping(anilistId, requiredSlug);
+    return requiredSlug;
+  }
 
   const requiredSearch = getRequiredHiAnimeSearch(anilistId);
   if (requiredSearch) {
@@ -240,8 +276,15 @@ export async function resolveAnimeSlug(
         (r) => !r.id.includes('-dub') && !r.name?.toLowerCase().includes('dub')
       );
       const candidates = filtered.length > 0 ? filtered : results;
-      if (candidates.length > 0) {
-        const best = candidates.reduce((a, b) => {
+      const titleMatched = candidates.filter((r) =>
+        hiAnimeSlugMatchesTitle(title, r.id, {
+          episodeCount: episodeCount ?? 0,
+          hiAnimeName: r.name,
+        })
+      );
+      const pool = titleMatched.length > 0 ? titleMatched : [];
+      if (pool.length > 0) {
+        const best = pool.reduce((a, b) => {
           const aCount = Math.max(a.episodes?.sub ?? 0, a.episodes?.dub ?? 0);
           const bCount = Math.max(b.episodes?.sub ?? 0, b.episodes?.dub ?? 0);
           return aCount >= bCount ? a : b;

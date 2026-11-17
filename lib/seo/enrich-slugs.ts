@@ -6,6 +6,7 @@ import type { Anime, AnimeSearchResult } from '@/types';
 import { isAniListNumericId } from '@/lib/seo/anime-path';
 import {
   getCachedAnimeSlug,
+  isTrustedAnimeSlug,
   resolveAnimeSlug,
   saveAnimeSlugMapping,
 } from '@/lib/seo/anime-slug';
@@ -28,6 +29,22 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
+function animeTitle(anime: Anime): string | undefined {
+  return anime.title?.english || anime.title?.romaji || undefined;
+}
+
+/** Prefer a trusted slug; drop poisoned HiAnime mappings so links use /anime/{id}. */
+function pickTrustedSlug(
+  anime: Anime,
+  candidate?: string | null
+): string | undefined {
+  if (!candidate) return undefined;
+  if (isTrustedAnimeSlug(candidate, animeTitle(anime), anime.episodes)) {
+    return candidate;
+  }
+  return undefined;
+}
+
 export async function attachSlugToAnime(
   anime: Anime,
   options?: { allowLookup?: boolean }
@@ -38,18 +55,21 @@ export async function attachSlugToAnime(
     return { ...anime, slug: anime.slug ?? id };
   }
 
-  if (anime.slug) return anime;
+  const existing = pickTrustedSlug(anime, anime.slug);
+  if (existing) return { ...anime, slug: existing };
 
-  const cached = await getCachedAnimeSlug(id);
+  const cached = pickTrustedSlug(anime, await getCachedAnimeSlug(id));
   if (cached) return { ...anime, slug: cached };
 
-  if (!options?.allowLookup) return anime;
+  if (!options?.allowLookup) {
+    return { ...anime, slug: undefined };
+  }
 
-  const title = anime.title?.english || anime.title?.romaji;
+  const title = animeTitle(anime);
   const slug = await resolveAnimeSlug(id, title, anime.episodes, {
     allowLookup: true,
   });
-  return slug ? { ...anime, slug } : anime;
+  return slug ? { ...anime, slug } : { ...anime, slug: undefined };
 }
 
 /** Cache reads in parallel; optional bounded live HiAnime lookups for missing slugs. */
@@ -65,12 +85,14 @@ export async function attachSlugsToMedia(
         return { ...item, slug: item.slug ?? id };
       }
 
-      if (item.slug) return item;
+      const existing = pickTrustedSlug(item, item.slug);
+      if (existing) return { ...item, slug: existing };
 
-      const cached = await getCachedAnimeSlug(id);
+      const cached = pickTrustedSlug(item, await getCachedAnimeSlug(id));
       if (cached) return { ...item, slug: cached };
 
-      return item;
+      // Drop poisoned slug so home/spotlight link with AniList id.
+      return { ...item, slug: undefined };
     })
   );
 
@@ -86,7 +108,7 @@ export async function attachSlugsToMedia(
 
   await runWithConcurrency(toLookup, concurrency, async (item) => {
     const id = String(item.id);
-    const title = item.title?.english || item.title?.romaji;
+    const title = animeTitle(item);
     const slug = await resolveAnimeSlug(id, title, item.episodes, {
       allowLookup: true,
     });
@@ -124,7 +146,13 @@ export async function attachSlugsToSearchResult(
 /** Fire-and-forget slug warming for list responses (does not block the HTTP response). */
 export function warmAnimeSlugsInBackground(media: Anime[], limit = 12): void {
   const candidates = media
-    .filter((item) => isAniListNumericId(String(item.id)) && !item.slug)
+    .filter((item) => isAniListNumericId(String(item.id)))
+    .filter((item) => {
+      const title = animeTitle(item);
+      // Warm missing or poisoned HiAnime slugs.
+      if (!item.slug) return true;
+      return !isTrustedAnimeSlug(item.slug, title, item.episodes);
+    })
     .slice(0, limit);
 
   if (!candidates.length) return;
@@ -132,11 +160,11 @@ export function warmAnimeSlugsInBackground(media: Anime[], limit = 12): void {
   void (async () => {
     for (const item of candidates) {
       const id = String(item.id);
-      const cached = await getCachedAnimeSlug(id);
-      if (cached) continue;
-
-      const title = item.title?.english || item.title?.romaji;
+      const title = animeTitle(item);
       if (!title?.trim()) continue;
+
+      const cached = await getCachedAnimeSlug(id);
+      if (cached && isTrustedAnimeSlug(cached, title, item.episodes)) continue;
 
       try {
         const slug = await resolveAnimeSlug(id, title, item.episodes, {
@@ -164,7 +192,10 @@ export async function attachSlugsToIdRows<T extends { animeId: string; slug?: st
         return;
       }
       const cached = await getCachedAnimeSlug(id);
-      if (cached) slugById.set(id, cached);
+      // No title here — only attach non-HiAnime SEO slugs; skip unverified HiAnime.
+      if (cached && isTrustedAnimeSlug(cached)) {
+        slugById.set(id, cached);
+      }
     })
   );
 
