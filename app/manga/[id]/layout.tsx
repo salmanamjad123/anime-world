@@ -26,7 +26,11 @@ export async function generateMetadata({
   const { id } = await params;
   const manga = await getMangaForMetadata(id);
   if (!manga) {
-    return { title: 'Manga Not Found' };
+    return {
+      title: 'Manga Not Found',
+      description: `This manga could not be found on ${SITE_NAME}.`,
+      robots: { index: false, follow: false },
+    };
   }
 
   const title = getPreferredTitle(manga.title);

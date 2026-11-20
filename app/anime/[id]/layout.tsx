@@ -107,18 +107,31 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const anime = await getAnimeForMetadataFast(id);
+
+  // Avoid soft-404 indexing when AniList has no media for a numeric id.
+  // Slug-only segments may still resolve client-side — keep them indexable with fallback meta.
+  if (!anime && isAniListNumericId(id)) {
+    return {
+      title: 'Anime Not Found',
+      description: `This anime could not be found on ${SITE_NAME}.`,
+      robots: { index: false, follow: false },
+    };
+  }
+
   const title = anime ? getPreferredTitle(anime.title) : titleFromSegment(id);
   const synopsis = anime?.description
     ? stripHtml(anime.description).replace(/\s+/g, ' ').trim()
     : '';
+  const year = anime?.seasonYear ? ` (${anime.seasonYear})` : '';
+  const format = anime?.format ? ` ${String(anime.format).replace(/_/g, ' ')}` : '';
   const seoTail = `Watch ${title} online free with English sub and dub on ${SITE_NAME}.`;
   const description = synopsis
-    ? `${synopsis.slice(0, 110).trim()}${synopsis.length > 110 ? '…' : ''} ${seoTail}`.slice(
+    ? `${synopsis.slice(0, 100).trim()}${synopsis.length > 100 ? '…' : ''} ${seoTail}`.slice(
         0,
         160
       )
-    : seoTail;
-  const pageTitle = `Watch ${title} Online Free (Sub & Dub)`;
+    : `${seoTail}${year ? ` Released${year}.` : ''}`.slice(0, 160);
+  const pageTitle = `Watch ${title}${year} Online Free (Sub & Dub)`;
   const slug = anime ? await resolveSlugForPage(id, anime) : id;
   const canonicalUrl = buildAnimeDetailUrl(id, slug);
   const image =
@@ -154,6 +167,7 @@ export async function generateMetadata({
       `${title} dub`,
       ...(anime?.genres || []),
       ...tagKeywords,
+      ...(format ? [format.trim()] : []),
     ],
     openGraph: {
       title: `${pageTitle} | ${SITE_NAME}`,

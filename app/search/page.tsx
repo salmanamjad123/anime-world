@@ -39,24 +39,40 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const params = await searchParams;
   const search = (typeof params.search === 'string' ? params.search : typeof params.q === 'string' ? params.q : '') || '';
-  const url = `${SITE_URL}/search${search ? `?search=${encodeURIComponent(search)}` : ''}`;
 
-  if (search) {
-    const title = `Watch ${search} Online Free (Sub & Dub)`;
-    const description = `Watch ${search} online free on ${SITE_NAME}. Stream episodes with English subtitles and dub.`;
+  const hasFilters = Boolean(
+    search ||
+      params.genres ||
+      params.format ||
+      params.status ||
+      params.season ||
+      params.year ||
+      (params.sort && params.sort !== 'POPULARITY_DESC')
+  );
+
+  // Filtered/search-query URLs are thin duplicates — keep UX, don't ask Google to index them.
+  if (hasFilters) {
+    const title = search
+      ? `Watch ${search} Online Free (Sub & Dub)`
+      : 'Search Anime Online Free | Browse by Genre & Title';
+    const description = search
+      ? `Watch ${search} online free on ${SITE_NAME}. Stream episodes with English subtitles and dub.`
+      : `Search anime online free on ${SITE_NAME}. Browse by genre, type, or season — English sub and dub.`;
     return {
       title,
       description,
-      openGraph: { title: `${title} | ${SITE_NAME}`, description, url },
+      openGraph: { title: `${title} | ${SITE_NAME}`, description, url: `${SITE_URL}/search` },
       twitter: { card: 'summary_large_image', title: `${title} | ${SITE_NAME}`, description },
-      alternates: { canonical: url },
+      alternates: { canonical: `${SITE_URL}/search` },
+      robots: { index: false, follow: true },
     };
   }
 
   return {
     title: 'Search Anime Online Free | Browse by Genre & Title',
     description: `Search anime online free on ${SITE_NAME}. Browse by genre, type, or season — English sub and dub.`,
-    alternates: { canonical: url },
+    alternates: { canonical: `${SITE_URL}/search` },
+    robots: { index: true, follow: true },
   };
 }
 

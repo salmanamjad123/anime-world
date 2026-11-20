@@ -11,7 +11,6 @@ import { SITE_URL } from '@/constants/site';
 import { AZ_LETTERS } from '@/constants/routes';
 import { GENRES } from '@/constants/genres';
 import { genreToSlug } from '@/lib/utils/genre-slug';
-import { POPULAR_ANIME_KEYWORDS } from '@/constants/seo';
 import { getPreferredTitle } from '@/lib/utils';
 import {
   getPublicAnimeSegment,
@@ -25,12 +24,14 @@ import type { Anime } from '@/types';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
+/**
+ * Only high-value indexable URLs. Query-param search pages, watchlist, and
+ * history inflate "Discovered – not indexed" without helping rankings.
+ */
 function staticSitemap(baseUrl: string): MetadataRoute.Sitemap {
   const staticPages: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
-    { url: `${baseUrl}/search`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.95 },
-    { url: `${baseUrl}/watchlist`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.7 },
-    { url: `${baseUrl}/history`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.7 },
+    { url: `${baseUrl}/search`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
     { url: `${baseUrl}/manga`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
   ];
 
@@ -48,16 +49,7 @@ function staticSitemap(baseUrl: string): MetadataRoute.Sitemap {
     priority: 0.85,
   }));
 
-  const searchPages: MetadataRoute.Sitemap = POPULAR_ANIME_KEYWORDS.slice(0, 60).map(
-    (term) => ({
-      url: `${baseUrl}/search?search=${encodeURIComponent(term)}`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly' as const,
-      priority: 0.8,
-    })
-  );
-
-  return [...staticPages, ...genrePages, ...azPages, ...searchPages];
+  return [...staticPages, ...genrePages, ...azPages];
 }
 
 async function publicSegmentForAnime(
