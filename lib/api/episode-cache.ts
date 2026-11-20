@@ -1,15 +1,12 @@
 /**
- * Episode Cache - Firestore backup when HiAnime succeeds
+ * Episode Cache - read-only Firestore backup
  *
- * - Save in background (fire-and-forget) when HiAnime returns episodes
- * - Read when HiAnime fails - serve cached instead of wrong fallbacks
- * - No Firebase = no cache, same behavior as before
+ * Existing `episode_cache` docs may still be read when HiAnime fails.
+ * New writes are disabled to protect Spark quota (AniList + HiAnime + Redis
+ * are enough for normal traffic).
  */
 
-import {
-  getAdminFirestore,
-  isFirebaseAdminConfigured,
-} from '@/lib/firebase/admin';
+import { getAdminFirestore } from '@/lib/firebase/admin';
 import {
   firestoreBudget,
   isFirestoreQuotaBlocked,
@@ -17,7 +14,6 @@ import {
 } from '@/lib/firebase/quota';
 import {
   EPISODE_CACHE_COLLECTION,
-  EPISODE_CACHE_SCHEMA_VERSION,
   toEpisodeCacheDocId,
   type EpisodeCacheDocument,
 } from '@/lib/firebase/episode-cache-schema';
@@ -57,41 +53,13 @@ export async function getEpisodesFromFirestore(
 }
 
 /**
- * Save episodes to Firestore - fire-and-forget (background, no await)
- * Call after HiAnime success; does not block response
+ * Writes disabled — keep call sites unchanged; no-op to save Spark write quota.
  */
 export function saveEpisodesToFirestoreBackground(
-  animeId: string,
-  category: 'sub' | 'dub',
-  hiAnimeId: string,
-  data: EpisodeListResponse
+  _animeId: string,
+  _category: 'sub' | 'dub',
+  _hiAnimeId: string,
+  _data: EpisodeListResponse
 ): void {
-  if (!isFirebaseAdminConfigured() || isFirestoreQuotaBlocked()) return;
-  if (!data.episodes?.length) return;
-
-  const doc: EpisodeCacheDocument = {
-    animeId,
-    category,
-    hiAnimeId,
-    episodes: data.episodes,
-    totalEpisodes: data.totalEpisodes,
-    cachedAt: new Date().toISOString(),
-    schemaVersion: EPISODE_CACHE_SCHEMA_VERSION,
-  };
-
-  saveEpisodesToFirestoreInternal(doc).catch((err) =>
-    console.warn('[Episode Cache] Background save failed:', (err as Error).message)
-  );
-}
-
-async function saveEpisodesToFirestoreInternal(
-  doc: EpisodeCacheDocument
-): Promise<void> {
-  if (isFirestoreQuotaBlocked()) return;
-  const db = getAdminFirestore();
-  if (!db) return;
-
-  const docId = toEpisodeCacheDocId(doc.animeId, doc.category);
-  const docRef = db.collection(EPISODE_CACHE_COLLECTION).doc(docId);
-  await docRef.set(doc);
+  // intentionally empty
 }
