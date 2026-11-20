@@ -24,7 +24,7 @@ let mem: { at: number; value: SiteGeneralSettings } | null = null;
 
 function defaultSettings(): SiteGeneralSettings {
   return {
-    showMirrorLink: true,
+    showMirrorLink: false,
     updatedAt: null,
     updatedBy: null,
   };
@@ -65,7 +65,8 @@ export async function readSiteGeneralSettings(
 
     const data = snap.data();
     const value: SiteGeneralSettings = {
-      showMirrorLink: data?.showMirrorLink !== false,
+      // Opt-in only — missing/false keeps .my promo hidden
+      showMirrorLink: data?.showMirrorLink === true,
       updatedAt:
         data?.updatedAt?.toDate?.()?.toISOString?.() ??
         (typeof data?.updatedAt === 'string' ? data.updatedAt : null),

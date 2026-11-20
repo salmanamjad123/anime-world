@@ -8,14 +8,14 @@ export type SiteGeneralPublic = {
   showMirrorLink: boolean;
 };
 
-const DEFAULTS: SiteGeneralPublic = { showMirrorLink: true };
+const DEFAULTS: SiteGeneralPublic = { showMirrorLink: false };
 
 async function fetchGeneral(): Promise<SiteGeneralPublic> {
   const res = await fetch('/api/site-settings/general', { cache: 'no-store' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return DEFAULTS;
   return {
-    showMirrorLink: data.showMirrorLink !== false,
+    showMirrorLink: data.showMirrorLink === true,
   };
 }
 
@@ -34,6 +34,6 @@ export function useSiteGeneralSettings() {
 }
 
 export function useShowMirrorLink() {
-  const { settings, isLoading } = useSiteGeneralSettings();
-  return { show: settings.showMirrorLink, isLoading };
+  // Mirror promo (.my "Watch here") forced off — opt-in later via Admin → Site + restore hook
+  return { show: false as boolean, isLoading: false };
 }

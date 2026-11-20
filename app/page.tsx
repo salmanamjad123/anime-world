@@ -23,7 +23,13 @@ function HomeIntro() {
       <h1 className="text-base sm:text-lg font-semibold text-gray-300 mb-1">
         Anime Village – Watch Anime Online Free
       </h1>
-      {showMirror ? (
+      {/* .my mirror promo hidden — enable via Admin → Site if needed */}
+      {!showMirror && (
+        <p className="text-gray-500 text-[11px] sm:text-xs max-w-xl leading-relaxed">
+          Stream anime free with English sub &amp; dub.
+        </p>
+      )}
+      {showMirror && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3">
           <a
             href={MIRROR_SITE_URL}
@@ -42,10 +48,6 @@ function HomeIntro() {
             {MIRROR_SITE_LABEL}
           </a>
         </div>
-      ) : (
-        <p className="text-gray-500 text-[11px] sm:text-xs max-w-xl leading-relaxed">
-          Stream anime free with English sub &amp; dub.
-        </p>
       )}
     </>
   );

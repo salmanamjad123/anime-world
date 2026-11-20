@@ -11,7 +11,7 @@ import {
 import { noteFirestoreError } from '@/lib/firebase/quota';
 
 function defaults() {
-  return { showMirrorLink: true };
+  return { showMirrorLink: false };
 }
 
 export async function GET() {
