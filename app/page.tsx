@@ -98,7 +98,7 @@ export default function Home() {
         <section className="mb-4 sm:mb-6">
           <AdFreeLoginBanner />
           <h1 className="text-lg sm:text-xl font-semibold text-gray-300 mb-1">
-            Anime Village – Watch Anime Online Free
+            Anime Village Official – Watch Free Anime Online SUB and DUB
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm max-w-2xl">
             Anime Village is a free place to watch anime online. Stream thousands of series in English sub and dub.

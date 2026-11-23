@@ -13,7 +13,7 @@ export const SITE_DESCRIPTION =
   'Watch anime online free on Anime Village. Stream thousands of series with English subtitles and dub — One Piece, Naruto, Jujutsu Kaisen, Demon Slayer and more.';
 
 export const SITE_TITLE_DEFAULT =
-  'Anime Village — Watch Anime Online Free (Sub & Dub)';
+  'Anime Village Official – Watch Free Anime Online SUB and DUB';
 
 /** Social profiles (footer + Organization sameAs) */
 export const SOCIAL_INSTAGRAM_URL =
