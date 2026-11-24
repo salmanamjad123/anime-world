@@ -28,6 +28,14 @@ export const AD_PLACEMENTS = [
     units: 1,
   },
   {
+    id: 'watch_popunder',
+    label: 'Over player (once / session, dismissible)',
+    page: 'Watch',
+    path: '/watch/…',
+    format: 'Popunder / interstitial',
+    units: 1,
+  },
+  {
     id: 'anime_social_bar',
     label: 'Social bar (once / 2 hours)',
     page: 'Anime detail',

@@ -27,8 +27,34 @@ export const ADSTERRA_SMARTLINK =
   process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK ||
   'https://araplhn.org/4/f7182aedea42dbf055578f0d0cfc0498';
 
+/** Watch-player interstitial / popunder (once per browser session). */
+export const ADSTERRA_POPUNDER_SRC =
+  process.env.NEXT_PUBLIC_ADSTERRA_POPUNDER_SRC ||
+  'https://abscloud.org/1/7cbb1cbbccfe3188b80f3a70acc58dc3';
+
 /** After a smartlink opens, do not open another for this long. */
 export const SMARTLINK_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+const WATCH_POPUNDER_SESSION_KEY = 'av_watch_popunder_session_v2';
+
+/** Once per tab/session — closes with X and does not return until new session. */
+export function canShowWatchPopunder(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!ADSTERRA_POPUNDER_SRC) return false;
+  try {
+    return sessionStorage.getItem(WATCH_POPUNDER_SESSION_KEY) !== '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markWatchPopunderShown(): void {
+  try {
+    sessionStorage.setItem(WATCH_POPUNDER_SESSION_KEY, '1');
+  } catch {
+    /* private mode */
+  }
+}
 
 const SMARTLINK_LAST_OPEN_KEY = 'smartlink_last_open';
 const SMARTLINK_COOKIE = 'av_smartlink_cd';

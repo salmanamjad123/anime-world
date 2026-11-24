@@ -29,6 +29,7 @@ import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { CommentsSection } from '@/components/comments/CommentsSection';
 import { RelatedAnimeSidebar } from '@/components/anime/RelatedAnimeSidebar';
 import { AdsterraNative } from '@/components/ads/AdsterraNative';
+import { WatchPlayerPopunder } from '@/components/ads/WatchPlayerPopunder';
 
 export function WatchPage() {
   const params = useParams();
@@ -423,6 +424,7 @@ export function WatchPage() {
                       : undefined
                   }
                 />
+                <WatchPlayerPopunder />
               </div>
             )}
 
