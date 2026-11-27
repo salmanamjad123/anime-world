@@ -10,7 +10,8 @@ import { Footer } from "@/components/layout/Footer";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, SITE_TITLE_DEFAULT, SOCIAL_LINKS } from "@/constants/site";
 import { ALL_SEO_KEYWORDS } from "@/constants/seo";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
-import { HomeSmartlinkTracker } from "@/components/ads/HomeSmartlinkTracker";
+import { HilltopMultitag } from "@/components/ads/HilltopMultitag";
+import { HilltopPopunder } from "@/components/ads/HilltopPopunder";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -93,6 +94,7 @@ const FAQ_JSON_LD = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  referrer: "no-referrer-when-downgrade",
   title: {
     default: SITE_TITLE_DEFAULT,
     template: `%s | ${SITE_NAME}`,
@@ -179,7 +181,8 @@ export default function RootLayout({
         <QueryProvider>
           <ThemeProvider>
             <AuthProvider>
-              <HomeSmartlinkTracker />
+              <HilltopMultitag />
+              <HilltopPopunder />
               <Suspense fallback={null}>
                 <NavigationProgress />
               </Suspense>

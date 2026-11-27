@@ -6,48 +6,16 @@ import { SpotlightSlider } from '@/components/anime/SpotlightSlider';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { RecommendedAnimeRow } from '@/components/anime/RecommendedAnimeRow';
 import { ScheduleSection } from '@/components/schedule/ScheduleSection';
-import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
 import { AdFreeLoginBanner } from '@/components/ads/AdFreeLoginBanner';
-import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import { useTrendingAnime, usePopularAnime } from '@/hooks/useAnime';
 import { TrendingUp, Star } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
+/** No strip ad here — Hilltop only has 300×250 (too tall vs old Adsterra 320×50). */
 function TrendingNowHeader() {
-  const stripAllowed = useReserveAdSlot('home_trending_320', true);
-  const [dismissed, setDismissed] = useState(false);
-  const showStrip = !dismissed && stripAllowed;
-
   return (
-    <div className="mb-6">
-      <div
-        className={cn(
-          'flex',
-          showStrip
-            ? 'flex-col sm:flex-row sm:items-center sm:justify-between'
-            : 'items-center'
-        )}
-      >
-        {showStrip && (
-          <AdsterraBanner
-            placement="home_trending_320"
-            variant="strip"
-            size="320x50"
-            dismissible
-            onDismiss={() => setDismissed(true)}
-            className="order-1 h-[50px] sm:order-2"
-          />
-        )}
-        <div
-          className={cn(
-            'flex items-center gap-2',
-            showStrip && 'order-2 sm:order-1'
-          )}
-        >
-          <TrendingUp className="h-6 w-6 text-blue-500" />
-          <h2 className="text-2xl font-bold text-white">Trending Now</h2>
-        </div>
-      </div>
+    <div className="mb-6 flex items-center gap-2">
+      <TrendingUp className="h-6 w-6 text-blue-500" />
+      <h2 className="text-2xl font-bold text-white">Trending Now</h2>
     </div>
   );
 }

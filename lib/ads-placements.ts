@@ -1,14 +1,15 @@
 /**
- * Adsterra placement catalog — single source for admin UI and visibility checks.
+ * Ad placement catalog — single source for admin UI and visibility checks.
+ * Network: HilltopAds (banner 300×250, MultiTag, popunder).
  */
 
 export const AD_PLACEMENTS = [
   {
     id: 'home_trending_320',
-    label: 'Trending Now strip',
+    label: 'Trending Now strip (hidden — no short banner size)',
     page: 'Home',
     path: '/',
-    format: '320×50',
+    format: 'off',
     units: 1,
   },
   {
@@ -24,7 +25,7 @@ export const AD_PLACEMENTS = [
     label: 'Under video player',
     page: 'Watch',
     path: '/watch/…',
-    format: '300×250 / native',
+    format: '300×250',
     units: 1,
   },
   {
@@ -37,10 +38,10 @@ export const AD_PLACEMENTS = [
   },
   {
     id: 'home_smartlink',
-    label: 'First-click smartlink (2 hour cooldown)',
+    label: 'Popunder (script + click URL, 2 hour cooldown)',
     page: 'Site-wide',
     path: '/*',
-    format: 'Smartlink (new tab)',
+    format: 'Popunder',
     units: 1,
   },
   {
@@ -48,7 +49,7 @@ export const AD_PLACEMENTS = [
     label: 'Above synopsis',
     page: 'Manga detail',
     path: '/manga/[id]',
-    format: '320×50',
+    format: '300×250',
     units: 1,
   },
   {
@@ -56,7 +57,7 @@ export const AD_PLACEMENTS = [
     label: 'Above synopsis',
     page: 'Anime detail',
     path: '/anime/[id]',
-    format: '320×50',
+    format: '300×250',
     units: 1,
   },
   {
@@ -64,7 +65,7 @@ export const AD_PLACEMENTS = [
     label: 'Trending grid card',
     page: 'Manga home',
     path: '/manga',
-    format: '160×300',
+    format: '300×250',
     units: 1,
   },
   {
@@ -83,12 +84,16 @@ export type AdPlacementsMap = Record<AdPlacementId, boolean>;
 
 export const AD_PLACEMENT_IDS: AdPlacementId[] = AD_PLACEMENTS.map((p) => p.id);
 
-/** Social bar stays off on animevillage.my. The .org site keeps it. */
-const SOCIAL_BAR_OFF = new Set<AdPlacementId>(['anime_social_bar', 'manga_social_bar']);
+/** Always-off on animevillage.my (no Hilltop short strip / no social bar). */
+const FORCE_OFF = new Set<AdPlacementId>([
+  'anime_social_bar',
+  'manga_social_bar',
+  'home_trending_320',
+]);
 
 export function defaultAdPlacements(): AdPlacementsMap {
   return Object.fromEntries(
-    AD_PLACEMENT_IDS.map((id) => [id, !SOCIAL_BAR_OFF.has(id)])
+    AD_PLACEMENT_IDS.map((id) => [id, !FORCE_OFF.has(id)])
   ) as AdPlacementsMap;
 }
 
@@ -100,7 +105,7 @@ export function normalizeAdPlacements(
   for (const id of AD_PLACEMENT_IDS) {
     if (raw[id] === false) base[id] = false;
   }
-  for (const id of SOCIAL_BAR_OFF) base[id] = false;
+  for (const id of FORCE_OFF) base[id] = false;
   return base;
 }
 
@@ -122,7 +127,7 @@ export function isPlacementVisible(
   placement: AdPlacementId,
   audience: AdAudienceContext
 ): boolean {
-  if (SOCIAL_BAR_OFF.has(placement)) return false;
+  if (FORCE_OFF.has(placement)) return false;
   if (audience.userAdsHidden) return false;
   if (!settings.enabled) return false;
   if (settings.hideForLoggedInUsers && audience.isLoggedIn) return false;

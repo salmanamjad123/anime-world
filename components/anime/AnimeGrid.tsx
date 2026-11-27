@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimeCard } from './AnimeCard';
-import { AdsterraBanner } from '@/components/ads/AdsterraBanner';
+import { HilltopBanner } from '@/components/ads/HilltopBanner';
 import { Button } from '@/components/ui/Button';
 import { useReserveAdSlot } from '@/hooks/useAdsSettings';
 import type { Anime } from '@/types';
@@ -33,12 +33,9 @@ function useGridColumns() {
   return cols;
 }
 
-function visibleCountForAdRow(available: number, cols: number) {
-  const maxCards = Math.max(0, available - 2);
-  if (cols <= 2) return maxCards;
-  const wantRemainder = cols - 2;
-  const extra = (maxCards - wantRemainder + cols * 10) % cols;
-  return Math.max(0, maxCards - extra);
+/** Cards before the ad so the banner (col-span-2) finishes the first row. */
+function cardsBeforeFirstRowAd(cols: number) {
+  return Math.max(0, cols - 2);
 }
 
 interface AnimeGridProps {
@@ -48,7 +45,7 @@ interface AnimeGridProps {
   errorMessage?: string;
   onRetry?: () => void;
   slowLoad?: boolean;
-  /** Place a 300x250 ad in the last two card slots so the grid stays even. */
+  /** Place a 300x250 ad in the first row (last two columns). */
   adSlot?: boolean;
 }
 
@@ -120,20 +117,39 @@ export function AnimeGrid({
     );
   }
 
-  const items = showAd
-    ? anime.slice(0, visibleCountForAdRow(anime.length, cols))
-    : anime;
+  /** Drop a short last row so the grid ends evenly. */
+  function trimToFullRows(list: Anime[], columns: number) {
+    if (columns <= 0 || list.length < columns) return list;
+    const full = Math.floor(list.length / columns) * columns;
+    return list.slice(0, full);
+  }
+
+  if (!showAd) {
+    const items = trimToFullRows(anime, cols);
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {items.map((item) => (
+          <AnimeCard key={item.id} anime={item} />
+        ))}
+      </div>
+    );
+  }
+
+  const before = cardsBeforeFirstRowAd(cols);
+  const head = anime.slice(0, before);
+  const tail = trimToFullRows(anime.slice(before), cols);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {items.map((item) => (
+      {head.map((item) => (
         <AnimeCard key={item.id} anime={item} />
       ))}
-      {showAd && (
-        <div className="col-span-2">
-          <AdsterraBanner placement="home_grid_300" variant="grid" />
-        </div>
-      )}
+      <div className="col-span-2">
+        <HilltopBanner placement="home_grid_300" variant="grid" />
+      </div>
+      {tail.map((item) => (
+        <AnimeCard key={item.id} anime={item} />
+      ))}
     </div>
   );
 }

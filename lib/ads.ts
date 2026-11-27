@@ -1,40 +1,48 @@
-/** Empty until this site's Adsterra account is set in env. No .org scripts. */
-export const ADSTERRA_BANNER_KEY = process.env.NEXT_PUBLIC_ADSTERRA_BANNER_KEY || '';
+/**
+ * HilltopAds — banner, MultiTag, and popunder.
+ * Script hosts come from env (NEXT_PUBLIC_HILLTOP_*).
+ */
 
-/** 320x50 mobile leaderboard — create this unit in Adsterra (Banner → 320x50). */
-export const ADSTERRA_BANNER_320_KEY = process.env.NEXT_PUBLIC_ADSTERRA_BANNER_320_KEY || '';
+function normalizeScriptSrc(raw: string): string {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  if (s.startsWith('//')) return `https:${s}`;
+  return s;
+}
 
-/** 160x300 skyscraper — Manga home trending grid. */
-export const ADSTERRA_BANNER_160_300_KEY = process.env.NEXT_PUBLIC_ADSTERRA_BANNER_160_300_KEY || '';
+/** In-content banner (300×250 MultiTag banner unit). */
+export const HILLTOP_BANNER_SRC = normalizeScriptSrc(
+  process.env.NEXT_PUBLIC_HILLTOP_BANNER_SRC || ''
+);
 
-/** Publisher invoke host only, e.g. example.org — no https:// and no path. */
-export const ADSTERRA_INVOKE_HOST = (process.env.NEXT_PUBLIC_ADSTERRA_INVOKE_HOST || '')
-  .replace(/^https?:\/\//, '')
-  .replace(/\/.*$/, '');
+/** Site-wide MultiTag (banner + pops combo). Inject once. */
+export const HILLTOP_MULTITAG_SRC = normalizeScriptSrc(
+  process.env.NEXT_PUBLIC_HILLTOP_MULTITAG_SRC || ''
+);
 
-export const ADSTERRA_NATIVE_SRC = process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_SRC || '';
-export const ADSTERRA_NATIVE_CONTAINER = process.env.NEXT_PUBLIC_ADSTERRA_NATIVE_CONTAINER || '';
+/** Popunder script — inject once when placement is on. */
+export const HILLTOP_POPUNDER_SRC = normalizeScriptSrc(
+  process.env.NEXT_PUBLIC_HILLTOP_POPUNDER_SRC || ''
+);
 
-/** Unused on animevillage.my — social bar stays off. */
-export const ADSTERRA_SOCIAL_SRC = '';
+/** Direct-link / click popunder URL (optional; used with cooldown). */
+export const HILLTOP_POPUNDER_URL = (process.env.NEXT_PUBLIC_HILLTOP_POPUNDER_URL || '').trim();
 
-export const ADSTERRA_SMARTLINK = process.env.NEXT_PUBLIC_ADSTERRA_SMARTLINK || '';
+/** After a popunder URL opens, do not open another for this long. */
+export const POPUNDER_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
-/** After a smartlink opens, do not open another for this long. */
-export const SMARTLINK_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const POPUNDER_LAST_OPEN_KEY = 'hilltop_popunder_last_open';
+const POPUNDER_COOKIE = 'av_popunder_cd';
 
-const SMARTLINK_LAST_OPEN_KEY = 'smartlink_last_open';
-const SMARTLINK_COOKIE = 'av_smartlink_cd';
-
-function readSmartlinkCooldownTs(): number {
+function readPopunderCooldownTs(): number {
   try {
-    const fromLs = Number(localStorage.getItem(SMARTLINK_LAST_OPEN_KEY) || 0);
+    const fromLs = Number(localStorage.getItem(POPUNDER_LAST_OPEN_KEY) || 0);
     if (fromLs) return fromLs;
   } catch {
     /* private mode */
   }
   try {
-    const match = document.cookie.match(/(?:^|; )av_smartlink_cd=(\d+)/);
+    const match = document.cookie.match(/(?:^|; )av_popunder_cd=(\d+)/);
     if (match) return Number(match[1]) || 0;
   } catch {
     /* cookies blocked */
@@ -42,57 +50,19 @@ function readSmartlinkCooldownTs(): number {
   return 0;
 }
 
-function writeSmartlinkCooldownTs(ts: number) {
+function writePopunderCooldownTs(ts: number) {
   try {
-    localStorage.setItem(SMARTLINK_LAST_OPEN_KEY, String(ts));
+    localStorage.setItem(POPUNDER_LAST_OPEN_KEY, String(ts));
   } catch {
     /* private mode */
   }
   try {
-    const maxAge = Math.floor(SMARTLINK_COOLDOWN_MS / 1000);
-    document.cookie = `${SMARTLINK_COOKIE}=${ts}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+    const maxAge = Math.floor(POPUNDER_COOLDOWN_MS / 1000);
+    document.cookie = `${POPUNDER_COOKIE}=${ts}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
   } catch {
     /* cookies blocked */
   }
 }
-
-/** Social bar: once per 2 hours, separate from the smartlink timer. */
-export const SOCIAL_BAR_COOLDOWN_MS = 2 * 60 * 60 * 1000;
-export type SocialBarScope = 'manga' | 'anime';
-
-const SOCIAL_BAR_KEYS: Record<SocialBarScope, string[]> = {
-  manga: ['manga_social_bar_last', 'social_bar_last'],
-  anime: ['anime_social_bar_last'],
-};
-
-export function canShowSocialBar(scope: SocialBarScope = 'manga'): boolean {
-  if (typeof window === 'undefined') return false;
-  if (!ADSTERRA_SOCIAL_SRC) return false;
-  try {
-    const last = SOCIAL_BAR_KEYS[scope].reduce(
-      (max, key) => Math.max(max, Number(localStorage.getItem(key) || 0)),
-      0
-    );
-    if (last && Date.now() - last < SOCIAL_BAR_COOLDOWN_MS) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function markSocialBarShown(scope: SocialBarScope = 'manga'): void {
-  try {
-    const ts = String(Date.now());
-    localStorage.setItem(SOCIAL_BAR_KEYS[scope][0], ts);
-  } catch {
-    /* private mode */
-  }
-}
-
-/** @deprecated use canShowSocialBar('manga') */
-export const canShowMangaSocialBar = () => canShowSocialBar('manga');
-/** @deprecated use markSocialBarShown('manga') */
-export const markMangaSocialBarShown = () => markSocialBarShown('manga');
 
 export function isAdLocalHost() {
   if (typeof window === 'undefined') return false;
@@ -100,27 +70,66 @@ export function isAdLocalHost() {
   return host === 'localhost' || host === '127.0.0.1';
 }
 
-/** Opens Adsterra smartlink in a new tab. No-op if unset. */
-export function openAdsterraSmartlink() {
+/**
+ * Inject a HilltopAds loader script into `parent`.
+ * Mirrors their snippet: script.settings + async + referrerPolicy.
+ */
+export function injectHilltopScript(
+  parent: HTMLElement,
+  src: string,
+  settings: Record<string, unknown> = {}
+): HTMLScriptElement | null {
+  if (!src || !parent) return null;
+  const s = document.createElement('script');
+  (s as HTMLScriptElement & { settings?: Record<string, unknown> }).settings =
+    settings;
+  s.src = src;
+  s.async = true;
+  s.referrerPolicy = 'no-referrer-when-downgrade';
+  parent.appendChild(s);
+  return s;
+}
+
+/** Opens the popunder URL in a new tab. No-op if unset. */
+export function openHilltopPopunderUrl() {
   if (typeof window === 'undefined') return;
-  if (!ADSTERRA_SMARTLINK) return;
-  window.open(ADSTERRA_SMARTLINK, '_blank', 'noopener,noreferrer');
+  if (!HILLTOP_POPUNDER_URL) return;
+  window.open(HILLTOP_POPUNDER_URL, '_blank', 'noopener,noreferrer');
 }
 
 /**
- * On the first eligible click, open the smartlink in a new tab.
- * After that, no-op for 2 hours even if the tab/browser is closed
- * (localStorage + cookie).
- * Returns true if the smartlink was opened.
+ * On the first eligible click, open the popunder URL in a new tab.
+ * After that, no-op for 2 hours (localStorage + cookie).
  */
-export function trackHomeSmartlinkClick(enabled: boolean): boolean {
+export function trackPopunderClick(enabled: boolean): boolean {
   if (typeof window === 'undefined') return false;
-  if (!enabled || !ADSTERRA_SMARTLINK) return false;
+  if (!enabled || !HILLTOP_POPUNDER_URL) return false;
 
-  const last = readSmartlinkCooldownTs();
-  if (last && Date.now() - last < SMARTLINK_COOLDOWN_MS) return false;
+  const last = readPopunderCooldownTs();
+  if (last && Date.now() - last < POPUNDER_COOLDOWN_MS) return false;
 
-  writeSmartlinkCooldownTs(Date.now());
-  openAdsterraSmartlink();
+  writePopunderCooldownTs(Date.now());
+  openHilltopPopunderUrl();
   return true;
+}
+
+const POPUNDER_SCRIPT_SESSION_KEY = 'hilltop_popunder_script_session';
+
+/** Inject popunder script at most once per browser tab session. */
+export function canInjectPopunderScript(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!HILLTOP_POPUNDER_SRC) return false;
+  try {
+    return sessionStorage.getItem(POPUNDER_SCRIPT_SESSION_KEY) !== '1';
+  } catch {
+    return true;
+  }
+}
+
+export function markPopunderScriptInjected(): void {
+  try {
+    sessionStorage.setItem(POPUNDER_SCRIPT_SESSION_KEY, '1');
+  } catch {
+    /* private mode */
+  }
 }

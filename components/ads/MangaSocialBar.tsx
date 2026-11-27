@@ -1,14 +1,8 @@
 'use client';
 
 /**
- * Social bar is off on animevillage.my.
- * feat/animevillage-org still loads the Adsterra social bar.
- * These exports stay so the placement setup matches, without injecting a script.
+ * Social bar / In-page Push stays off on animevillage.my.
  */
-export function AdsterraSocialBar() {
-  return null;
-}
-
 export function MangaSocialBar() {
   return null;
 }
